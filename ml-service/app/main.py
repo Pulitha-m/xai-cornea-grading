@@ -1,4 +1,5 @@
 from fastapi import FastAPI
+
 from pipelines.cellular.service import run_cellular_analysis
 from pipelines.grading.service import run_grading_analysis
 from pipelines.disease.service import run_disease_analysis
@@ -33,7 +34,7 @@ def analyze(request: AnalyzeRequest):
 
     # Cellular
     try:
-        cellular_data = run_cellular_analysis(request.image_url)
+        cellular_data = run_cellular_analysis(request.imageUrl)
 
         cellular = CellularResult(
             status="completed",
@@ -47,7 +48,7 @@ def analyze(request: AnalyzeRequest):
 
     # Grading
     try:
-        grading_data = run_grading_analysis(request.image_url)
+        grading_data = run_grading_analysis(request.imageUrl)
 
         grading = GradingResult(
             status="completed",
@@ -61,7 +62,7 @@ def analyze(request: AnalyzeRequest):
 
     # Disease
     try:
-        disease_data = run_disease_analysis(request.image_url)
+        disease_data = run_disease_analysis(request.imageUrl)
 
         disease = DiseaseResult(
             status="completed",
@@ -76,7 +77,7 @@ def analyze(request: AnalyzeRequest):
     # Recommendation
     try:
         recommendation_data = run_recommendation_analysis(
-            request.image_url
+            request.imageUrl
         )
 
         recommendation = RecommendationResult(
@@ -90,7 +91,7 @@ def analyze(request: AnalyzeRequest):
         )
 
     return AnalyzeResponse(
-        case_id=request.case_id,
+        caseId=request.caseId,
         status="completed",
         cellular=cellular,
         grading=grading,

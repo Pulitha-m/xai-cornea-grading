@@ -2,16 +2,16 @@ from pydantic import BaseModel, Field
 
 
 class AnalyzeRequest(BaseModel):
-    image_url: str = Field(..., description="URL of the corneal image")
-    case_id: str = Field(..., description="Case identifier")
+    imageUrl: str = Field(..., description="URL of the corneal image")
+    caseId: str = Field(..., description="Case identifier")
 
 
 class CellularResult(BaseModel):
     status: str
     error: str | None = None
-    cell_count: int | None = None
+    cellCount: int | None = None
     ecd: float | None = None
-    coefficient_of_variation: float | None = None
+    coefficientOfVariation: float | None = None
     hexagonality: float | None = None
 
 
@@ -38,7 +38,7 @@ class RecommendationResult(BaseModel):
 
 
 class AnalyzeResponse(BaseModel):
-    case_id: str
+    caseId: str
     status: str
     cellular: CellularResult
     grading: GradingResult
