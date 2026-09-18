@@ -13,9 +13,36 @@ services:
       - .env
 
     environment:
-      ML_SERVICE_URL: ${ML_SERVICE_URL:-http://host.docker.internal:8000}
+      ML_SERVICE_URL: http://ml-service:8000
 
-    extra_hosts:
-      - "host.docker.internal:host-gateway"
+    depends_on:
+      - ml-service
+
+    restart: unless-stopped
+
+  ml-service:
+    build:
+      context: ./ml-service
+      dockerfile: Dockerfile
+
+    container_name: corneal-ai-ml-service
+
+    ports:
+      - "8000:8000"
+
+    restart: unless-stopped
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+
+    container_name: corneal-ai-frontend
+
+    ports:
+      - "3000:80"
+
+    depends_on:
+      - backend
 
     restart: unless-stopped
