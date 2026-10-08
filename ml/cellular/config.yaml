@@ -56,10 +56,13 @@ scale:
 # image.cell_spacing_px so the method adapts if the cell size estimate changes.
 # -----------------------------------------------------------------------------
 classical:
+  method: ridge                       # "ridge" (walls -> h-minima seeds, data-driven) or "seeds" (v1, spacing-driven)
+  ridge_sigmas_px: [1.5, 2.5]         # Sato ridge-filter scales matching the dark cell walls (px)
+  h_threshold: 0.12                   # min wall contrast (0..1 of the wall map) that separates two cells
   dark_threshold: 40                  # ignore regions whose illumination is below this
   smooth_sigma_factor: 0.08           # noise smoothing before watershed (~2 px)
-  seed_sigma_factor: 0.22             # smoothing for cell-centre detection (~6 px)
-  min_seed_distance_factor: 0.45      # minimum distance between cell centres (~13 px)
+  seed_sigma_factor: 0.22             # "seeds" method only: smoothing for cell-centre detection (~6 px)
+  min_seed_distance_factor: 0.45      # "seeds" method only: minimum distance between centres (~13 px)
   min_area_factor: 0.30               # keep cells with area >= 0.30 x expected hexagon area
   max_area_factor: 2.50               # ... and <= 2.50 x expected hexagon area
 

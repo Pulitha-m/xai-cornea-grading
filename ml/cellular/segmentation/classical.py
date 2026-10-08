@@ -5,16 +5,21 @@ Two roles in Component 3:
   1. Baseline that the U-Net (Sub-component 3.2) must beat.
   2. Draft boundary masks for annotation (correcting is faster than drawing).
 
-Method (all scales are multiples of the cell spacing, ~28 px from the audit):
+Method:
   1. Flatten illumination: divide by a heavily blurred background; ignore areas
      that are too dark to analyse ("valid" mask, eroded by one cell).
   2. Contrast-normalise inside the valid area (percentile stretch + CLAHE).
-  3. Cell centres = local maxima of a smoothed image (cell interiors are bright,
-     walls are dark).
-  4. Marker-controlled watershed on the inverted image: each centre floods its
-     bright interior until it meets a neighbour at a dark wall.
+  3. Seeds + watershed, two variants (config: classical.method):
+       "ridge" (default) — enhance the thin dark cell WALLS with a Sato ridge
+           filter; seeds are basins enclosed by walls of at least h_threshold
+           contrast (h-minima). Cell size comes from the image, not a parameter.
+       "seeds" (v1)      — cell CENTRES as bright local maxima with a minimum
+           spacing. Kept for comparison: its cell size is set by the spacing
+           parameter, so it merges cells when interiors are uneven.
+  4. Marker-controlled watershed with a 1-px wall between neighbouring cells.
   5. Keep only complete cells: plausible area, not touching the image border or
-     the edge of the valid area.
+     the edge of the valid area. Size limits are multiples of the expected
+     hexagon area for the ~28 px cell spacing (from the audit).
 
 Usage:
     from segmentation.classical import ClassicalParams, segment
@@ -31,14 +36,19 @@ import cv2
 import numpy as np
 from scipy import ndimage as ndi
 from skimage.feature import peak_local_max
-from skimage.measure import regionprops
+from skimage.filters import sato
+from skimage.measure import label, regionprops
+from skimage.morphology import h_minima
 from skimage.segmentation import relabel_sequential, watershed
 
 
 @dataclass(frozen=True)
 class ClassicalParams:
     """Tunable parameters; *_factor values are multiples of cell_px."""
+    method: str = "ridge"                       # "ridge" or "seeds"
     cell_px: float = 28.2
+    ridge_sigmas_px: tuple[float, ...] = (1.5, 2.5)
+    h_threshold: float = 0.12
     dark_threshold: float = 40.0
     smooth_sigma_factor: float = 0.08
     seed_sigma_factor: float = 0.22
@@ -49,7 +59,10 @@ class ClassicalParams:
     @classmethod
     def from_config(cls, cfg: dict) -> "ClassicalParams":
         """Build parameters from config.yaml (image.cell_spacing_px + classical.*)."""
-        return cls(cell_px=float(cfg["image"]["cell_spacing_px"]), **cfg.get("classical", {}))
+        c = dict(cfg.get("classical", {}))
+        if "ridge_sigmas_px" in c:                       # YAML list -> hashable tuple
+            c["ridge_sigmas_px"] = tuple(c["ridge_sigmas_px"])
+        return cls(cell_px=float(cfg["image"]["cell_spacing_px"]), **c)
 
     @property
     def expected_area_px(self) -> float:
@@ -65,6 +78,12 @@ class ClassicalResult:
     flat: np.ndarray         # float32 0..1; illumination-flattened image (for display)
     n_cells: int
     areas_px: np.ndarray     # area of each kept cell, px
+    n_regions: int = 0       # all watershed regions before filtering (diagnostic)
+
+    @property
+    def kept_fraction(self) -> float:
+        """Share of watershed regions kept as complete cells; low = many merges / edge cells."""
+        return self.n_cells / self.n_regions if self.n_regions else float("nan")
 
     @property
     def mean_area_px(self) -> float:
@@ -104,8 +123,23 @@ def flatten_illumination(img: np.ndarray, p: ClassicalParams) -> tuple[np.ndarra
     return flat, valid
 
 
+def wall_map(flat: np.ndarray, valid: np.ndarray, p: ClassicalParams) -> np.ndarray:
+    """0..1 map that is high on thin dark cell walls ("ridge" method)."""
+    walls = sato(flat, sigmas=p.ridge_sigmas_px, black_ridges=True).astype(np.float32)
+    walls[~valid] = 0
+    if valid.any():
+        walls = np.clip(walls / (np.percentile(walls[valid], 99) + 1e-6), 0, 1)
+    return cv2.GaussianBlur(walls, (0, 0), 1.0)
+
+
+def detect_basins(walls: np.ndarray, valid: np.ndarray, p: ClassicalParams) -> np.ndarray:
+    """Marker image: one label per basin enclosed by walls of >= h_threshold contrast."""
+    minima = h_minima(walls, p.h_threshold).astype(bool) & valid
+    return label(minima, connectivity=2).astype(np.int32)
+
+
 def detect_cell_centres(flat: np.ndarray, valid: np.ndarray, p: ClassicalParams) -> np.ndarray:
-    """Marker image: one integer label per detected cell centre."""
+    """Marker image: one integer label per detected cell centre ("seeds" method)."""
     seed_map = cv2.GaussianBlur(flat, (0, 0), p.seed_sigma_factor * p.cell_px)
     coords = peak_local_max(
         seed_map,
@@ -122,13 +156,21 @@ def segment(img: np.ndarray, p: ClassicalParams | None = None) -> ClassicalResul
     """Segment one grayscale specular image into individual cells."""
     p = p or ClassicalParams()
     flat, valid = flatten_illumination(img, p)
-    markers = detect_cell_centres(flat, valid, p)
 
-    smooth = cv2.GaussianBlur(flat, (0, 0), p.smooth_sigma_factor * p.cell_px)
-    # Bright interiors become basins, dark walls become ridges; watershed_line
-    # leaves a 1-px wall (label 0) between neighbouring cells.
-    ws = watershed(-smooth, markers, mask=valid, watershed_line=True)
+    if p.method == "ridge":
+        elevation = wall_map(flat, valid, p)             # walls high, interiors low
+        markers = detect_basins(elevation, valid, p)
+    elif p.method == "seeds":
+        markers = detect_cell_centres(flat, valid, p)
+        # bright interiors become basins, dark walls ridges
+        elevation = -cv2.GaussianBlur(flat, (0, 0), p.smooth_sigma_factor * p.cell_px)
+    else:
+        raise ValueError(f"unknown method {p.method!r} (use 'ridge' or 'seeds')")
+
+    # watershed_line leaves a 1-px wall (label 0) between neighbouring cells.
+    ws = watershed(elevation, markers, mask=valid, watershed_line=True)
     boundary = ((ws == 0) & valid).astype(np.uint8)
+    n_regions = int(len(np.unique(ws)) - (1 if (ws == 0).any() else 0))
 
     # --- keep only complete, plausibly sized cells ---------------------------
     edge_zone = ndi.binary_dilation(~valid, iterations=2)
@@ -146,7 +188,7 @@ def segment(img: np.ndarray, p: ClassicalParams | None = None) -> ClassicalResul
     areas = np.bincount(labels.ravel())[1:].astype(np.float64)
 
     return ClassicalResult(labels=labels, boundary=boundary, valid=valid, flat=flat,
-                           n_cells=int(labels.max()), areas_px=areas)
+                           n_cells=int(labels.max()), areas_px=areas, n_regions=n_regions)
 
 
 # -----------------------------------------------------------------------------
