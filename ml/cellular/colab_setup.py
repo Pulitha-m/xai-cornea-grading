@@ -54,6 +54,21 @@ def _run(cmd: list[str]) -> None:
         print(out)
 
 
+def _forget_component_modules(component: Path) -> None:
+    """
+    Drop already-imported Component 3 modules (config, segmentation.*, ...) from
+    the import cache, so code updated by `git pull` is used without restarting
+    the Colab session. Third-party packages are left untouched.
+    """
+    root = str(component.resolve())
+    stale = [name for name, mod in list(sys.modules.items())
+             if (getattr(mod, "__file__", None) or "").startswith(root)]
+    for name in stale:
+        del sys.modules[name]
+    if stale:
+        print(f"Reloaded modules: {', '.join(sorted(stale))}")
+
+
 def setup(pull: bool = True, copy_data: bool = True) -> Path:
     """Prepare the session and return the ml/cellular directory."""
     if _in_colab():
@@ -81,6 +96,7 @@ def setup(pull: bool = True, copy_data: bool = True) -> Path:
     os.chdir(component)
     if str(component) not in sys.path:
         sys.path.insert(0, str(component))
+    _forget_component_modules(component)
 
     n_images = len(list(Path(os.environ.get("CELLULAR_DATA_ROOT", component / "data"),
                               "Finalized_images").glob("*")))
