@@ -1,0 +1,61 @@
+# =============================================================================
+# Component 3 — Corneal Cellular Intelligence Platform
+# Central configuration: every path and tunable parameter lives here so that
+# scripts never hardcode values and results stay reproducible.
+#
+# Path rules (resolved by config.py):
+#   * Relative paths are resolved against ml/cellular/ (this file's folder).
+#   * images_dir and ground_truth_xlsx are resolved against data_root.
+#   * Environment variables override the defaults, so the SAME code runs on a
+#     laptop and on Colab without editing this file:
+#       CELLULAR_DATA_ROOT    -> paths.data_root    (Colab: /content/data)
+#       CELLULAR_OUTPUT_ROOT  -> paths.outputs_dir  (Colab: a Drive folder)
+#       CELLULAR_MODELS_ROOT  -> paths.models_dir   (Colab: a Drive folder)
+# =============================================================================
+
+paths:
+  data_root: data                     # images + ground truth (gitignored)
+  images_dir: Finalized_images        # relative to data_root
+  ground_truth_xlsx: validation_ground_truth_dataset.xlsx   # relative to data_root
+  splits_dir: splits                  # manifest.csv + split summary (tracked in git)
+  outputs_dir: outputs                # figures, tables, reports (gitignored)
+  models_dir: models                  # trained weights / checkpoints (gitignored)
+
+# -----------------------------------------------------------------------------
+# Dataset split (Phase 0, Step 0.4) — tissue-level, stratified, frozen.
+# Changing seed or ratios changes the test set; do not edit after Phase 0.
+# -----------------------------------------------------------------------------
+split:
+  seed: 42
+  train: 0.70
+  val: 0.15
+  test: 0.15
+  calibration_from_train: 0.05        # carved out of train, used ONLY for um/px (Phase 4)
+  stratify_ecd_bins: [2000, 2800]     # ECD bands: <2000, 2000-2800, >2800 cells/mm^2
+
+# -----------------------------------------------------------------------------
+# Raw image properties (Konan CellChek D specular images).
+# -----------------------------------------------------------------------------
+image:
+  width: 1296
+  height: 972
+  channels: 1                         # grayscale
+
+# -----------------------------------------------------------------------------
+# Physical scale (Phase 4). Unknown until calibrated — leave null until then.
+# -----------------------------------------------------------------------------
+scale:
+  um_per_px: null
+
+# -----------------------------------------------------------------------------
+# Validation targets from the research scope (Phase 7).
+# -----------------------------------------------------------------------------
+targets:
+  roi_iou: 0.75
+  seg_dice: 0.85
+  seg_iou: 0.80
+  ecd_pct_error: 5.0
+  cv_pct_error: 10.0
+  hex_pct_error: 10.0
+  mean_area_pct_error: 8.0
+  compactness_cv: 15.0
