@@ -84,6 +84,34 @@ def choose_images(train: pd.DataFrame, quality: pd.DataFrame | None, ann: dict,
     return chosen.reset_index(drop=True)
 
 
+def assign_within_bands(chosen: pd.DataFrame, share: float, rng: np.random.Generator) -> pd.Series:
+    """
+    Mark ~share of the crops 'challenging' INSIDE every ECD band, so difficulty is
+    not confounded with cell density (round-1 v1 put all of them in one band).
+    """
+    difficulty = pd.Series("typical", index=chosen.index)
+    for _, idx in chosen.groupby("ecd_band").groups.items():
+        idx = list(idx)
+        k = int(round(share * len(idx)))
+        difficulty.loc[rng.choice(idx, size=k, replace=False)] = "challenging"
+    return difficulty
+
+
+def pick_expert_subset(chosen: pd.DataFrame, n: int, rng: np.random.Generator) -> set[str]:
+    """
+    Expert-overlap crops spread over ECD band x difficulty strata (round robin),
+    so inter-annotator agreement covers easy and hard, dense and sparse cells.
+    """
+    strata = {key: list(rng.permutation(g["image_id"].to_numpy()))
+              for key, g in chosen.groupby(["ecd_band", "difficulty"])}
+    picked: list[str] = []
+    while len(picked) < n and any(strata.values()):
+        for key in sorted(strata):
+            if strata[key] and len(picked) < n:
+                picked.append(strata[key].pop())
+    return set(picked)
+
+
 # -----------------------------------------------------------------------------
 # Where in the image
 # -----------------------------------------------------------------------------
@@ -168,10 +196,9 @@ def main() -> None:
     print(f"Quality scores: {'used' if quality is not None else 'not found - stratifying by ECD only'}")
 
     chosen = choose_images(train, quality, ann, rng)
-    n_challenging = int(round(ann["challenging_share"] * len(chosen)))
-    chosen["difficulty"] = ["challenging"] * n_challenging + ["typical"] * (len(chosen) - n_challenging)
+    chosen["difficulty"] = assign_within_bands(chosen, ann["challenging_share"], rng)
     chosen = chosen.sample(frac=1, random_state=ann["seed"]).reset_index(drop=True)
-    expert_ids = set(chosen.sample(ann["n_expert_overlap"], random_state=ann["seed"])["image_id"])
+    expert_ids = pick_expert_subset(chosen, ann["n_expert_overlap"], rng)
 
     draft_params = replace(ClassicalParams.from_config(cfg), h_threshold=cfg["classical"]["draft_h_threshold"])
 
@@ -209,6 +236,7 @@ def main() -> None:
     print(index.groupby(["ecd_band", "difficulty"]).size().unstack(fill_value=0).to_string())
     print(f"Quality terciles: {index['quality_tercile'].value_counts().to_dict()}")
     print(f"Expert overlap crops: {int(index['expert_overlap'].sum())}  ->  {out_dir / 'expert'}")
+    print(index[index["expert_overlap"]].groupby(["ecd_band", "difficulty"]).size().to_string())
 
 
 if __name__ == "__main__":
