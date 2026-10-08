@@ -48,7 +48,7 @@ class ClassicalParams:
     method: str = "ridge"                       # "ridge" or "seeds"
     cell_px: float = 28.2
     ridge_sigmas_px: tuple[float, ...] = (1.5, 2.5)
-    h_threshold: float = 0.12
+    h_threshold: float = 0.30
     dark_threshold: float = 40.0
     smooth_sigma_factor: float = 0.08
     seed_sigma_factor: float = 0.22
@@ -60,6 +60,7 @@ class ClassicalParams:
     def from_config(cls, cfg: dict) -> "ClassicalParams":
         """Build parameters from config.yaml (image.cell_spacing_px + classical.*)."""
         c = dict(cfg.get("classical", {}))
+        c.pop("draft_h_threshold", None)                 # used by the annotation drafts, not here
         if "ridge_sigmas_px" in c:                       # YAML list -> hashable tuple
             c["ridge_sigmas_px"] = tuple(c["ridge_sigmas_px"])
         return cls(cell_px=float(cfg["image"]["cell_spacing_px"]), **c)

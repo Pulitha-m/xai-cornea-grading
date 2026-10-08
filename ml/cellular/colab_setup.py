@@ -35,6 +35,7 @@ REPO_DIR = f"{RESEARCH}/xai-cornea-grading"
 LOCAL_DATA = "/content/data"                       # fast local disk on the Colab VM
 OUTPUT_ROOT = f"{RESEARCH}/cellular_outputs"        # persistent results on Drive
 MODELS_ROOT = f"{RESEARCH}/cellular_models"         # persistent checkpoints on Drive
+ANNOT_ROOT = f"{RESEARCH}/cellular_annotations"     # crops, drafts, corrected masks on Drive
 
 
 def _in_colab() -> bool:
@@ -89,6 +90,7 @@ def setup(pull: bool = True, copy_data: bool = True) -> Path:
         os.environ["CELLULAR_DATA_ROOT"] = LOCAL_DATA
         os.environ["CELLULAR_OUTPUT_ROOT"] = OUTPUT_ROOT
         os.environ["CELLULAR_MODELS_ROOT"] = MODELS_ROOT
+        os.environ["CELLULAR_ANNOT_ROOT"] = ANNOT_ROOT
         component = Path(REPO_DIR, "ml", "cellular")
     else:
         component = Path(__file__).resolve().parent

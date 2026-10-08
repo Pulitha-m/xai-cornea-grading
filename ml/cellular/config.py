@@ -13,6 +13,7 @@ editing paths per machine, set environment variables before running:
     CELLULAR_DATA_ROOT    overrides paths.data_root
     CELLULAR_OUTPUT_ROOT  overrides paths.outputs_dir
     CELLULAR_MODELS_ROOT  overrides paths.models_dir
+    CELLULAR_ANNOT_ROOT   overrides paths.annotations_dir
 
 Usage
 -----
@@ -45,6 +46,7 @@ _ENV_OVERRIDES = {
     "data_root": "CELLULAR_DATA_ROOT",
     "outputs_dir": "CELLULAR_OUTPUT_ROOT",
     "models_dir": "CELLULAR_MODELS_ROOT",
+    "annotations_dir": "CELLULAR_ANNOT_ROOT",
 }
 
 # Keys whose values are relative to data_root rather than to COMPONENT_ROOT.

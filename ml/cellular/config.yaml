@@ -11,6 +11,7 @@
 #       CELLULAR_DATA_ROOT    -> paths.data_root    (Colab: /content/data)
 #       CELLULAR_OUTPUT_ROOT  -> paths.outputs_dir  (Colab: a Drive folder)
 #       CELLULAR_MODELS_ROOT  -> paths.models_dir   (Colab: a Drive folder)
+#       CELLULAR_ANNOT_ROOT   -> paths.annotations_dir (Colab: a Drive folder)
 # =============================================================================
 
 paths:
@@ -20,6 +21,7 @@ paths:
   splits_dir: splits                  # manifest.csv + split summary (tracked in git)
   outputs_dir: outputs                # figures, tables, reports (gitignored)
   models_dir: models                  # trained weights / checkpoints (gitignored)
+  annotations_dir: annotations        # crops, drafts and corrected masks (patient data: Drive, not git)
 
 # -----------------------------------------------------------------------------
 # Dataset split (Phase 0, Step 0.4) — tissue-level, stratified, frozen.
@@ -58,13 +60,29 @@ scale:
 classical:
   method: ridge                       # "ridge" (walls -> h-minima seeds, data-driven) or "seeds" (v1, spacing-driven)
   ridge_sigmas_px: [1.5, 2.5]         # Sato ridge-filter scales matching the dark cell walls (px)
-  h_threshold: 0.12                   # min wall contrast (0..1 of the wall map) that separates two cells
+  h_threshold: 0.30                   # min wall contrast (0..1) separating two cells; tuned on 40 train images
+                                      # (2026-10-08: area ratio 0.92, Spearman 0.76 vs Konan — best correlation)
+  draft_h_threshold: 0.20             # for annotation drafts: slightly over-split, since erasing a wall
+                                      # is quicker than drawing a missing one
   dark_threshold: 40                  # ignore regions whose illumination is below this
   smooth_sigma_factor: 0.08           # noise smoothing before watershed (~2 px)
   seed_sigma_factor: 0.22             # "seeds" method only: smoothing for cell-centre detection (~6 px)
   min_seed_distance_factor: 0.45      # "seeds" method only: minimum distance between centres (~13 px)
   min_area_factor: 0.30               # keep cells with area >= 0.30 x expected hexagon area
   max_area_factor: 2.50               # ... and <= 2.50 x expected hexagon area
+
+# -----------------------------------------------------------------------------
+# Segmentation annotation, round 1 (Phase 1, Steps 1.2-1.6). Crops come from
+# TRAIN images only, one crop per tissue.
+# -----------------------------------------------------------------------------
+annotation:
+  round: round1
+  crop_size: 256                      # px; ~95 cells at 28 px spacing
+  n_crops: 40
+  n_expert_overlap: 10                # crops also corrected independently by the NEBSL expert
+  min_per_ecd_band: 6                 # guarantee rare low-ECD tissues are represented
+  challenging_share: 0.3              # share of crops taken from harder (not best-covered) windows
+  seed: 7                             # separate from split.seed; changing it picks other crops
 
 # -----------------------------------------------------------------------------
 # Validation targets from the research scope (Phase 7).
