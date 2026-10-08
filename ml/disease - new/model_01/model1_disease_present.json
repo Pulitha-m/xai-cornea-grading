@@ -1,0 +1,34 @@
+{
+  "model": "Gradient Boosting",
+  "params": {
+    "model__learning_rate": "0.03",
+    "model__max_depth": "3",
+    "model__min_samples_leaf": "30"
+  },
+  "features": [
+    "ECD_CD_cells_per_mm2",
+    "ECD_Deficit",
+    "SD",
+    "CV",
+    "HEX_percent",
+    "Donor_Age"
+  ],
+  "threshold": 0.44,
+  "cv_train": {
+    "ROC_AUC": 0.679,
+    "PR_AUC": 0.6991,
+    "Balanced_Acc": 0.6133,
+    "Sensitivity": 0.5517,
+    "Specificity": 0.6749,
+    "F1_Diseased": 0.5955
+  },
+  "test": {
+    "ROC_AUC": 0.6699,
+    "PR_AUC": 0.6993,
+    "Balanced_Acc": 0.606,
+    "Sensitivity": 0.6972,
+    "Specificity": 0.5149,
+    "Precision_Diseased": 0.608,
+    "F1_Diseased": 0.6496
+  }
+}
