@@ -314,10 +314,10 @@ def build(cfg: dict) -> pd.DataFrame:
             stats.append(inspect_image(images_dir / row["image_file"]))
     merged = pd.concat([merged.reset_index(drop=True), pd.DataFrame(stats)], axis=1)
 
-    merged["needs_review"] = merged["needs_review"].fillna(False).astype(bool)
-    merged["dup_same_tissue"] = merged["dup_same_tissue"].fillna(False).astype(bool)
-    merged["duplicate_gt_row"] = merged.get("duplicate_gt_row", False)
-    merged["duplicate_gt_row"] = merged["duplicate_gt_row"].fillna(False).astype(bool)
+    # Rows without ground truth have NaN in these boolean columns; `.eq(True)`
+    # maps True -> True and NaN/False -> False without pandas' downcast warning.
+    for col in ("needs_review", "dup_same_tissue", "duplicate_gt_row"):
+        merged[col] = merged[col].eq(True)
 
     merged["image_id"] = merged["image_file"].map(lambda f: Path(f).stem)
     merged["cornea_id"] = merged["matched_cornea_id"]
