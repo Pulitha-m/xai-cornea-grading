@@ -1,0 +1,106 @@
+{
+  "created_utc": "2026-10-08T08:28:58+00:00",
+  "seed": 42,
+  "ratios": {
+    "train": 0.7,
+    "val": 0.15,
+    "test": 0.15,
+    "calibration_from_train": 0.05
+  },
+  "stratified_by": "ECD band, bins [2000, 2800]",
+  "grouped_by": "group_id (tissue)",
+  "grouping_limitation": "Tissues are grouped by tissue serial number (5-digit serials) or by the normalised cornea ID (other formats). Whether both eyes of one donor share a serial is unconfirmed, so two eyes of the same donor could fall into different splits. Confirm with NEBSL and rebuild with --force before training if needed.",
+  "sklearn_version": "1.6.1",
+  "status_counts": {
+    "included": 1384,
+    "excluded:no_ground_truth": 3,
+    "review:needs_review": 2
+  },
+  "flag_counts": {
+    "dup_same_tissue": 6
+  },
+  "splits": {
+    "calibration": {
+      "images": 69,
+      "tissues": 69,
+      "share": 0.0499,
+      "ecd_band_counts": {
+        "2000-2800": 38,
+        "<2000": 1,
+        ">2800": 30
+      },
+      "grade_counts": {
+        "green": 69
+      },
+      "mean": {
+        "ecd": 2778.38,
+        "cv": 36.01,
+        "hex": 57.17,
+        "mean_area": 364.84,
+        "num_cells": 109.72
+      }
+    },
+    "test": {
+      "images": 197,
+      "tissues": 197,
+      "share": 0.1423,
+      "ecd_band_counts": {
+        "2000-2800": 101,
+        "<2000": 3,
+        ">2800": 93
+      },
+      "grade_counts": {
+        "green": 197
+      },
+      "mean": {
+        "ecd": 2777.2,
+        "cv": 36.09,
+        "hex": 56.5,
+        "mean_area": 367.46,
+        "num_cells": 110.0
+      }
+    },
+    "train": {
+      "images": 921,
+      "tissues": 916,
+      "share": 0.6655,
+      "ecd_band_counts": {
+        "2000-2800": 492,
+        "<2000": 27,
+        ">2800": 402
+      },
+      "grade_counts": {
+        "green": 919,
+        "yellow": 2
+      },
+      "mean": {
+        "ecd": 2745.12,
+        "cv": 36.57,
+        "hex": 56.61,
+        "mean_area": 373.27,
+        "num_cells": 110.72
+      }
+    },
+    "val": {
+      "images": 197,
+      "tissues": 197,
+      "share": 0.1423,
+      "ecd_band_counts": {
+        "2000-2800": 102,
+        "<2000": 4,
+        ">2800": 91
+      },
+      "grade_counts": {
+        "green": 197
+      },
+      "mean": {
+        "ecd": 2781.81,
+        "cv": 36.12,
+        "hex": 56.9,
+        "mean_area": 367.27,
+        "num_cells": 111.59
+      }
+    }
+  },
+  "test_hash_sha256": "5c739a9cc28c7decc34740a5ef80489dbcbaf08a3b96b5c91d252e6ea5950796"
+}
