@@ -1,10 +1,13 @@
 """
 One-line environment setup for Component 3 notebooks.
 
-On Colab, put this as the FIRST cell of every notebook (works after any restart):
+On Colab, put this as the FIRST cell of every notebook (works after any restart).
+The explicit pull comes first so this file exists and is up to date before it runs:
 
     from google.colab import drive; drive.mount("/content/drive")
-    %run "/content/drive/MyDrive/Colab Notebooks/Research_Project/xai-cornea-grading/ml/cellular/colab_setup.py"
+    REPO_DIR = "/content/drive/MyDrive/Colab Notebooks/Research_Project/xai-cornea-grading"
+    !git -C "{REPO_DIR}" pull --ff-only
+    %run "{REPO_DIR}/ml/cellular/colab_setup.py"
 
 What it does
 ------------
@@ -15,8 +18,8 @@ Local:  only changes directory to ml/cellular and makes it importable.
 
 Variables left in the notebook: IN_COLAB, COMPONENT_DIR, RESEARCH, REPO_DIR, LOCAL_DATA.
 
-Note: the file runs *before* it pulls, so a change to colab_setup.py itself takes
-effect from the next run.
+setup() pulls again by default; that second pull is a harmless no-op when the
+cell above already pulled.
 """
 
 from __future__ import annotations
