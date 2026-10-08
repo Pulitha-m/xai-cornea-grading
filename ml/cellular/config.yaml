@@ -40,12 +40,28 @@ image:
   width: 1296
   height: 972
   channels: 1                         # grayscale
+  cell_spacing_px: 28.2               # median cell centre-to-centre distance (audit, FFT)
 
 # -----------------------------------------------------------------------------
-# Physical scale (Phase 4). Unknown until calibrated — leave null until then.
+# Physical scale (Phase 4). um_per_px stays null until calibrated.
+# um_per_px_prelim comes from the audit (calibration split only) and may be used
+# for rough sanity checks before Phase 4 — never for reported results.
 # -----------------------------------------------------------------------------
 scale:
   um_per_px: null
+  um_per_px_prelim: 0.752
+
+# -----------------------------------------------------------------------------
+# Classical baseline segmenter (Phase 1). Factors are multiples of
+# image.cell_spacing_px so the method adapts if the cell size estimate changes.
+# -----------------------------------------------------------------------------
+classical:
+  dark_threshold: 40                  # ignore regions whose illumination is below this
+  smooth_sigma_factor: 0.08           # noise smoothing before watershed (~2 px)
+  seed_sigma_factor: 0.22             # smoothing for cell-centre detection (~6 px)
+  min_seed_distance_factor: 0.45      # minimum distance between cell centres (~13 px)
+  min_area_factor: 0.30               # keep cells with area >= 0.30 x expected hexagon area
+  max_area_factor: 2.50               # ... and <= 2.50 x expected hexagon area
 
 # -----------------------------------------------------------------------------
 # Validation targets from the research scope (Phase 7).
