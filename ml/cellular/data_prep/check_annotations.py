@@ -21,7 +21,8 @@ For every file it
      using boundary F1 (walls matched within 2 px) and cell F1
      (cells matched at IoU > 0.5). Ignore regions are excluded.
 
-Outputs: <round>/check_report.csv and a printed summary.
+Outputs: <round>/check_report.csv, review/<crop_id>_check.png (where to look),
+and a printed summary. A crop identical to its draft is reported as NOT CORRECTED.
 
 Usage (from ml/cellular/; on Colab after the setup cell):
     python -m data_prep.check_annotations                 # all corrected crops
@@ -115,6 +116,32 @@ def cell_issues(labels: np.ndarray, expected_area: float) -> dict:
     }
 
 
+def save_review(crop: np.ndarray, mask: np.ndarray, cells: np.ndarray, expected_area: float,
+                out_path: Path, scale: int = 3) -> None:
+    """
+    Review image (crop enlarged x3): walls red, ignore areas blue, suspected stray
+    walls (tiny fragments) circled YELLOW, suspected wall gaps (large regions)
+    outlined CYAN — tells the annotator exactly where to look in GIMP.
+    """
+    big = lambda a: cv2.resize(a, None, fx=scale, fy=scale, interpolation=cv2.INTER_NEAREST)
+    view = cv2.cvtColor(big(crop), cv2.COLOR_GRAY2BGR)
+    m = big(mask)
+    view[m == WALL] = (0, 0, 255)
+    view[m == IGNORE] = (0.5 * view[m == IGNORE] + (127, 0, 0)).astype(np.uint8)
+
+    areas = np.bincount(cells.ravel())
+    for lab in np.flatnonzero(areas[1:]) + 1:
+        region = (cells == lab).astype(np.uint8)
+        if areas[lab] < 0.25 * expected_area:
+            ys, xs = np.nonzero(region)
+            cv2.circle(view, (int(xs.mean() * scale), int(ys.mean() * scale)), 6 * scale, (0, 255, 255), 2)
+        elif areas[lab] > 2.5 * expected_area:
+            contours, _ = cv2.findContours(big(region), cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+            cv2.drawContours(view, contours, -1, (255, 255, 0), 2)
+    out_path.parent.mkdir(parents=True, exist_ok=True)
+    cv2.imwrite(str(out_path), view)
+
+
 def boundary_f1(pred_walls: np.ndarray, gt_walls: np.ndarray, keep: np.ndarray) -> float:
     """F1 of 1-px wall skeletons matched within BOUNDARY_TOLERANCE_PX, inside `keep`."""
     p = skeletonize(pred_walls) & keep
@@ -195,8 +222,14 @@ def main() -> None:
             if mask is not None:
                 cv2.imwrite(str(mask_dir / f"{crop_id}.png"), mask)
                 masks[(who, crop_id)] = mask
-                row.update(cell_issues(cells_from_mask(mask), expected_area_px(crop_id)))
+                cells = cells_from_mask(mask)
+                row.update(cell_issues(cells, expected_area_px(crop_id)))
                 row["ignore_share"] = round(float((mask == IGNORE).mean()), 3)
+                crop_img = cv2.imread(str(rd / "crops" / f"{crop_id}.png"), cv2.IMREAD_GRAYSCALE)
+                if crop_img is not None:
+                    review_dir = (rd if who == "annotator" else rd / "expert") / "review"
+                    save_review(crop_img, mask, cells, expected_area_px(crop_id),
+                                review_dir / f"{crop_id}_check.png")
 
                 draft, _, _ = read_layer(rd / "drafts" / f"{crop_id}_walls.png", size)
                 if draft is not None:
@@ -239,6 +272,14 @@ def main() -> None:
     if not flagged.empty:
         print("\nCHECK = possible wall gap (large region) or stray wall (tiny fragment); "
               "re-open in GIMP and fix: " + ", ".join(flagged["crop_id"]))
+        print(f"  -> see {rd / 'review'}/<crop_id>_check.png : yellow circles = stray walls, "
+              "cyan outlines = wall gaps")
+    if "draft_boundary_f1" in report:
+        unchanged = report[(report["who"] != "inter-annotator") & (report["draft_boundary_f1"] >= 0.999)]
+    else:
+        unchanged = report.iloc[0:0]
+    if not unchanged.empty:
+        print("\nNOT CORRECTED YET (identical to the draft): " + ", ".join(unchanged["crop_id"]))
 
     done = report[(report["who"] == "annotator") & (report["status"] != "ERROR")]
     if len(done):

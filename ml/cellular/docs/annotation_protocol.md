@@ -47,16 +47,34 @@ Patient-derived images: keep them on Drive / your own computer. Do not upload to
 
 ## 3. GIMP (2.10 or 3.x)
 
+> **The draft must be CORRECTED, not just exported.** The checker reports a crop that is identical
+> to its draft as *NOT CORRECTED*. Expect to erase several stray walls and add a few missing ones
+> in every crop.
+
+**One-time tool setup** (GIMP remembers it):
+* **Pencil** (`N`) — *not* the Paintbrush. Size **2**, brush **"2. Hardness 100"**,
+  **untick "Enable dynamics"** (otherwise line width follows pen pressure).
+* **Eraser** (`Shift+E`) — tick **Hard edge**, size **3**, untick "Enable dynamics".
+
+**For every crop:**
 1. **File → Open** `crops/round1_XXX.png`.
-2. **File → Open as Layers…** `drafts/round1_XXX_walls.png` (now two layers: crop + walls).
-3. Select the **walls** layer in the Layers panel. Zoom to **400 %** (`View → Zoom → 4:1`).
-4. **Pencil tool** (`N`): size **2 px**, hardness 100, colour **#FF0000** — add walls.
-   **Eraser** (`Shift+E`): tick **Hard edge**, size **3 px** — remove false walls.
-   For ignore regions: Pencil with colour **#0000FF**, larger size (10–20 px), fill the area.
-5. Check: toggle the crop layer's eye icon off and on — every cell should be a closed loop.
-6. **Hide the crop layer** (eye icon off) so only the walls layer is visible.
-7. **File → Export As…** → `corrected/round1_XXX_walls.png` → keep **Save background colour** off,
-   so transparency is kept. (Optionally **File → Save** the `.xcf` to resume later.)
+2. **Image → Mode → RGB** — *do this first!* The crop is grayscale; without this step GIMP turns the
+   red walls grey and you cannot paint in colour (title bar must say **"RGB color"**).
+3. **File → Open as Layers…** `drafts/round1_XXX_walls.png` (now two layers: crop + walls).
+4. **Click the walls layer** in the Layers panel so it is highlighted — all painting goes on this
+   layer, never on the crop. Zoom to **400 %** (`View → Zoom → 4:1`).
+5. Correct, cell by cell:
+   * **Eraser** — remove walls that cut through one cell, slivers, and dangling wall ends.
+   * **Pencil, colour `FF0000`** — add missing walls between merged cells.
+   * **Pencil, colour `0000FF`, size 15** — fill areas whose cells cannot be judged (ignore).
+6. Check: toggle the crop layer's eye icon off and on — every cell should be a closed red loop.
+7. **Hide the crop layer** (eye icon off): you must see **only red/blue on a checkerboard**.
+8. **File → Export As…** → `corrected/round1_XXX_walls.png` → **Export** (PNG defaults keep
+   transparency). Optionally **File → Save** the `.xcf` to resume later.
+
+**If the walls already turned grey** (step 2 was skipped): Image → Mode → RGB, select the walls
+layer, **Layer → Transparency → Alpha to Selection**, set the foreground colour to `FF0000`,
+**Edit → Fill with FG Color**, **Select → None**.
 
 ## 4. Krita (alternative)
 
@@ -79,6 +97,14 @@ Patient-derived images: keep them on Drive / your own computer. Do not upload to
 Run `python -m data_prep.check_annotations` (Step 1.5). It checks colours, size and that cells are
 closed, converts each layer to a training mask (wall / interior / ignore), and reports the classical
 baseline's agreement with your corrections and the inter-annotator agreement.
+
+| Checker says | Do |
+|---|---|
+| `OK` | done |
+| `CHECK` | open `review/round1_XXX_check.png`: **yellow circles** = probable stray walls (erase), **cyan outlines** = probable wall gaps (close them); fix in GIMP and re-export |
+| `NOT CORRECTED YET` | the file equals the draft — correct it (section 3) |
+| `ERROR … neither red nor blue` | crop layer was visible, or the background was saved white — hide the crop layer / keep transparency and re-export |
+| `draft_boundary_f1` | how much you changed (1.0 = nothing; typical after correction 0.85–0.95) |
 
 ## 7. Notes for the thesis (Methods)
 
