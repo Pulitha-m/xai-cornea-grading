@@ -108,7 +108,15 @@ baseline's agreement with your corrections and the inter-annotator agreement.
 
 ## 7. Notes for the thesis (Methods)
 
-* Annotation by correction of an automated draft (classical ridge-based watershed, h = 0.20);
-  annotator 1 = researcher, annotator 2 = NEBSL technician (10 overlapping crops).
-* Both annotators corrected the **same draft**, so agreement measures consistency of correction;
-  this is stated as a limitation (a draft can anchor both annotators).
+* Annotation by correction of an automated draft (classical ridge-based watershed, h = 0.20).
+  All 40 crops were annotated by the researcher under the guidance of an NEBSL expert.
+* **Expert revision (10 crops):** the expert compared each crop and its draft with the
+  researcher's corrected annotation and revised the errors directly in that annotation.
+  Original vs revised: boundary F1 0.991, cell F1 0.980 (mean of 10 crops; 2 px tolerance,
+  IoU > 0.5), i.e. the expert changed ~2 % of cell boundaries.
+* This is **expert validation, not independent inter-annotator agreement** — the expert started
+  from the researcher's annotation, so the agreement is not a measure of inter-observer
+  variability. Stated as a limitation.
+* The expert-revised masks replace the researcher's for those 10 crops in training and evaluation.
+* Classical baseline (ridge watershed, h = 0.30) vs annotations, 40 crops: boundary F1 0.878,
+  cell F1 0.668. Record: `check_report_final_round1.csv`.
