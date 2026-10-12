@@ -85,6 +85,21 @@ annotation:
   seed: 7                             # separate from split.seed; changing it picks other crops
 
 # -----------------------------------------------------------------------------
+# ROI tile labelling, round 1 (Phase 1, Step 1.7). Whole images are cut into a
+# grid of square tiles and EVERY tile is labelled good / usable / poor:
+# train images -> patch-quality CNN (3.1); val images -> reference ROI for ROI IoU.
+# Test images are never used.
+# -----------------------------------------------------------------------------
+roi:
+  round: round1
+  grid_rows: 6                        # 972 / 6 = 162 px
+  grid_cols: 8                        # 1296 / 8 = 162 px -> square tiles, ~5.7 cells across
+  n_images_train: 20
+  n_images_val: 10
+  n_repeat: 3                         # images shown again (rotated 180 deg) for intra-rater repeatability
+  seed: 11                            # separate from split.seed and annotation.seed
+
+# -----------------------------------------------------------------------------
 # Validation targets from the research scope (Phase 7).
 # -----------------------------------------------------------------------------
 targets:
