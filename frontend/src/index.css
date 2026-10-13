@@ -1,1 +1,34 @@
 @import "tailwindcss";
+
+/* Design tokens: calm, clinical palette — off-white surfaces, deep navy primary, muted teal accent. */
+@theme {
+  --font-sans: ui-sans-serif, system-ui, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+
+  --color-background: #f7f8fa;
+  --color-foreground: #0f1b2d;
+  --color-card: #ffffff;
+  --color-muted: #eef1f5;
+  --color-muted-foreground: #5b6779;
+  --color-border: #dde3ea;
+  --color-input: #c9d1db;
+
+  --color-primary: #12355b;
+  --color-primary-foreground: #ffffff;
+  --color-secondary: #e8eef4;
+  --color-secondary-foreground: #12355b;
+  --color-accent: #0f766e;
+  --color-accent-soft: #e6f2f1;
+  --color-ring: #0f766e;
+  --color-destructive: #b42318;
+  --color-destructive-soft: #fef3f2;
+}
+
+@layer base {
+  html {
+    color-scheme: light;
+  }
+
+  body {
+    @apply bg-background text-foreground antialiased;
+  }
+}
