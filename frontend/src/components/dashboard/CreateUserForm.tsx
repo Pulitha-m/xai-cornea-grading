@@ -3,7 +3,7 @@ import { useMutation, useQueryClient } from "@tanstack/react-query"
 import { createUser, USERS_QUERY_KEY } from "@/api/users"
 import { ApiError } from "@/lib/api-client"
 import { ROLE_LABELS } from "@/lib/roles"
-import { textInput } from "@/lib/styles"
+import { primaryButton, textInput } from "@/lib/styles"
 import { ROLES, type CreateUserRequest, type Role } from "@/types/auth"
 import { Spinner } from "@/components/ui/spinner"
 
@@ -82,7 +82,7 @@ export function CreateUserForm() {
                 <button
                     type="submit"
                     disabled={mutation.isPending}
-                    className="inline-flex h-10 items-center gap-2 rounded-lg bg-primary px-4 text-sm font-medium text-primary-foreground hover:bg-primary/90 focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-ring/40 disabled:opacity-70"
+                    className={primaryButton}
                 >
                     {mutation.isPending && <Spinner />}
                     Create account

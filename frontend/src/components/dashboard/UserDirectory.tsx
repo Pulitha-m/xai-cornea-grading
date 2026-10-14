@@ -3,7 +3,7 @@ import { UsersIcon } from "lucide-react"
 import { assignRole, listUsers, setUserEnabled, USERS_QUERY_KEY } from "@/api/users"
 import { useAuth } from "@/hooks/use-auth"
 import { ROLE_LABELS } from "@/lib/roles"
-import { tableCell, tableHead, tableHeaderCell, tableRow } from "@/lib/styles"
+import { alertError, tableCell, tableHead, tableHeaderCell, tableRow } from "@/lib/styles"
 import { ROLES, type ManagedUser, type Role } from "@/types/auth"
 import { EmptyState } from "@/components/ui/empty-state"
 import { Spinner } from "@/components/ui/spinner"
@@ -43,7 +43,7 @@ export function UserDirectory() {
 
     if (users.isError) {
         return (
-            <p role="alert" className="py-6 text-sm text-destructive">
+            <p role="alert" className={alertError}>
                 {users.error.message}
             </p>
         )
@@ -56,12 +56,13 @@ export function UserDirectory() {
     return (
         <div>
             {mutationError && (
-                <p role="alert" className="mb-3 text-sm text-destructive">
+                <p role="alert" className={`mb-4 ${alertError}`}>
                     {mutationError.message}
                 </p>
             )}
-            <div className="overflow-x-auto">
-                <table className="w-full min-w-[40rem] text-sm">
+            {/* Bleed to the card edges, as data tables do in the NEBSL design. */}
+            <div className="-mx-5 -mb-5 overflow-x-auto sm:-mx-6 sm:-mb-6">
+                <table className="w-full min-w-[40rem] text-sm [&_tbody_tr:last-child_td]:border-b-0">
                     <thead className={tableHead}>
                         <tr>
                             <th scope="col" className={tableHeaderCell}>Name</th>
@@ -122,7 +123,7 @@ function UserRow({
                         value={user.role}
                         disabled={busy}
                         onChange={(e) => onRoleChange(e.target.value as Role)}
-                        className="h-8 rounded-md border border-input bg-card px-2 text-sm focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-ring/25"
+                        className="h-8 rounded-xl border border-input bg-sunken px-2.5 text-sm focus:bg-card focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-ring/25"
                     >
                         {ROLES.map((role) => (
                             <option key={role} value={role}>

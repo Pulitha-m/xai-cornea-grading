@@ -1,6 +1,6 @@
 import { useId, useState, type FormEvent } from "react"
 import { useAnalysis } from "@/hooks/use-analysis"
-import { textInput } from "@/lib/styles"
+import { alertError, primaryButton, textInput } from "@/lib/styles"
 import { AnalysisResults } from "@/components/analysis/AnalysisResults"
 import { Card } from "@/components/dashboard/PageHeader"
 import { Spinner } from "@/components/ui/spinner"
@@ -55,7 +55,7 @@ export function AnalysisPanel() {
                     <button
                         type="submit"
                         disabled={analysis.isPending}
-                        className="inline-flex h-10 items-center justify-center gap-2 rounded-lg bg-primary px-4 text-sm font-medium text-primary-foreground hover:bg-primary/90 focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-ring/40 disabled:opacity-70"
+                        className={primaryButton}
                     >
                         {analysis.isPending && <Spinner />}
                         {analysis.isPending ? "Analysing…" : "Analyse"}
@@ -63,7 +63,7 @@ export function AnalysisPanel() {
                 </form>
 
                 {analysis.isError && (
-                    <p role="alert" className="mt-4 text-sm text-destructive">
+                    <p role="alert" className={`mt-4 ${alertError}`}>
                         {analysis.error.message}
                     </p>
                 )}

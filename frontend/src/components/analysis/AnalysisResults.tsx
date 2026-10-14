@@ -1,6 +1,7 @@
 import type { ReactNode } from "react"
 import type { AnalyzeResponse } from "@/api/analysis"
 import { formatCount, formatPercent, humanize, isFailed, moduleStatus } from "@/lib/analysis-format"
+import { alertError } from "@/lib/styles"
 import { Card } from "@/components/dashboard/PageHeader"
 import { ConfidenceMeter } from "@/components/analysis/ConfidenceMeter"
 import { Field } from "@/components/ui/field"
@@ -103,7 +104,7 @@ function ModuleResult({
         <Card title={title} description={description} actions={<StatusBadge tone={tone}>{label}</StatusBadge>}>
             {isFailed(status) ? (
                 // The module's own error text is internal detail; show a neutral message instead.
-                <p className="rounded-2xl border border-destructive/20 bg-destructive-soft px-3.5 py-3 text-sm text-destructive">
+                <p className={alertError}>
                     This module could not complete the analysis. The other modules are unaffected.
                 </p>
             ) : (

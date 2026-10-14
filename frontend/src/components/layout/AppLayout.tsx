@@ -5,11 +5,33 @@ import { useAuth } from "@/hooks/use-auth"
 import { Sidebar } from "@/components/layout/Sidebar"
 import { TopBar } from "@/components/layout/TopBar"
 
+const FOCUSABLE = 'a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), [tabindex]:not([tabindex="-1"])'
+
+/** Keeps Tab / Shift+Tab cycling inside the open drawer. */
+function trapFocus(event: KeyboardEvent, container: HTMLElement) {
+    const focusable = container.querySelectorAll<HTMLElement>(FOCUSABLE)
+    if (focusable.length === 0) {
+        return
+    }
+    const first = focusable[0]
+    const last = focusable[focusable.length - 1]
+    const active = document.activeElement
+
+    if (event.shiftKey && (active === first || !container.contains(active))) {
+        event.preventDefault()
+        last.focus()
+    } else if (!event.shiftKey && (active === last || !container.contains(active))) {
+        event.preventDefault()
+        first.focus()
+    }
+}
+
 /** Shared shell for every signed-in page: sidebar (drawer on small screens), top bar, content. */
 export function AppLayout() {
     const { user } = useAuth()
     const [navOpen, setNavOpen] = useState(false)
     const menuButtonRef = useRef<HTMLButtonElement>(null)
+    const drawerRef = useRef<HTMLDivElement>(null)
 
     const closeNav = useCallback(() => {
         setNavOpen(false)
@@ -23,6 +45,8 @@ export function AppLayout() {
         const onKeyDown = (event: KeyboardEvent) => {
             if (event.key === "Escape") {
                 closeNav()
+            } else if (event.key === "Tab" && drawerRef.current) {
+                trapFocus(event, drawerRef.current)
             }
         }
         document.addEventListener("keydown", onKeyDown)
@@ -44,11 +68,11 @@ export function AppLayout() {
                     <button
                         type="button"
                         tabIndex={-1}
-                        aria-label="Close navigation"
+                        aria-hidden="true"
                         onClick={closeNav}
                         className="absolute inset-0 bg-foreground/30"
                     />
-                    <div className="relative flex h-full w-72 max-w-[85vw] bg-card shadow-pop">
+                    <div ref={drawerRef} className="relative flex h-full w-72 max-w-[85vw] bg-card shadow-pop">
                         <button
                             type="button"
                             autoFocus

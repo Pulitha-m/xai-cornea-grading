@@ -1,4 +1,4 @@
-import { screen } from "@testing-library/react"
+import { screen, within } from "@testing-library/react"
 import userEvent from "@testing-library/user-event"
 import { describe, expect, it, vi } from "vitest"
 import { makeAuth, makeUser, renderApp } from "@/test/auth-test-utils"
@@ -109,6 +109,23 @@ describe("AppLayout", () => {
         await user.keyboard("{Escape}")
         expect(screen.queryByRole("dialog", { name: "Navigation" })).not.toBeInTheDocument()
         expect(menuButton).toHaveFocus()
+    })
+
+    it("keeps keyboard focus inside the open drawer", async () => {
+        const user = userEvent.setup()
+        renderApp("/doctor/dashboard", makeAuth({ user: makeUser("DOCTOR") }))
+
+        await user.click(await screen.findByRole("button", { name: "Open navigation" }))
+        const drawer = screen.getByRole("dialog", { name: "Navigation" })
+        const closeButton = within(drawer).getByRole("button", { name: "Close navigation" })
+        const signOut = within(drawer).getByRole("button", { name: "Sign out" })
+        expect(closeButton).toHaveFocus()
+
+        await user.tab({ shift: true })
+        expect(signOut).toHaveFocus()
+
+        await user.tab()
+        expect(closeButton).toHaveFocus()
     })
 })
 
