@@ -71,6 +71,7 @@ def finetune(train: list[Sample], cp: dict, name: str, save_dir: Path) -> str:
     import torch
     from cellpose import train as cp_train
     torch.manual_seed(cp["seed"])
+    save_dir.mkdir(parents=True, exist_ok=True)           # Cellpose creates only <save_dir>/models
     model = load_model(cp["pretrained"])
     result = cp_train.train_seg(
         model.net,
