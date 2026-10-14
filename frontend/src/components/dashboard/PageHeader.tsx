@@ -1,23 +1,29 @@
-import type { ReactNode } from "react"
+import { useId, type ReactNode } from "react"
 
 export function PageHeader({ title, description, children }: { title: string; description: string; children?: ReactNode }) {
     return (
-        <div className="mb-8 flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
-            <div>
-                <h1 className="text-2xl font-semibold tracking-tight">{title}</h1>
-                <p className="mt-1 text-sm text-muted-foreground">{description}</p>
+        <div className="mb-6 flex flex-col gap-4 rounded-3xl border border-border bg-card p-6 shadow-bento sm:flex-row sm:items-center sm:justify-between">
+            <div className="min-w-0">
+                <h1 className="text-xl font-bold tracking-tight">{title}</h1>
+                <p className="mt-1 max-w-3xl text-sm leading-relaxed text-muted-foreground">{description}</p>
             </div>
-            {children}
+            {children && <div className="flex shrink-0 flex-wrap items-center gap-2.5">{children}</div>}
         </div>
     )
 }
 
 export function Card({ title, description, children }: { title: string; description?: string; children: ReactNode }) {
+    const headingId = useId()
+
     return (
-        <section className="rounded-xl border border-border bg-card p-5 shadow-xs sm:p-6">
-            <h2 className="text-base font-semibold">{title}</h2>
-            {description && <p className="mt-1 text-sm text-muted-foreground">{description}</p>}
-            <div className="mt-4">{children}</div>
+        <section aria-labelledby={headingId} className="overflow-hidden rounded-3xl border border-border bg-card shadow-bento">
+            <header className="border-b border-muted px-5 py-4 sm:px-6">
+                <h2 id={headingId} className="text-sm font-semibold">
+                    {title}
+                </h2>
+                {description && <p className="mt-0.5 text-xs leading-relaxed text-muted-foreground">{description}</p>}
+            </header>
+            <div className="p-5 sm:p-6">{children}</div>
         </section>
     )
 }
