@@ -1,0 +1,26 @@
+# Central settings for the recommendation module.
+# Paths are relative to ml/recommendation/. Any value can be overridden with an
+# environment variable, e.g. REC_PATHS__RAW_WORKBOOK=/path/to/file.xlsx
+
+paths:
+  raw_workbook: data/raw/dataset_final_labeled.xlsx
+  matching_dataset: data/processed/matching_dataset.xlsx
+  outputs: outputs
+  models: models
+
+split:
+  group_col: Request_ID     # split by request, never by row
+  test_size: 0.2
+  seed: 42
+
+matching:
+  storage_days: 14          # Eusol-C window used to decide which tissues were in stock
+  weights_version: placeholder-2026-10-08
+  # PLACEHOLDER weights. Replace with weights agreed with NEBSL clinicians
+  # (e.g. AHP pairwise comparison). Only their ratios matter.
+  weights:
+    grade_fit: 0.35          # closeness of tissue grade to requested grade
+    endothelium: 0.30        # ECD / CV / HEX quality (PK, DSEK, DMEK only)
+    freshness: 0.15          # fewer days in storage is better
+    donor_age: 0.10          # younger donor is better
+    preservation_time: 0.10  # shorter death-to-preservation time is better
