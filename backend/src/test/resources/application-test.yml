@@ -1,0 +1,20 @@
+# Test profile: in-memory H2 in PostgreSQL mode so tests run without external services.
+# CI overrides SPRING_DATASOURCE_URL/USERNAME/PASSWORD to run the same tests against PostgreSQL.
+spring:
+  datasource:
+    url: jdbc:h2:mem:cornealai;MODE=PostgreSQL;DATABASE_TO_LOWER=TRUE;DEFAULT_NULL_ORDERING=HIGH;DB_CLOSE_DELAY=-1
+    username: sa
+    password: ""
+
+app:
+  security:
+    jwt:
+      # Test-only key; never used outside the test profile.
+      secret: dGVzdC1vbmx5LWp3dC1zZWNyZXQtZm9yLWNvcm5lYWwtYWktdW5pdC10ZXN0cw==
+    refresh-token:
+      # Make refresh-token reuse detection observable without waiting.
+      reuse-grace-period: 0s
+  bootstrap:
+    admin:
+      email: ""
+      password: ""

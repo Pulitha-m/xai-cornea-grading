@@ -1,0 +1,59 @@
+import { useId, type ReactNode } from "react"
+
+export function PageHeader({
+    eyebrow,
+    title,
+    description,
+    children,
+}: {
+    /** Short context line above the title, e.g. the role's portal. */
+    eyebrow?: ReactNode
+    title: string
+    description: string
+    children?: ReactNode
+}) {
+    return (
+        <div className="mb-6 flex flex-col gap-4 rounded-3xl border border-border bg-card p-6 shadow-bento sm:flex-row sm:items-center sm:justify-between">
+            <div className="min-w-0">
+                {eyebrow && (
+                    <p className="mb-1 flex items-center gap-2 text-2xs font-bold tracking-wider text-accent uppercase [&_svg]:size-4">
+                        {eyebrow}
+                    </p>
+                )}
+                <h1 className="text-xl font-bold tracking-tight">{title}</h1>
+                <p className="mt-1 max-w-3xl text-sm leading-relaxed text-muted-foreground">{description}</p>
+            </div>
+            {children && <div className="flex shrink-0 flex-wrap items-center gap-2.5">{children}</div>}
+        </div>
+    )
+}
+
+export function Card({
+    title,
+    description,
+    actions,
+    children,
+}: {
+    title: string
+    description?: string
+    /** Rendered at the end of the header, e.g. a status badge or button. */
+    actions?: ReactNode
+    children: ReactNode
+}) {
+    const headingId = useId()
+
+    return (
+        <section aria-labelledby={headingId} className="overflow-hidden rounded-3xl border border-border bg-card shadow-bento">
+            <header className="flex items-start justify-between gap-3 border-b border-muted px-5 py-4 sm:px-6">
+                <div className="min-w-0">
+                    <h2 id={headingId} className="text-sm font-semibold">
+                        {title}
+                    </h2>
+                    {description && <p className="mt-0.5 text-xs leading-relaxed text-muted-foreground">{description}</p>}
+                </div>
+                {actions && <div className="flex shrink-0 items-center gap-2">{actions}</div>}
+            </header>
+            <div className="p-5 sm:p-6">{children}</div>
+        </section>
+    )
+}

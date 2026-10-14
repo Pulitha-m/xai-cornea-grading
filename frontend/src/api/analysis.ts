@@ -1,3 +1,5 @@
+import { apiRequest } from "@/lib/api-client"
+
 export interface AnalyzeRequest {
     imageUrl: string
     caseId: string
@@ -43,22 +45,6 @@ export interface AnalyzeResponse {
     recommendation: RecommendationResult
 }
 
-const API_BASE_URL = "http://localhost:8080"
-
-export async function analyzeCornea(
-    request: AnalyzeRequest,
-): Promise<AnalyzeResponse> {
-    const response = await fetch(`${API_BASE_URL}/api/analysis`, {
-        method: "POST",
-        headers: {
-            "Content-Type": "application/json",
-        },
-        body: JSON.stringify(request),
-    })
-
-    if (!response.ok) {
-        throw new Error(`Analysis request failed: ${response.status}`)
-    }
-
-    return response.json()
+export function analyzeCornea(request: AnalyzeRequest): Promise<AnalyzeResponse> {
+    return apiRequest<AnalyzeResponse>("/api/analysis", { method: "POST", body: request })
 }

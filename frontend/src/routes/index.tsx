@@ -1,48 +1,71 @@
-import { createBrowserRouter } from "react-router-dom"
-import { useAnalysis } from "@/hooks/use-analysis"
+import { createBrowserRouter, type RouteObject } from "react-router-dom"
+import { HomeRedirect } from "@/components/auth/HomeRedirect"
+import { ProtectedRoute } from "@/components/auth/ProtectedRoute"
+import { RoleGuard } from "@/components/auth/RoleGuard"
+import { AppLayout } from "@/components/layout/AppLayout"
+import { ANALYSIS_PATH, PLANNED_MODULES } from "@/lib/roles"
+import { AnalysisPage } from "@/pages/AnalysisPage"
+import { ComingSoonPage } from "@/pages/ComingSoonPage"
+import { LoginPage } from "@/pages/LoginPage"
+import { NotFoundPage } from "@/pages/NotFoundPage"
+import { UnauthorizedPage } from "@/pages/UnauthorizedPage"
+import { AdminDashboard } from "@/pages/dashboards/AdminDashboard"
+import { ManagerDashboard } from "@/pages/dashboards/ManagerDashboard"
+import { DoctorDashboard, NurseDashboard } from "@/pages/dashboards/ClinicalDashboard"
+import { SupportDashboard } from "@/pages/dashboards/SupportDashboard"
 
-function TestPage() {
-    const analysis = useAnalysis()
-
-    function handleTest() {
-        analysis.mutate({
-            imageUrl: "https://example.com/cornea.jpg",
-            caseId: "CASE-007",
-        })
-    }
-
-    return (
-        <div className="p-8">
-            <h1 className="text-2xl font-bold">Corneal-AI</h1>
-
-            <button
-                className="mt-4 rounded-md border px-4 py-2"
-                onClick={handleTest}
-                disabled={analysis.isPending}
-            >
-                {analysis.isPending ? "Analyzing..." : "Test Analysis"}
-            </button>
-
-            {analysis.isSuccess && (
-                <pre className="mt-6 overflow-auto rounded-md border p-4">
-          {JSON.stringify(analysis.data, null, 2)}
-        </pre>
-            )}
-
-            {analysis.isError && (
-                <p className="mt-6 text-red-500">
-                    {analysis.error.message}
-                </p>
-            )}
-        </div>
-    )
-}
-
-const router = createBrowserRouter([
+export const routes: RouteObject[] = [
+    { path: "/login", element: <LoginPage /> },
     {
-        path: "/",
-        element: <TestPage />,
+        element: <ProtectedRoute />,
+        children: [
+            { index: true, element: <HomeRedirect /> },
+            {
+                element: <AppLayout />,
+                children: [
+                    {
+                        element: <RoleGuard allow={["ADMIN"]} />,
+                        children: [{ path: "/admin/dashboard", element: <AdminDashboard /> }],
+                    },
+                    {
+                        element: <RoleGuard allow={["MANAGER"]} />,
+                        children: [{ path: "/manager/dashboard", element: <ManagerDashboard /> }],
+                    },
+                    {
+                        element: <RoleGuard allow={["DOCTOR"]} />,
+                        children: [{ path: "/doctor/dashboard", element: <DoctorDashboard /> }],
+                    },
+                    {
+                        element: <RoleGuard allow={["NURSE"]} />,
+                        children: [{ path: "/nurse/dashboard", element: <NurseDashboard /> }],
+                    },
+                    {
+                        element: <RoleGuard allow={["SUPPORT_STAFF"]} />,
+                        children: [{ path: "/support/dashboard", element: <SupportDashboard /> }],
+                    },
+                    {
+                        element: <RoleGuard allow={["DOCTOR", "NURSE"]} permission="analysis:run" />,
+                        children: [{ path: ANALYSIS_PATH, element: <AnalysisPage /> }],
+                    },
+                    ...PLANNED_MODULES.map(
+                        (module): RouteObject => ({
+                            element: <RoleGuard allow={module.roles} />,
+                            children: [
+                                {
+                                    path: module.to,
+                                    element: <ComingSoonPage title={module.label} description={module.description} />,
+                                },
+                            ],
+                        }),
+                    ),
+                    { path: "/unauthorized", element: <UnauthorizedPage /> },
+                ],
+            },
+        ],
     },
-])
+    { path: "*", element: <NotFoundPage /> },
+]
+
+const router = createBrowserRouter(routes)
 
 export default router

@@ -13,6 +13,8 @@ spring:
     enabled: true
     baseline-on-migrate: true
     baseline-version: 0
+    # {vendor} resolves to e.g. "postgresql", for database-specific migrations
+    locations: classpath:db/migration,classpath:db/vendor/{vendor}
 
 server:
   port: 8080
@@ -26,3 +28,34 @@ management:
 ml:
   service:
     url: ${ML_SERVICE_URL:http://localhost:8000}
+
+app:
+  security:
+    jwt:
+      # Base64-encoded HMAC key, at least 256 bits. Generate with: openssl rand -base64 48
+      secret: ${JWT_SECRET}
+      issuer: corneal-ai
+      audience: corneal-ai-web
+      access-token-ttl: ${JWT_ACCESS_TOKEN_TTL:15m}
+    refresh-token:
+      cookie-name: cornealai_refresh
+      cookie-path: /api/auth
+      cookie-secure: ${AUTH_COOKIE_SECURE:true}
+      # Lifetime when "remember me" is selected (persistent cookie)
+      remember-me-ttl: ${REFRESH_TOKEN_REMEMBER_ME_TTL:7d}
+      # Lifetime otherwise (browser-session cookie)
+      session-ttl: ${REFRESH_TOKEN_SESSION_TTL:12h}
+      # A just-rotated token presented again within this window (e.g. two tabs
+      # refreshing at once) is rejected without revoking the whole session.
+      reuse-grace-period: 10s
+    login:
+      max-failed-attempts: 5
+      lockout-duration: 15m
+    cors:
+      allowed-origins: ${CORS_ALLOWED_ORIGINS:http://localhost:3000}
+  bootstrap:
+    admin:
+      email: ${BOOTSTRAP_ADMIN_EMAIL:}
+      username: ${BOOTSTRAP_ADMIN_USERNAME:admin}
+      password: ${BOOTSTRAP_ADMIN_PASSWORD:}
+      full-name: ${BOOTSTRAP_ADMIN_FULL_NAME:System Administrator}
