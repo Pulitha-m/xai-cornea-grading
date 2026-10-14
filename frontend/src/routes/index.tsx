@@ -3,6 +3,8 @@ import { HomeRedirect } from "@/components/auth/HomeRedirect"
 import { ProtectedRoute } from "@/components/auth/ProtectedRoute"
 import { RoleGuard } from "@/components/auth/RoleGuard"
 import { AppLayout } from "@/components/layout/AppLayout"
+import { PLANNED_MODULES } from "@/lib/roles"
+import { ComingSoonPage } from "@/pages/ComingSoonPage"
 import { LoginPage } from "@/pages/LoginPage"
 import { NotFoundPage } from "@/pages/NotFoundPage"
 import { UnauthorizedPage } from "@/pages/UnauthorizedPage"
@@ -40,6 +42,17 @@ export const routes: RouteObject[] = [
                         element: <RoleGuard allow={["SUPPORT_STAFF"]} />,
                         children: [{ path: "/support/dashboard", element: <SupportDashboard /> }],
                     },
+                    ...PLANNED_MODULES.map(
+                        (module): RouteObject => ({
+                            element: <RoleGuard allow={module.roles} />,
+                            children: [
+                                {
+                                    path: module.to,
+                                    element: <ComingSoonPage title={module.label} description={module.description} />,
+                                },
+                            ],
+                        }),
+                    ),
                     { path: "/unauthorized", element: <UnauthorizedPage /> },
                 ],
             },
