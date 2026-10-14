@@ -46,3 +46,29 @@ Judge **whether cells in the tile could be counted and measured reliably** — n
 * Single rater (researcher, guided by the NEBSL expert). Intra-rater repeatability on 3 blind,
   rotated repeat images: exact agreement and Cohen's κ (unweighted and linear-weighted), from
   `summary()`.
+
+### Results (round 1, completed 2026-10-12)
+
+* **Labels:** 30 images, 1,440 tiles — good 303 (21 %), usable 631 (44 %), poor 506 (35 %);
+  train 960 tiles (207 / 423 / 330), val 480 tiles (96 / 208 / 176).
+* **Intra-rater repeatability** (3 repeats, 144 tiles):
+
+  | Distinction | Agreement | Cohen's κ |
+  |---|---|---|
+  | 3 classes | 0.715 | 0.556 (linear-weighted 0.635) |
+  | **poor vs analysable** (good + usable) | **0.910** | **0.804** |
+  | good vs rest | 0.806 | 0.390 |
+
+  Disagreement lies almost entirely between *good* and *usable* (26 of 39 tiles first labelled
+  good were usable in the repeat — grading became stricter over time); *poor* was stable
+  (45 of 47).
+* **Decision for the ROI model (3.1):** trained on the binary target **poor vs analysable**
+  (reliable reference, κ = 0.80); the good / usable distinction is used only as a soft score to
+  rank analysable regions, and no accuracy is reported for it. The intra-rater κ = 0.80 serves
+  as the human-level reference for the model.
+
+> Suggested wording: *Intra-rater repeatability (3 blind rotated repeats, 144 tiles) was
+> substantial for the clinically relevant decision analysable vs poor (agreement 0.91, κ = 0.80),
+> but only fair for good vs usable (κ = 0.39), which drifted toward stricter grading over time.
+> ROI selection was therefore trained on the binary target, with tile-quality probabilities used
+> only to rank analysable regions.*
