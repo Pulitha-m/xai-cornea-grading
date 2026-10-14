@@ -68,5 +68,4 @@ yarn-error.log*
 pnpm-debug.log*
 lerna-debug.log*
 
-
-.zip
+/frontend/prototype.zip
