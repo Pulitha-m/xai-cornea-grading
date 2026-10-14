@@ -1,4 +1,5 @@
-import { screen } from "@testing-library/react"
+import { screen, within } from "@testing-library/react"
+import userEvent from "@testing-library/user-event"
 import { describe, expect, it, vi } from "vitest"
 import { makeAuth, makeUser, renderApp } from "@/test/auth-test-utils"
 
@@ -67,6 +68,64 @@ describe("Navigation", () => {
         expect(nav).toHaveTextContent("Nurse dashboard")
         expect(nav).not.toHaveTextContent("Admin dashboard")
         expect(nav).not.toHaveTextContent("Doctor dashboard")
+        expect(nav).toHaveTextContent("Donor cases")
+        expect(nav).not.toHaveTextContent("Audit log")
+    })
+})
+
+describe("Planned modules", () => {
+    it("shows a coming-soon screen to a permitted role", async () => {
+        renderApp("/cases", makeAuth({ user: makeUser("NURSE") }))
+
+        expect(await screen.findByRole("heading", { name: "Donor cases" })).toBeInTheDocument()
+        expect(screen.getByText("This module is not available yet")).toBeInTheDocument()
+    })
+
+    it("applies the same role guard as real pages", async () => {
+        renderApp("/audit", makeAuth({ user: makeUser("NURSE") }))
+
+        expect(await screen.findByRole("heading", { name: "Access denied" })).toBeInTheDocument()
+    })
+})
+
+describe("AppLayout", () => {
+    it("signs the user out from the sidebar", async () => {
+        const auth = makeAuth({ user: makeUser("DOCTOR") })
+        renderApp("/doctor/dashboard", auth)
+
+        await userEvent.setup().click(await screen.findByRole("button", { name: "Sign out" }))
+
+        expect(auth.logout).toHaveBeenCalledTimes(1)
+    })
+
+    it("opens and closes the navigation drawer", async () => {
+        const user = userEvent.setup()
+        renderApp("/doctor/dashboard", makeAuth({ user: makeUser("DOCTOR") }))
+
+        const menuButton = await screen.findByRole("button", { name: "Open navigation" })
+        await user.click(menuButton)
+        expect(screen.getByRole("dialog", { name: "Navigation" })).toBeInTheDocument()
+
+        await user.keyboard("{Escape}")
+        expect(screen.queryByRole("dialog", { name: "Navigation" })).not.toBeInTheDocument()
+        expect(menuButton).toHaveFocus()
+    })
+
+    it("keeps keyboard focus inside the open drawer", async () => {
+        const user = userEvent.setup()
+        renderApp("/doctor/dashboard", makeAuth({ user: makeUser("DOCTOR") }))
+
+        await user.click(await screen.findByRole("button", { name: "Open navigation" }))
+        const drawer = screen.getByRole("dialog", { name: "Navigation" })
+        const closeButton = within(drawer).getByRole("button", { name: "Close navigation" })
+        const signOut = within(drawer).getByRole("button", { name: "Sign out" })
+        expect(closeButton).toHaveFocus()
+
+        await user.tab({ shift: true })
+        expect(signOut).toHaveFocus()
+
+        await user.tab()
+        expect(closeButton).toHaveFocus()
     })
 })
 

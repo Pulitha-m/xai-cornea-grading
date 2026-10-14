@@ -1,81 +1,98 @@
-import { useState } from "react"
-import { NavLink, Outlet, useNavigate } from "react-router-dom"
-import { cn } from "cn"
+import { useCallback, useEffect, useRef, useState } from "react"
+import { Outlet } from "react-router-dom"
+import { XIcon } from "lucide-react"
 import { useAuth } from "@/hooks/use-auth"
-import { ROLE_LABELS, visibleNavItems } from "@/lib/roles"
-import { BrandMark } from "@/components/brand/BrandMark"
-import { LogOutIcon } from "@/components/ui/icons"
-import { Spinner } from "@/components/ui/spinner"
+import { Sidebar } from "@/components/layout/Sidebar"
+import { TopBar } from "@/components/layout/TopBar"
 
-/** Shared shell for every signed-in page: header, role-filtered navigation, content. */
+const FOCUSABLE = 'a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), [tabindex]:not([tabindex="-1"])'
+
+/** Keeps Tab / Shift+Tab cycling inside the open drawer. */
+function trapFocus(event: KeyboardEvent, container: HTMLElement) {
+    const focusable = container.querySelectorAll<HTMLElement>(FOCUSABLE)
+    if (focusable.length === 0) {
+        return
+    }
+    const first = focusable[0]
+    const last = focusable[focusable.length - 1]
+    const active = document.activeElement
+
+    if (event.shiftKey && (active === first || !container.contains(active))) {
+        event.preventDefault()
+        last.focus()
+    } else if (!event.shiftKey && (active === last || !container.contains(active))) {
+        event.preventDefault()
+        first.focus()
+    }
+}
+
+/** Shared shell for every signed-in page: sidebar (drawer on small screens), top bar, content. */
 export function AppLayout() {
-    const { user, logout } = useAuth()
-    const navigate = useNavigate()
-    const [signingOut, setSigningOut] = useState(false)
+    const { user } = useAuth()
+    const [navOpen, setNavOpen] = useState(false)
+    const menuButtonRef = useRef<HTMLButtonElement>(null)
+    const drawerRef = useRef<HTMLDivElement>(null)
+
+    const closeNav = useCallback(() => {
+        setNavOpen(false)
+        menuButtonRef.current?.focus()
+    }, [])
+
+    useEffect(() => {
+        if (!navOpen) {
+            return
+        }
+        const onKeyDown = (event: KeyboardEvent) => {
+            if (event.key === "Escape") {
+                closeNav()
+            } else if (event.key === "Tab" && drawerRef.current) {
+                trapFocus(event, drawerRef.current)
+            }
+        }
+        document.addEventListener("keydown", onKeyDown)
+        return () => document.removeEventListener("keydown", onKeyDown)
+    }, [navOpen, closeNav])
 
     if (!user) {
         return null
     }
 
-    const navItems = visibleNavItems(user)
-
-    async function handleLogout() {
-        setSigningOut(true)
-        await logout()
-        navigate("/login", { replace: true })
-    }
-
     return (
-        <div className="min-h-svh bg-background">
-            <header className="border-b border-border bg-card">
-                <div className="mx-auto flex h-16 max-w-6xl items-center justify-between gap-4 px-4 sm:px-6">
-                    <BrandMark />
+        <div className="flex min-h-svh bg-background">
+            <aside className="sticky top-0 hidden h-svh w-64 shrink-0 border-r border-border bg-card lg:flex">
+                <Sidebar />
+            </aside>
 
-                    <div className="flex items-center gap-3 sm:gap-4">
-                        <div className="hidden text-right sm:block">
-                            <p className="text-sm font-medium leading-tight">{user.fullName}</p>
-                            <p className="text-xs text-muted-foreground">{ROLE_LABELS[user.role]}</p>
-                        </div>
+            {navOpen && (
+                <div id="mobile-navigation" role="dialog" aria-modal="true" aria-label="Navigation" className="fixed inset-0 z-40 lg:hidden">
+                    <button
+                        type="button"
+                        tabIndex={-1}
+                        aria-hidden="true"
+                        onClick={closeNav}
+                        className="absolute inset-0 bg-foreground/30"
+                    />
+                    <div ref={drawerRef} className="relative flex h-full w-72 max-w-[85vw] bg-card shadow-pop">
                         <button
                             type="button"
-                            onClick={handleLogout}
-                            disabled={signingOut}
-                            className="inline-flex h-9 items-center gap-2 rounded-lg border border-border px-3 text-sm font-medium text-foreground transition-colors hover:bg-muted focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-ring/40 disabled:opacity-60"
+                            autoFocus
+                            onClick={closeNav}
+                            aria-label="Close navigation"
+                            className="absolute top-3 right-3 z-10 flex size-8 items-center justify-center rounded-xl text-muted-foreground hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-ring/40"
                         >
-                            {signingOut ? <Spinner /> : <LogOutIcon className="size-4" />}
-                            Sign out
+                            <XIcon className="size-4" aria-hidden="true" />
                         </button>
+                        <Sidebar onNavigate={() => setNavOpen(false)} />
                     </div>
                 </div>
+            )}
 
-                {navItems.length > 0 && (
-                    <nav aria-label="Main" className="mx-auto max-w-6xl px-4 sm:px-6">
-                        <ul className="-mb-px flex gap-6 overflow-x-auto">
-                            {navItems.map((item) => (
-                                <li key={item.to}>
-                                    <NavLink
-                                        to={item.to}
-                                        className={({ isActive }) =>
-                                            cn(
-                                                "inline-block border-b-2 py-3 text-sm font-medium whitespace-nowrap transition-colors focus-visible:outline-none focus-visible:text-accent",
-                                                isActive
-                                                    ? "border-accent text-primary"
-                                                    : "border-transparent text-muted-foreground hover:text-foreground",
-                                            )
-                                        }
-                                    >
-                                        {item.label}
-                                    </NavLink>
-                                </li>
-                            ))}
-                        </ul>
-                    </nav>
-                )}
-            </header>
-
-            <main className="mx-auto max-w-6xl px-4 py-8 sm:px-6">
-                <Outlet />
-            </main>
+            <div className="flex min-w-0 flex-1 flex-col">
+                <TopBar navOpen={navOpen} onOpenNav={() => setNavOpen(true)} menuButtonRef={menuButtonRef} />
+                <main className="mx-auto w-full max-w-6xl flex-1 px-4 py-6 sm:px-6 lg:px-8 lg:py-8">
+                    <Outlet />
+                </main>
+            </div>
         </div>
     )
 }

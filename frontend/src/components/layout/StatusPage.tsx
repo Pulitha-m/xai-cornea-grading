@@ -1,6 +1,6 @@
 import type { ReactNode } from "react"
 
-/** Centered message used by the 403 / 404 pages. */
+/** Centered message card used by the 403 / 404 pages. */
 export function StatusPage({
     icon,
     code,
@@ -15,14 +15,17 @@ export function StatusPage({
     action: ReactNode
 }) {
     return (
-        <section className="mx-auto flex max-w-md flex-col items-center py-16 text-center" aria-labelledby="status-title">
+        <section
+            className="mx-auto flex w-full max-w-md flex-col items-center rounded-3xl border border-border bg-card px-6 py-12 text-center shadow-bento sm:px-10"
+            aria-labelledby="status-title"
+        >
             {icon && (
-                <div className="mb-5 flex size-12 items-center justify-center rounded-full bg-accent-soft text-accent">
+                <div className="mb-5 flex size-12 items-center justify-center rounded-2xl border border-secondary bg-accent-soft text-accent [&_svg]:size-6">
                     {icon}
                 </div>
             )}
-            <p className="text-sm font-medium text-accent">{code}</p>
-            <h1 id="status-title" className="mt-1 text-2xl font-semibold tracking-tight">
+            <p className="text-2xs font-bold tracking-wider text-accent uppercase">Error {code}</p>
+            <h1 id="status-title" className="mt-1 text-xl font-bold tracking-tight">
                 {title}
             </h1>
             <p className="mt-2 text-sm leading-relaxed text-muted-foreground">{description}</p>

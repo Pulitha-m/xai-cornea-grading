@@ -1,10 +1,13 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
-import { cn } from "cn"
+import { UsersIcon } from "lucide-react"
 import { assignRole, listUsers, setUserEnabled, USERS_QUERY_KEY } from "@/api/users"
 import { useAuth } from "@/hooks/use-auth"
 import { ROLE_LABELS } from "@/lib/roles"
+import { alertError, tableCell, tableHead, tableHeaderCell, tableRow } from "@/lib/styles"
 import { ROLES, type ManagedUser, type Role } from "@/types/auth"
+import { EmptyState } from "@/components/ui/empty-state"
 import { Spinner } from "@/components/ui/spinner"
+import { StatusBadge } from "@/components/ui/status-badge"
 
 /**
  * Staff list. Read-only unless the user may assign roles / manage accounts;
@@ -40,31 +43,36 @@ export function UserDirectory() {
 
     if (users.isError) {
         return (
-            <p role="alert" className="py-6 text-sm text-destructive">
+            <p role="alert" className={alertError}>
                 {users.error.message}
             </p>
         )
     }
 
+    if (users.data.length === 0) {
+        return <EmptyState icon={<UsersIcon />} title="No staff accounts yet" />
+    }
+
     return (
         <div>
             {mutationError && (
-                <p role="alert" className="mb-3 text-sm text-destructive">
+                <p role="alert" className={`mb-4 ${alertError}`}>
                     {mutationError.message}
                 </p>
             )}
-            <div className="overflow-x-auto">
-                <table className="w-full min-w-[40rem] text-left text-sm">
-                    <thead className="border-b border-border text-xs tracking-wide text-muted-foreground uppercase">
+            {/* Bleed to the card edges, as data tables do in the NEBSL design. */}
+            <div className="-mx-5 -mb-5 overflow-x-auto sm:-mx-6 sm:-mb-6">
+                <table className="w-full min-w-[40rem] text-sm [&_tbody_tr:last-child_td]:border-b-0">
+                    <thead className={tableHead}>
                         <tr>
-                            <th scope="col" className="py-2.5 pr-4 font-medium">Name</th>
-                            <th scope="col" className="py-2.5 pr-4 font-medium">Username</th>
-                            <th scope="col" className="py-2.5 pr-4 font-medium">Role</th>
-                            <th scope="col" className="py-2.5 pr-4 font-medium">Status</th>
-                            {canManageUsers && <th scope="col" className="py-2.5 font-medium"><span className="sr-only">Actions</span></th>}
+                            <th scope="col" className={tableHeaderCell}>Name</th>
+                            <th scope="col" className={tableHeaderCell}>Username</th>
+                            <th scope="col" className={tableHeaderCell}>Role</th>
+                            <th scope="col" className={tableHeaderCell}>Status</th>
+                            {canManageUsers && <th scope="col" className={tableHeaderCell}><span className="sr-only">Actions</span></th>}
                         </tr>
                     </thead>
-                    <tbody className="divide-y divide-border">
+                    <tbody>
                         {users.data.map((u) => (
                             <UserRow
                                 key={u.id}
@@ -102,20 +110,20 @@ function UserRow({
     busy: boolean
 }) {
     return (
-        <tr>
-            <td className="py-3 pr-4">
+        <tr className={tableRow}>
+            <td className={tableCell}>
                 <div className="font-medium">{user.fullName}</div>
                 <div className="text-xs text-muted-foreground">{user.email}</div>
             </td>
-            <td className="py-3 pr-4 text-muted-foreground">{user.username}</td>
-            <td className="py-3 pr-4">
+            <td className={`${tableCell} text-muted-foreground`}>{user.username}</td>
+            <td className={tableCell}>
                 {canAssignRoles && !isSelf ? (
                     <select
                         aria-label={`Role for ${user.fullName}`}
                         value={user.role}
                         disabled={busy}
                         onChange={(e) => onRoleChange(e.target.value as Role)}
-                        className="h-8 rounded-md border border-input bg-card px-2 text-sm focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-ring/25"
+                        className="h-8 rounded-xl border border-input bg-sunken px-2.5 text-sm focus:bg-card focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-ring/25"
                     >
                         {ROLES.map((role) => (
                             <option key={role} value={role}>
@@ -127,18 +135,13 @@ function UserRow({
                     ROLE_LABELS[user.role]
                 )}
             </td>
-            <td className="py-3 pr-4">
-                <span
-                    className={cn(
-                        "inline-flex rounded-full px-2 py-0.5 text-xs font-medium",
-                        user.enabled ? "bg-accent-soft text-accent" : "bg-muted text-muted-foreground",
-                    )}
-                >
+            <td className={tableCell}>
+                <StatusBadge tone={user.enabled ? "success" : "neutral"}>
                     {user.enabled ? "Active" : "Disabled"}
-                </span>
+                </StatusBadge>
             </td>
             {canManageUsers && (
-                <td className="py-3 text-right">
+                <td className={`${tableCell} text-right`}>
                     {!isSelf && (
                         <button
                             type="button"

@@ -1,26 +1,45 @@
 @import "tailwindcss";
 
-/* Design tokens: calm, clinical palette — off-white surfaces, deep navy primary, muted teal accent. */
+/*
+ * Design tokens: National Eye Bank "bento" palette — cool grey canvas, white
+ * surfaces, sky-blue primary with a brand yellow highlight. Poppins is loaded in index.html.
+ */
 @theme {
-  --font-sans: ui-sans-serif, system-ui, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  --font-sans: "Poppins", ui-sans-serif, system-ui, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
 
-  --color-background: #f7f8fa;
-  --color-foreground: #0f1b2d;
+  --color-background: #f4f6f8;
+  --color-foreground: #0f172a;
   --color-card: #ffffff;
-  --color-muted: #eef1f5;
-  --color-muted-foreground: #5b6779;
-  --color-border: #dde3ea;
-  --color-input: #c9d1db;
+  --color-sunken: #f8fafc;
+  --color-muted: #f1f5f9;
+  --color-muted-foreground: #64748b;
+  --color-border: #e2e8f0;
+  --color-input: #cbd5e1;
 
-  --color-primary: #12355b;
+  --color-primary: #0369a1;
   --color-primary-foreground: #ffffff;
-  --color-secondary: #e8eef4;
-  --color-secondary-foreground: #12355b;
-  --color-accent: #0f766e;
-  --color-accent-soft: #e6f2f1;
-  --color-ring: #0f766e;
-  --color-destructive: #b42318;
-  --color-destructive-soft: #fef3f2;
+  --color-secondary: #e0f2fe;
+  --color-secondary-foreground: #0c4a6e;
+  --color-accent: #0369a1;
+  --color-accent-soft: #f0f9ff;
+  --color-ring: #0284c7;
+  --color-destructive: #be123c;
+  --color-destructive-soft: #fff1f2;
+
+  /* Status and brand highlight colours (names chosen not to shadow Tailwind's palettes). */
+  --color-success: #047857;
+  --color-success-soft: #ecfdf5;
+  --color-warning: #b45309;
+  --color-warning-soft: #fffbeb;
+  --color-highlight: #facc15;
+  --color-highlight-soft: #fefce8;
+
+  --text-2xs: 0.6875rem;
+  --text-2xs--line-height: 1rem;
+
+  --shadow-bento: 0 4px 20px -2px rgb(15 23 42 / 0.04), 0 2px 6px -1px rgb(15 23 42 / 0.02);
+  --shadow-card: 0 1px 3px rgb(15 23 42 / 0.05);
+  --shadow-pop: 0 12px 32px -4px rgb(15 23 42 / 0.12);
 }
 
 @layer base {
@@ -30,5 +49,22 @@
 
   body {
     @apply bg-background text-foreground antialiased;
+  }
+
+  ::-webkit-scrollbar {
+    width: 8px;
+    height: 8px;
+  }
+
+  ::-webkit-scrollbar-thumb {
+    background: var(--color-input);
+    border: 2px solid transparent;
+    background-clip: content-box;
+    border-radius: 999px;
+  }
+
+  ::-webkit-scrollbar-thumb:hover {
+    background: var(--color-muted-foreground);
+    background-clip: content-box;
   }
 }
