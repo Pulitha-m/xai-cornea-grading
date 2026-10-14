@@ -1,9 +1,25 @@
 import { useId, type ReactNode } from "react"
 
-export function PageHeader({ title, description, children }: { title: string; description: string; children?: ReactNode }) {
+export function PageHeader({
+    eyebrow,
+    title,
+    description,
+    children,
+}: {
+    /** Short context line above the title, e.g. the role's portal. */
+    eyebrow?: ReactNode
+    title: string
+    description: string
+    children?: ReactNode
+}) {
     return (
         <div className="mb-6 flex flex-col gap-4 rounded-3xl border border-border bg-card p-6 shadow-bento sm:flex-row sm:items-center sm:justify-between">
             <div className="min-w-0">
+                {eyebrow && (
+                    <p className="mb-1 flex items-center gap-2 text-2xs font-bold tracking-wider text-accent uppercase [&_svg]:size-4">
+                        {eyebrow}
+                    </p>
+                )}
                 <h1 className="text-xl font-bold tracking-tight">{title}</h1>
                 <p className="mt-1 max-w-3xl text-sm leading-relaxed text-muted-foreground">{description}</p>
             </div>

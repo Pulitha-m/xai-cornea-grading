@@ -1,4 +1,6 @@
+import { StethoscopeIcon } from "lucide-react"
 import { useAuth } from "@/hooks/use-auth"
+import { ROLE_LABELS } from "@/lib/roles"
 import { AnalysisPanel } from "@/components/dashboard/AnalysisPanel"
 import { PageHeader } from "@/components/dashboard/PageHeader"
 
@@ -8,7 +10,18 @@ function ClinicalDashboard({ title, description }: { title: string; description:
 
     return (
         <>
-            <PageHeader title={title} description={`Signed in as ${user?.fullName}. ${description}`} />
+            <PageHeader
+                eyebrow={
+                    user && (
+                        <>
+                            <StethoscopeIcon aria-hidden="true" />
+                            {ROLE_LABELS[user.role]} portal
+                        </>
+                    )
+                }
+                title={title}
+                description={`Signed in as ${user?.fullName}. ${description}`}
+            />
             {hasPermission("analysis:run") && <AnalysisPanel />}
         </>
     )
