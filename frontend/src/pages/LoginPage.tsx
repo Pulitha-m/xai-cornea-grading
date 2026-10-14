@@ -4,7 +4,7 @@ import { cn } from "cn"
 import { useAuth } from "@/hooks/use-auth"
 import { ApiError } from "@/lib/api-client"
 import { dashboardPathFor } from "@/lib/roles"
-import { BrandLogo, BrandMark } from "@/components/brand/BrandMark"
+import { BrandMark } from "@/components/brand/BrandMark"
 import { AlertCircleIcon, EyeIcon, EyeOffIcon, ShieldIcon } from "@/components/ui/icons"
 import { Spinner } from "@/components/ui/spinner"
 import { FullPageSpinner } from "@/components/ui/spinner"
@@ -135,12 +135,7 @@ export function LoginPage() {
             {/* Form */}
             <main className="flex flex-1 items-center justify-center px-4 py-12 sm:px-8">
                 <div className="w-full max-w-sm">
-                    <div className="mb-8 flex items-center gap-2.5 lg:hidden">
-                        <BrandLogo className="text-primary" />
-                        <span className="text-lg font-semibold tracking-tight text-primary">
-                            Corneal<span className="text-accent">-AI</span>
-                        </span>
-                    </div>
+                    <BrandMark className="mb-8 lg:hidden" />
 
                     <h1 className="text-2xl font-semibold tracking-tight text-foreground">Welcome back</h1>
                     <p className="mt-1.5 text-sm text-muted-foreground">Sign in to continue to your workspace.</p>
@@ -257,7 +252,7 @@ export function LoginPage() {
                                     id={ids.recovery}
                                     className="mt-2 rounded-lg bg-accent-soft px-3 py-2.5 text-xs leading-relaxed text-foreground"
                                 >
-                                    For security, passwords are reset by your Corneal-AI administrator. Please contact
+                                    For security, passwords are reset by your eye bank system administrator. Please contact
                                     them to regain access.
                                 </p>
                             )}
