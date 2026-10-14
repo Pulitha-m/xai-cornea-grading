@@ -1,0 +1,122 @@
+# Cell-Boundary Annotation Protocol — Component 3 (round 1)
+
+**Purpose.** Create ground-truth cell-wall masks to train and evaluate the U-Net (Sub-component 3.2)
+and to measure the classical baseline. Annotators **correct a draft** produced by the classical
+segmenter rather than drawing from scratch.
+
+**Material.** 40 crops of 256 × 256 px (≈ 95 cells each) from 40 different donor tissues of the
+**train split only**, spread over ECD bands and image-quality levels; ~30 % are deliberately
+harder regions. 10 crops are corrected independently by both annotators (inter-annotator agreement).
+
+**Location (Google Drive).** `Research_Project/cellular_annotations/seg/round1/`
+
+| Folder | Content | Who |
+|---|---|---|
+| `crops/` | `round1_XXX.png` — grayscale image crop | annotator 1 (input) |
+| `drafts/` | `round1_XXX_walls.png` — draft walls, red on transparent | annotator 1 (input) |
+| `corrected/` | `round1_XXX_walls.png` — **your corrected layer** | annotator 1 (output) |
+| `expert/crops`, `expert/drafts` | the 10 overlap crops | NEBSL expert (input) |
+| `expert/corrected/` | expert's corrected layers | NEBSL expert (output) |
+| `index.csv`, `preview.png` | crop list and contact sheet | reference |
+
+Patient-derived images: keep them on Drive / your own computer. Do not upload to other services.
+
+---
+
+## 1. What to mark
+
+| Colour (exact) | Meaning |
+|---|---|
+| **Red `#FF0000`** | cell wall |
+| **Blue `#0000FF`** (filled area) | *ignore* region — cells cannot be judged (blur, stress line, fold, debris, too dark) |
+| transparent | cell interior / not a wall |
+
+## 2. Rules
+
+1. **Walls sit on the darkest centre line** between two bright cell interiors, **1–2 px wide**.
+2. **Every cell must be closed.** A gap of one pixel merges two cells. Zoom in on junctions.
+3. **One wall per boundary.** No double lines; walls meet at junctions (usually 3 walls per junction).
+4. **Remove false walls** inside a cell (texture, nucleus-like spots, small dark dots). These are the
+   most common draft error — the draft deliberately over-splits.
+5. **Add missing walls** where two cells were merged.
+6. **Cells cut by the crop edge:** draw their walls up to the edge. They are excluded automatically
+   later (incomplete cells are never measured).
+7. **When unsure, paint the area blue** instead of guessing. Do not paint a whole crop blue; if more
+   than half a crop is unusable, note it in the log.
+8. Do not use anti-aliasing, soft brushes or other colours — the masks are read by exact colour.
+
+## 3. GIMP (2.10 or 3.x)
+
+> **The draft must be CORRECTED, not just exported.** The checker reports a crop that is identical
+> to its draft as *NOT CORRECTED*. Expect to erase several stray walls and add a few missing ones
+> in every crop.
+
+**One-time tool setup** (GIMP remembers it):
+* **Pencil** (`N`) — *not* the Paintbrush. Size **2**, brush **"2. Hardness 100"**,
+  **untick "Enable dynamics"** (otherwise line width follows pen pressure).
+* **Eraser** (`Shift+E`) — tick **Hard edge**, size **3**, untick "Enable dynamics".
+
+**For every crop:**
+1. **File → Open** `crops/round1_XXX.png`.
+2. **Image → Mode → RGB** — *do this first!* The crop is grayscale; without this step GIMP turns the
+   red walls grey and you cannot paint in colour (title bar must say **"RGB color"**).
+3. **File → Open as Layers…** `drafts/round1_XXX_walls.png` (now two layers: crop + walls).
+4. **Click the walls layer** in the Layers panel so it is highlighted — all painting goes on this
+   layer, never on the crop. Zoom to **400 %** (`View → Zoom → 4:1`).
+5. Correct, cell by cell:
+   * **Eraser** — remove walls that cut through one cell, slivers, and dangling wall ends.
+   * **Pencil, colour `FF0000`** — add missing walls between merged cells.
+   * **Pencil, colour `0000FF`, size 15** — fill areas whose cells cannot be judged (ignore).
+6. Check: toggle the crop layer's eye icon off and on — every cell should be a closed red loop.
+7. **Hide the crop layer** (eye icon off): you must see **only red/blue on a checkerboard**.
+8. **File → Export As…** → `corrected/round1_XXX_walls.png` → **Export** (PNG defaults keep
+   transparency). Optionally **File → Save** the `.xcf` to resume later.
+
+**If the walls already turned grey** (step 2 was skipped): Image → Mode → RGB, select the walls
+layer, **Layer → Transparency → Alpha to Selection**, set the foreground colour to `FF0000`,
+**Edit → Fill with FG Color**, **Select → None**.
+
+## 4. Krita (alternative)
+
+1. Open `crops/round1_XXX.png`; **Layer → Import/Export → Import Layer…** the walls PNG.
+2. Select the walls layer; brush preset **Pixel Art / "Basic-1"** (no smoothing, no anti-aliasing),
+   size 2 px, colour `#FF0000`; eraser mode `E`.
+3. Hide the crop layer; **File → Export…** `corrected/round1_XXX_walls.png` (PNG, keep alpha).
+
+## 5. Working tips
+
+* Install **Google Drive for desktop** to edit the files in place, or download `crops/` + `drafts/`
+  and upload your `corrected/` files when done.
+* Typical time: **10–20 min per crop**. Work in sessions of 5–8 crops; quality drops when tired.
+* Keep a short log (`log.csv` in the round folder): `crop_id, minutes, notes`.
+* **Expert:** work on `expert/` only and **do not look at** the other annotator's corrections — the
+  comparison must be independent.
+
+## 6. After annotation
+
+Run `python -m data_prep.check_annotations` (Step 1.5). It checks colours, size and that cells are
+closed, converts each layer to a training mask (wall / interior / ignore), and reports the classical
+baseline's agreement with your corrections and the inter-annotator agreement.
+
+| Checker says | Do |
+|---|---|
+| `OK` | done |
+| `CHECK` | open `review/round1_XXX_check.png`: **yellow circles** = probable stray walls (erase), **cyan outlines** = probable wall gaps (close them); fix in GIMP and re-export |
+| `NOT CORRECTED YET` | the file equals the draft — correct it (section 3) |
+| `ERROR … neither red nor blue` | crop layer was visible, or the background was saved white — hide the crop layer / keep transparency and re-export |
+| `draft_boundary_f1` | how much you changed (1.0 = nothing; typical after correction 0.85–0.95) |
+
+## 7. Notes for the thesis (Methods)
+
+* Annotation by correction of an automated draft (classical ridge-based watershed, h = 0.20).
+  All 40 crops were annotated by the researcher under the guidance of an NEBSL expert.
+* **Expert revision (10 crops):** the expert compared each crop and its draft with the
+  researcher's corrected annotation and revised the errors directly in that annotation.
+  Original vs revised: boundary F1 0.991, cell F1 0.980 (mean of 10 crops; 2 px tolerance,
+  IoU > 0.5), i.e. the expert changed ~2 % of cell boundaries.
+* This is **expert validation, not independent inter-annotator agreement** — the expert started
+  from the researcher's annotation, so the agreement is not a measure of inter-observer
+  variability. Stated as a limitation.
+* The expert-revised masks replace the researcher's for those 10 crops in training and evaluation.
+* Classical baseline (ridge watershed, h = 0.30) vs annotations, 40 crops: boundary F1 0.878,
+  cell F1 0.668. Record: `check_report_final_round1.csv`.

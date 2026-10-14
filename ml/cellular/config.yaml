@@ -1,0 +1,150 @@
+# =============================================================================
+# Component 3 — Corneal Cellular Intelligence Platform
+# Central configuration: every path and tunable parameter lives here so that
+# scripts never hardcode values and results stay reproducible.
+#
+# Path rules (resolved by config.py):
+#   * Relative paths are resolved against ml/cellular/ (this file's folder).
+#   * images_dir and ground_truth_xlsx are resolved against data_root.
+#   * Environment variables override the defaults, so the SAME code runs on a
+#     laptop and on Colab without editing this file:
+#       CELLULAR_DATA_ROOT    -> paths.data_root    (Colab: /content/data)
+#       CELLULAR_OUTPUT_ROOT  -> paths.outputs_dir  (Colab: a Drive folder)
+#       CELLULAR_MODELS_ROOT  -> paths.models_dir   (Colab: a Drive folder)
+#       CELLULAR_ANNOT_ROOT   -> paths.annotations_dir (Colab: a Drive folder)
+# =============================================================================
+
+paths:
+  data_root: data                     # images + ground truth (gitignored)
+  images_dir: Finalized_images        # relative to data_root
+  ground_truth_xlsx: validation_ground_truth_dataset.xlsx   # relative to data_root
+  splits_dir: splits                  # manifest.csv + split summary (tracked in git)
+  outputs_dir: outputs                # figures, tables, reports (gitignored)
+  models_dir: models                  # trained weights / checkpoints (gitignored)
+  annotations_dir: annotations        # crops, drafts and corrected masks (patient data: Drive, not git)
+
+# -----------------------------------------------------------------------------
+# Dataset split (Phase 0, Step 0.4) — tissue-level, stratified, frozen.
+# Changing seed or ratios changes the test set; do not edit after Phase 0.
+# -----------------------------------------------------------------------------
+split:
+  seed: 42
+  train: 0.70
+  val: 0.15
+  test: 0.15
+  calibration_from_train: 0.05        # carved out of train, used ONLY for um/px (Phase 4)
+  stratify_ecd_bins: [2000, 2800]     # ECD bands: <2000, 2000-2800, >2800 cells/mm^2
+
+# -----------------------------------------------------------------------------
+# Raw image properties (Konan CellChek D specular images).
+# -----------------------------------------------------------------------------
+image:
+  width: 1296
+  height: 972
+  channels: 1                         # grayscale
+  cell_spacing_px: 28.2               # median cell centre-to-centre distance (audit, FFT)
+
+# -----------------------------------------------------------------------------
+# Physical scale (Phase 4). um_per_px stays null until calibrated.
+# um_per_px_prelim comes from the audit (calibration split only) and may be used
+# for rough sanity checks before Phase 4 — never for reported results.
+# -----------------------------------------------------------------------------
+scale:
+  um_per_px: null
+  um_per_px_prelim: 0.752
+
+# -----------------------------------------------------------------------------
+# Classical baseline segmenter (Phase 1). Factors are multiples of
+# image.cell_spacing_px so the method adapts if the cell size estimate changes.
+# -----------------------------------------------------------------------------
+classical:
+  method: ridge                       # "ridge" (walls -> h-minima seeds, data-driven) or "seeds" (v1, spacing-driven)
+  ridge_sigmas_px: [1.5, 2.5]         # Sato ridge-filter scales matching the dark cell walls (px)
+  h_threshold: 0.30                   # min wall contrast (0..1) separating two cells; tuned on 40 train images
+                                      # (2026-10-08: area ratio 0.92, Spearman 0.76 vs Konan — best correlation)
+  draft_h_threshold: 0.20             # for annotation drafts: slightly over-split, since erasing a wall
+                                      # is quicker than drawing a missing one
+  dark_threshold: 40                  # ignore regions whose illumination is below this
+  smooth_sigma_factor: 0.08           # noise smoothing before watershed (~2 px)
+  seed_sigma_factor: 0.22             # "seeds" method only: smoothing for cell-centre detection (~6 px)
+  min_seed_distance_factor: 0.45      # "seeds" method only: minimum distance between centres (~13 px)
+  min_area_factor: 0.30               # keep cells with area >= 0.30 x expected hexagon area
+  max_area_factor: 2.50               # ... and <= 2.50 x expected hexagon area
+
+# -----------------------------------------------------------------------------
+# Segmentation annotation, round 1 (Phase 1, Steps 1.2-1.6). Crops come from
+# TRAIN images only, one crop per tissue.
+# -----------------------------------------------------------------------------
+annotation:
+  round: round1
+  crop_size: 256                      # px; ~95 cells at 28 px spacing
+  n_crops: 40
+  n_expert_overlap: 10                # crops also corrected independently by the NEBSL expert
+  min_per_ecd_band: 6                 # guarantee rare low-ECD tissues are represented
+  challenging_share: 0.3              # share of crops taken from harder (not best-covered) windows
+  seed: 7                             # separate from split.seed; changing it picks other crops
+
+# -----------------------------------------------------------------------------
+# ROI tile labelling, round 1 (Phase 1, Step 1.7). Whole images are cut into a
+# grid of square tiles and EVERY tile is labelled good / usable / poor:
+# train images -> patch-quality CNN (3.1); val images -> reference ROI for ROI IoU.
+# Test images are never used.
+# -----------------------------------------------------------------------------
+roi:
+  round: round1
+  grid_rows: 6                        # 972 / 6 = 162 px
+  grid_cols: 8                        # 1296 / 8 = 162 px -> square tiles, ~5.7 cells across
+  n_images_train: 20
+  n_images_val: 10
+  n_repeat: 3                         # images shown again (rotated 180 deg) for intra-rater repeatability
+  seed: 11                            # separate from split.seed and annotation.seed
+
+# -----------------------------------------------------------------------------
+# Segmentation model comparison (Phase 2). Every model uses the SAME folds
+# (splits/seg_folds_<round>.csv), the same reference masks (expert-revised where
+# they exist) and the same metrics. Rules fixed before any results:
+#   primary = cell F1 (cross-validation), secondary = Spearman of mean cell area
+#   vs Konan on val images; ties -> simpler / faster model. Test set never used.
+# -----------------------------------------------------------------------------
+seg_models:
+  round: round1                       # annotation round used for training
+  n_folds: 5                          # 40 crops -> 32 train / 8 test per fold
+  fold_seed: 13
+  preprocess: flat                    # "flat" (illumination flattening + CLAHE) or "raw"; ablation on the winner
+  watershed_h: 0.5                    # wall-probability contrast separating two cells (all wall-map models)
+  smp:                                # U-Net / U-Net++ / SegFormer (segmentation-models-pytorch)
+    encoder_weights: imagenet
+    epochs: 60                        # fixed; no early stopping (the test fold is never used for decisions)
+    samples_per_epoch: 320            # augmented crops drawn per epoch
+    batch_size: 8
+    lr: 3.0e-4
+    weight_decay: 1.0e-4
+    wall_pos_weight: 3.0              # walls are ~15 % of pixels
+    tta: true                         # average predictions over the 8 flips / 90-degree rotations
+    seed: 42
+    architectures:
+      unet:      {arch: Unet,         encoder: resnet34}
+      unetpp:    {arch: UnetPlusPlus, encoder: resnet34}
+      segformer: {arch: Segformer,    encoder: mit_b2, lr: 1.0e-4}
+  cellpose:                           # Cellpose 4 (Cellpose-SAM); installed in the Colab notebook only
+    pretrained: cpsam
+    diameter: null                    # null = no rescaling (cpsam is trained to be size-robust)
+    epochs: 100                       # fine-tuning per fold (Cellpose's recommended settings)
+    learning_rate: 1.0e-5
+    weight_decay: 0.1
+    batch_size: 1
+    keep_checkpoints: false           # fine-tuned models are ~1.2 GB each -> Colab disk only, not Drive
+    seed: 42
+
+# -----------------------------------------------------------------------------
+# Validation targets from the research scope (Phase 7).
+# -----------------------------------------------------------------------------
+targets:
+  roi_iou: 0.75
+  seg_dice: 0.85
+  seg_iou: 0.80
+  ecd_pct_error: 5.0
+  cv_pct_error: 10.0
+  hex_pct_error: 10.0
+  mean_area_pct_error: 8.0
+  compactness_cv: 15.0
