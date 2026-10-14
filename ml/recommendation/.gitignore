@@ -1,0 +1,17 @@
+# NEBSL clinical data must never be committed (data-sharing agreement + ethics).
+data/
+outputs/
+models/
+
+# No spreadsheets or exports anywhere in this module
+*.xlsx
+*.xls
+*.csv
+
+# Model artefacts and caches
+*.pkl
+*.joblib
+*.pt
+__pycache__/
+.pytest_cache/
+.ipynb_checkpoints/
