@@ -1,5 +1,6 @@
 import {
     ActivityIcon,
+    BrainCircuitIcon,
     ClipboardListIcon,
     FileTextIcon,
     LayoutDashboardIcon,
@@ -26,6 +27,8 @@ export const DASHBOARD_PATHS: Record<Role, string> = {
     SUPPORT_STAFF: "/support/dashboard",
 }
 
+export const ANALYSIS_PATH = "/analysis"
+
 export function dashboardPathFor(role: Role): string {
     return DASHBOARD_PATHS[role]
 }
@@ -47,6 +50,13 @@ export const NAV_ITEMS: NavItem[] = [
     { label: "Doctor dashboard", to: DASHBOARD_PATHS.DOCTOR, icon: LayoutDashboardIcon, roles: ["DOCTOR"] },
     { label: "Nurse dashboard", to: DASHBOARD_PATHS.NURSE, icon: LayoutDashboardIcon, roles: ["NURSE"] },
     { label: "Support dashboard", to: DASHBOARD_PATHS.SUPPORT_STAFF, icon: LayoutDashboardIcon, roles: ["SUPPORT_STAFF"] },
+    {
+        label: "AI analysis",
+        to: ANALYSIS_PATH,
+        icon: BrainCircuitIcon,
+        roles: ["DOCTOR", "NURSE"],
+        permission: "analysis:run",
+    },
 ]
 
 export interface PlannedModule extends NavItem {

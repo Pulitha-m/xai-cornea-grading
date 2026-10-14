@@ -28,16 +28,30 @@ export function PageHeader({
     )
 }
 
-export function Card({ title, description, children }: { title: string; description?: string; children: ReactNode }) {
+export function Card({
+    title,
+    description,
+    actions,
+    children,
+}: {
+    title: string
+    description?: string
+    /** Rendered at the end of the header, e.g. a status badge or button. */
+    actions?: ReactNode
+    children: ReactNode
+}) {
     const headingId = useId()
 
     return (
         <section aria-labelledby={headingId} className="overflow-hidden rounded-3xl border border-border bg-card shadow-bento">
-            <header className="border-b border-muted px-5 py-4 sm:px-6">
-                <h2 id={headingId} className="text-sm font-semibold">
-                    {title}
-                </h2>
-                {description && <p className="mt-0.5 text-xs leading-relaxed text-muted-foreground">{description}</p>}
+            <header className="flex items-start justify-between gap-3 border-b border-muted px-5 py-4 sm:px-6">
+                <div className="min-w-0">
+                    <h2 id={headingId} className="text-sm font-semibold">
+                        {title}
+                    </h2>
+                    {description && <p className="mt-0.5 text-xs leading-relaxed text-muted-foreground">{description}</p>}
+                </div>
+                {actions && <div className="flex shrink-0 items-center gap-2">{actions}</div>}
             </header>
             <div className="p-5 sm:p-6">{children}</div>
         </section>

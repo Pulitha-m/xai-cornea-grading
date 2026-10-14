@@ -1,6 +1,7 @@
 import { useId, useState, type FormEvent } from "react"
 import { useAnalysis } from "@/hooks/use-analysis"
 import { textInput } from "@/lib/styles"
+import { AnalysisResults } from "@/components/analysis/AnalysisResults"
 import { Card } from "@/components/dashboard/PageHeader"
 import { Spinner } from "@/components/ui/spinner"
 
@@ -21,56 +22,54 @@ export function AnalysisPanel() {
     }
 
     return (
-        <Card title="Run corneal analysis" description="Submit a specular microscopy image for AI-assisted assessment.">
-            <form className="grid gap-4 sm:grid-cols-[1fr_12rem_auto] sm:items-end" onSubmit={handleSubmit}>
-                <div>
-                    <label htmlFor={imageId} className="mb-1.5 block text-sm font-medium">
-                        Image URL
-                    </label>
-                    <input
-                        id={imageId}
-                        type="url"
-                        required
-                        value={imageUrl}
-                        onChange={(e) => setImageUrl(e.target.value)}
-                        className={textInput}
-                        placeholder="https://…"
-                    />
-                </div>
-                <div>
-                    <label htmlFor={caseIdId} className="mb-1.5 block text-sm font-medium">
-                        Case ID
-                    </label>
-                    <input
-                        id={caseIdId}
-                        required
-                        value={caseId}
-                        onChange={(e) => setCaseId(e.target.value)}
-                        className={textInput}
-                        placeholder="CASE-001"
-                    />
-                </div>
-                <button
-                    type="submit"
-                    disabled={analysis.isPending}
-                    className="inline-flex h-10 items-center justify-center gap-2 rounded-lg bg-primary px-4 text-sm font-medium text-primary-foreground hover:bg-primary/90 focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-ring/40 disabled:opacity-70"
-                >
-                    {analysis.isPending && <Spinner />}
-                    {analysis.isPending ? "Analysing…" : "Analyse"}
-                </button>
-            </form>
+        <div className="space-y-6">
+            <Card title="Run corneal analysis" description="Submit a specular microscopy image for AI-assisted assessment.">
+                <form className="grid gap-4 sm:grid-cols-[1fr_12rem_auto] sm:items-end" onSubmit={handleSubmit}>
+                    <div>
+                        <label htmlFor={imageId} className="mb-1.5 block text-sm font-medium">
+                            Image URL
+                        </label>
+                        <input
+                            id={imageId}
+                            type="url"
+                            required
+                            value={imageUrl}
+                            onChange={(e) => setImageUrl(e.target.value)}
+                            className={textInput}
+                            placeholder="https://…"
+                        />
+                    </div>
+                    <div>
+                        <label htmlFor={caseIdId} className="mb-1.5 block text-sm font-medium">
+                            Case ID
+                        </label>
+                        <input
+                            id={caseIdId}
+                            required
+                            value={caseId}
+                            onChange={(e) => setCaseId(e.target.value)}
+                            className={textInput}
+                            placeholder="CASE-001"
+                        />
+                    </div>
+                    <button
+                        type="submit"
+                        disabled={analysis.isPending}
+                        className="inline-flex h-10 items-center justify-center gap-2 rounded-lg bg-primary px-4 text-sm font-medium text-primary-foreground hover:bg-primary/90 focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-ring/40 disabled:opacity-70"
+                    >
+                        {analysis.isPending && <Spinner />}
+                        {analysis.isPending ? "Analysing…" : "Analyse"}
+                    </button>
+                </form>
 
-            {analysis.isError && (
-                <p role="alert" className="mt-4 text-sm text-destructive">
-                    {analysis.error.message}
-                </p>
-            )}
+                {analysis.isError && (
+                    <p role="alert" className="mt-4 text-sm text-destructive">
+                        {analysis.error.message}
+                    </p>
+                )}
+            </Card>
 
-            {analysis.isSuccess && (
-                <pre className="mt-4 max-h-96 overflow-auto rounded-lg border border-border bg-muted p-4 text-xs">
-                    {JSON.stringify(analysis.data, null, 2)}
-                </pre>
-            )}
-        </Card>
+            {analysis.isSuccess && <AnalysisResults result={analysis.data} />}
+        </div>
     )
 }

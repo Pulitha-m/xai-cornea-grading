@@ -1,8 +1,9 @@
-import { StethoscopeIcon } from "lucide-react"
+import { Link } from "react-router-dom"
+import { ArrowRightIcon, StethoscopeIcon } from "lucide-react"
 import { useAuth } from "@/hooks/use-auth"
-import { ROLE_LABELS } from "@/lib/roles"
-import { AnalysisPanel } from "@/components/dashboard/AnalysisPanel"
-import { PageHeader } from "@/components/dashboard/PageHeader"
+import { ANALYSIS_PATH, ROLE_LABELS } from "@/lib/roles"
+import { primaryLinkButton } from "@/lib/styles"
+import { Card, PageHeader } from "@/components/dashboard/PageHeader"
 
 /** Shared layout for clinical roles; the entry points below differ only in copy. */
 function ClinicalDashboard({ title, description }: { title: string; description: string }) {
@@ -22,7 +23,23 @@ function ClinicalDashboard({ title, description }: { title: string; description:
                 title={title}
                 description={`Signed in as ${user?.fullName}. ${description}`}
             />
-            {hasPermission("analysis:run") && <AnalysisPanel />}
+            {hasPermission("analysis:run") && (
+                <Card
+                    title="Run corneal analysis"
+                    description="Cellular analysis, cornea grading, disease screening and a recommendation from one specular microscopy image."
+                    actions={
+                        <Link to={ANALYSIS_PATH} className={`${primaryLinkButton} gap-2`}>
+                            Open workspace
+                            <ArrowRightIcon className="size-4" aria-hidden="true" />
+                        </Link>
+                    }
+                >
+                    <p className="text-sm text-muted-foreground">
+                        Each module reports independently, with its own status and model confidence. Results are decision
+                        support for specialist review.
+                    </p>
+                </Card>
+            )}
         </>
     )
 }
