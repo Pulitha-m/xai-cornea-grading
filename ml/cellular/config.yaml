@@ -100,6 +100,34 @@ roi:
   seed: 11                            # separate from split.seed and annotation.seed
 
 # -----------------------------------------------------------------------------
+# Segmentation model comparison (Phase 2). Every model uses the SAME folds
+# (splits/seg_folds_<round>.csv), the same reference masks (expert-revised where
+# they exist) and the same metrics. Rules fixed before any results:
+#   primary = cell F1 (cross-validation), secondary = Spearman of mean cell area
+#   vs Konan on val images; ties -> simpler / faster model. Test set never used.
+# -----------------------------------------------------------------------------
+seg_models:
+  round: round1                       # annotation round used for training
+  n_folds: 5                          # 40 crops -> 32 train / 8 test per fold
+  fold_seed: 13
+  preprocess: flat                    # "flat" (illumination flattening + CLAHE) or "raw"; ablation on the winner
+  watershed_h: 0.5                    # wall-probability contrast separating two cells (all wall-map models)
+  smp:                                # U-Net / U-Net++ / SegFormer (segmentation-models-pytorch)
+    encoder_weights: imagenet
+    epochs: 60                        # fixed; no early stopping (the test fold is never used for decisions)
+    samples_per_epoch: 320            # augmented crops drawn per epoch
+    batch_size: 8
+    lr: 3.0e-4
+    weight_decay: 1.0e-4
+    wall_pos_weight: 3.0              # walls are ~15 % of pixels
+    tta: true                         # average predictions over the 8 flips / 90-degree rotations
+    seed: 42
+    architectures:
+      unet:      {arch: Unet,         encoder: resnet34}
+      unetpp:    {arch: UnetPlusPlus, encoder: resnet34}
+      segformer: {arch: Segformer,    encoder: mit_b2, lr: 1.0e-4}
+
+# -----------------------------------------------------------------------------
 # Validation targets from the research scope (Phase 7).
 # -----------------------------------------------------------------------------
 targets:
