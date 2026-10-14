@@ -126,6 +126,15 @@ seg_models:
       unet:      {arch: Unet,         encoder: resnet34}
       unetpp:    {arch: UnetPlusPlus, encoder: resnet34}
       segformer: {arch: Segformer,    encoder: mit_b2, lr: 1.0e-4}
+  cellpose:                           # Cellpose 4 (Cellpose-SAM); installed in the Colab notebook only
+    pretrained: cpsam
+    diameter: null                    # null = no rescaling (cpsam is trained to be size-robust)
+    epochs: 100                       # fine-tuning per fold (Cellpose's recommended settings)
+    learning_rate: 1.0e-5
+    weight_decay: 0.1
+    batch_size: 1
+    keep_checkpoints: false           # fine-tuned models are ~1.2 GB each -> Colab disk only, not Drive
+    seed: 42
 
 # -----------------------------------------------------------------------------
 # Validation targets from the research scope (Phase 7).
