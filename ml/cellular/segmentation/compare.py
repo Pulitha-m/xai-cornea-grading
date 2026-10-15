@@ -13,6 +13,7 @@ Holm-corrected.
 Usage (from ml/cellular/; on Colab after the setup cell):
     python -m segmentation.compare --classical                  # score the classical baseline (once)
     python -m segmentation.compare --rescore                    # re-score all runs from saved masks
+    python -m segmentation.compare --h-sensitivity 0.3 0.4 0.5 0.6 0.7   # sensitivity analysis only
     python -m segmentation.compare                              # table + statistics
     python -m segmentation.compare --figure round1_019 round1_002
 """
@@ -31,7 +32,8 @@ from config import load_config
 from data_prep.check_annotations import IGNORE, INTERIOR, WALL
 from segmentation.classical import ClassicalParams, segment
 from segmentation.data import load_samples, round_dir
-from segmentation.metrics import print_summary, score_run, summarise
+from segmentation.metrics import print_summary, score_crop, score_run, summarise
+from segmentation.postprocess import walls_to_mask
 
 METRICS = ("cell_f1", "boundary_f1", "dice_interior", "iou_interior")
 
@@ -59,6 +61,47 @@ def rescore(cfg: dict, seg_out: Path) -> None:
         preds = {f.stem: cv2.imread(str(f), cv2.IMREAD_GRAYSCALE) for f in mask_dir.glob("*.png")}
         scores = score_run(samples, preds, mask_dir.parent)
         print(f"Re-scored {mask_dir.parent.name}: {len(scores)} crops")
+
+
+def h_sensitivity(cfg: dict, seg_out: Path, hs: list[float]) -> None:
+    """
+    Sensitivity analysis (NOT model selection): re-score every wall-map run from
+    its saved out-of-fold wall probabilities with other watershed thresholds h.
+    Official results (fixed h = seg_models.watershed_h) are not changed; output
+    goes to <seg_out>/sensitivity/h_sensitivity.csv.
+    """
+    samples = load_samples(cfg, "raw")
+    rows = []
+    for oof_dir in sorted(seg_out.glob("*/oof")):
+        run = oof_dir.parent.name
+        for h in hs:
+            per = [{"fold": s.fold, **score_crop(walls_to_mask(np.load(oof_dir / f"{s.crop_id}.npy"), h), s.mask)}
+                   for s in samples if (oof_dir / f"{s.crop_id}.npy").exists()]
+            df = pd.DataFrame(per)
+            per_fold = df.groupby("fold")[["cell_f1", "boundary_f1"]].mean()
+            rows.append({"run": run, "h": h, "n_crops": len(df),
+                         "cell_f1_mean": per_fold["cell_f1"].mean(), "cell_f1_sd": per_fold["cell_f1"].std(ddof=1),
+                         "boundary_f1_mean": per_fold["boundary_f1"].mean(),
+                         "area_ratio_tess_median": df["area_ratio_tess"].median()})
+            print(f"  {run:16s} h={h:.2f}  cell F1 {rows[-1]['cell_f1_mean']:.3f}", flush=True)
+
+    table = pd.DataFrame(rows)
+    (seg_out / "sensitivity").mkdir(exist_ok=True)
+    table.to_csv(seg_out / "sensitivity" / "h_sensitivity.csv", index=False)
+    official = cfg["seg_models"]["watershed_h"]
+    for col, title in (("cell_f1_mean", "Cell F1"), ("area_ratio_tess_median", "Centre-line area ratio (1.0 = correct)")):
+        print(f"\n{title} by watershed threshold h (official h = {official}):")
+        print(table.pivot(index="run", columns="h", values=col).round(3).to_string())
+    best = table.loc[table.groupby("run")["cell_f1_mean"].idxmax(), ["run", "h", "cell_f1_mean"]]
+    print("\nBest h per run (for interpretation only):")
+    print(best.round(3).to_string(index=False))
+
+    instance = {p.parent.name: pd.read_csv(p) for p in seg_out.glob("*/scores.csv")
+                if (p.parent / "inst").exists()}
+    if instance:
+        print("\nInstance models (no watershed, unaffected by h) for reference:")
+        for name, df in sorted(instance.items()):
+            print(f"  {name:24s} cell F1 {summarise(df)['cell_f1_mean']:.3f}")
 
 
 def holm(pvals: dict[str, float]) -> dict[str, float]:
@@ -152,6 +195,8 @@ def main() -> None:
     ap.add_argument("--classical", action="store_true", help="score the classical baseline on the folds")
     ap.add_argument("--figure", nargs="+", metavar="CROP_ID", help="overlay figure for these crops")
     ap.add_argument("--rescore", action="store_true", help="re-score all runs from their saved masks")
+    ap.add_argument("--h-sensitivity", type=float, nargs="+", metavar="H",
+                    help="sensitivity analysis: re-score wall-map runs with these watershed thresholds")
     args = ap.parse_args()
 
     cfg = load_config()
@@ -161,6 +206,8 @@ def main() -> None:
         classical_run(cfg, seg_out)
     elif args.rescore:
         rescore(cfg, seg_out)
+    elif args.h_sensitivity:
+        h_sensitivity(cfg, seg_out, args.h_sensitivity)
     elif args.figure:
         figure(cfg, seg_out, args.figure)
     else:
