@@ -1,6 +1,6 @@
 # Grading Model: Findings to Date
 
-Checkpoint of the evidence from notebooks `images/06`–`images/08`. The notebooks contain the full analysis and outputs; this file records what they establish and what they do not.
+Checkpoint of the evidence from notebooks `images/06`–`images/09`. The notebooks contain the full analysis and outputs; this file records what they establish and what they do not.
 
 ## Research question
 
@@ -69,7 +69,41 @@ Can image-derived information improve donor cornea tissue grading beyond existin
 
 ## Exploratory, hypothesis-generating only
 
-On non-2023 tissues the hybrid gains +0.036 macro F1 [−0.004, +0.075], p = 0.078 (unadjusted), larger than in 2023 (interaction p = 0.03). This was found after seeing the data and is not a confirmed benefit. It motivates a separately pre-specified experiment on non-2023 tissues.
+On non-2023 tissues the hybrid gains +0.036 macro F1 [−0.004, +0.075], p = 0.078 (unadjusted), larger than in 2023 (interaction p = 0.03). This was found after seeing the data and is not a confirmed benefit. It motivated the pre-specified sensitivity analysis in notebook 09.
+
+### 6. Non-2023 sensitivity analysis: inconclusive (notebook 09)
+
+Pre-specified (protocol committed before analysis code); trained and evaluated on non-2023 tissues only (551 tissues, 312 donors, year from `Tissue_ID`). Run once; no deviations.
+
+| Hybrid − Tabular | Tabular | Hybrid | Difference [corrected 95% CI] | p |
+|---|---:|---:|---|---:|
+| Macro F1 (primary) | 0.711 | 0.748 | +0.038 [−0.013, +0.088] | 0.135 |
+| Balanced accuracy | 0.705 | 0.734 | +0.029 [−0.018, +0.077] | 0.215 |
+| Grade B recall | 0.722 | 0.714 | −0.008 [−0.105, +0.089] | 0.869 |
+
+- Verdict under the protocol's rules: **inconclusive**. Grade B recall and per-year qualifiers were not triggered.
+- The direction was positive in all 5 repeats and in every year, but this analysis shares tissues, folds and features with the exploratory result and is not independent confirmation.
+
+## Observations from the evidence audit (descriptive)
+
+### 7. Konan features are partly derived from one another
+
+- ECD equals `Total_Cell_Count / Total_Area_um2` (all 940 tissues within 1%), and CV is effectively `SD / mean cell area` (r = 0.998). The six Konan features carry about four independent quantities.
+- This explains why notebook 04 found that adding ECD to the morphology features changed no predictions, and it means feature-level SHAP values split credit between derived features.
+
+### 8. A two-threshold ECD rule matches the tabular model on non-2023 tissues
+
+On the 470 non-2023 tissues with an ECD value (out-of-fold predictions from notebook 09):
+
+| Predictor | Macro F1 | Balanced accuracy | Accuracy | Grade B recall |
+|---|---:|---:|---:|---:|
+| ECD rule: B < 2250 ≤ A < 2500 ≤ A+ | 0.800 | 0.770 | 0.806 | 0.791 |
+| ECD rule: B < 2000 ≤ A < 2500 ≤ A+ | 0.671 | 0.636 | 0.749 | 0.388 |
+| Tabular RF | 0.758 | 0.754 | 0.758 | 0.818 |
+| Hybrid RF | 0.791 | 0.782 | 0.797 | 0.806 |
+
+- The 2250/2500 thresholds were identified from the 2023 data after it had been inspected, so this is a descriptive comparison, not a test. They were not fitted to the non-2023 tissues.
+- It shows that the added value of the Random Forest over a simple ECD threshold rule has not been demonstrated, even in the subset where recorded grades depart more often from the thresholds.
 
 ## Limitations
 
@@ -78,8 +112,6 @@ On non-2023 tissues the hybrid gains +0.036 macro F1 [−0.004, +0.075], p = 0.0
 - Image features are generic (ImageNet, frozen); a representation adapted to specular microscopy has not been tested.
 - 2023 slit-lamp findings are permanently missing; their absence is tied to a subset with a distinct grade pattern.
 
-## Planned next steps
+## Next steps
 
-1. Pre-specified tabular vs hybrid comparison restricted to non-2023 tissues (same folds, metrics and RF settings), with settings fixed before results are examined.
-2. If worthwhile, a separately pre-specified experiment with a specular-microscopy-appropriate image representation.
-3. Report all results overall and by year.
+See `CLAIMS_AUDIT.md` for the claim-by-claim review and the remaining gaps before writing.
