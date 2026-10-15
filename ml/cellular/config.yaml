@@ -147,6 +147,14 @@ seg_models:
     dataset_id: 501                   # "flat" inputs -> 501, "raw" inputs -> 502
     trainer: nnUNetTrainer_100epochs  # reduced budget (nnU-Net default: 1000 epochs); final checkpoint
                                       # is used, so the test fold never selects a checkpoint
+  full_image:                         # step 2.7: finalists on FULL validation images vs Konan
+    split: val
+    min_cells: 30                     # fewer complete cells in an image = failure for that run
+    n_bootstrap: 2000                 # paired bootstrap of the Spearman difference between finalists
+    seed: 7
+    # Decision (fixed before results): primary = Spearman(mean cell area, Konan mean area) on images
+    # every run measured; finalist with the higher rho wins if the 95% CI of the paired difference
+    # excludes 0, otherwise tie -> StarDist (simpler, ~60x smaller, faster).
 
 # -----------------------------------------------------------------------------
 # Validation targets from the research scope (Phase 7).
