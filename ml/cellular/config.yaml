@@ -155,6 +155,12 @@ seg_models:
     # Decision (fixed before results): primary = Spearman(mean cell area, Konan mean area) on images
     # every run measured; finalist with the higher rho wins if the 95% CI of the paired difference
     # excludes 0, otherwise tie -> StarDist (simpler, ~60x smaller, faster).
+    # Result (2026-10-15): StarDist selected (rho 0.813 vs 0.733, diff CI [-0.136, -0.028]).
+  ablation:                           # step 2.8: preprocessing ablation on the winner (StarDist)
+    model: stardist
+    alpha: 0.05
+    # Rule (fixed before results): "raw" replaces the default "flat" only if it is significantly better
+    # (paired Wilcoxon on cell F1, p < alpha); tie or flat better -> keep "flat" (validated pipeline).
 
 # -----------------------------------------------------------------------------
 # Validation targets from the research scope (Phase 7).

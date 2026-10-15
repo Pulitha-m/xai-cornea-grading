@@ -15,6 +15,7 @@ Usage (from ml/cellular/; on Colab after the setup cell):
     python -m segmentation.compare --rescore                    # re-score all runs from saved masks
     python -m segmentation.compare --h-sensitivity 0.3 0.4 0.5 0.6 0.7   # sensitivity analysis only
     python -m segmentation.compare --h-tuned-cv 0.1 0.2 0.3 0.4 0.5      # h chosen on the other folds
+    python -m segmentation.compare --pair stardist_finetune_raw stardist_finetune_flat  # ablation
     python -m segmentation.compare                              # table + statistics
     python -m segmentation.compare --figure round1_019 round1_002
 """
@@ -155,6 +156,28 @@ def h_tuned_cv(cfg: dict, seg_out: Path, hs: list[float]) -> None:
         print(f"  {best} vs {name:28s} mean diff {(paired[best] - paired[name]).mean():+.3f}   Holm p = {p:.2g}")
 
 
+def pair(seg_out: Path, run_a: str, run_b: str, alpha: float) -> None:
+    """Paired comparison of two runs on the same crops (used for the preprocessing ablation)."""
+    a, b = (pd.read_csv(seg_out / r / "scores.csv").set_index("crop_id") for r in (run_a, run_b))
+    common = a.index.intersection(b.index)
+    print(f"{run_a} vs {run_b} on {len(common)} paired crops (mean +- SD over folds):")
+    for name, df in ((run_a, a), (run_b, b)):
+        d = df.loc[common]
+        s = summarise(d.reset_index(), METRICS)
+        challenging = d.loc[d["difficulty"] == "challenging", "cell_f1"].mean()
+        print(f"  {name:24s} cell F1 {s['cell_f1_mean']:.3f} +- {s['cell_f1_sd']:.3f}   "
+              f"boundary F1 {s['boundary_f1_mean']:.3f}   challenging {challenging:.3f}   "
+              f"area ratio (centre line) {d['area_ratio_tess'].median():.3f}")
+    diff = (a.loc[common, "cell_f1"] - b.loc[common, "cell_f1"]).dropna()
+    p = wilcoxon(diff).pvalue if (diff != 0).any() else 1.0
+    print(f"\nCell F1 difference {run_a} - {run_b}: mean {diff.mean():+.3f}, "
+          f"{run_a} better on {(diff > 0).sum()} / {len(diff)} crops, Wilcoxon p = {p:.3g}")
+    if p < alpha:
+        print(f"-> significant at alpha = {alpha}: {run_a if diff.mean() > 0 else run_b} is better")
+    else:
+        print(f"-> not significant at alpha = {alpha}: no evidence of a difference")
+
+
 def holm(pvals: dict[str, float]) -> dict[str, float]:
     """Holm-Bonferroni adjusted p-values."""
     order = sorted(pvals, key=pvals.get)
@@ -250,6 +273,7 @@ def main() -> None:
                     help="sensitivity analysis: re-score wall-map runs with these watershed thresholds")
     ap.add_argument("--h-tuned-cv", type=float, nargs="+", metavar="H",
                     help="sensitivity analysis: h chosen per fold on the other folds, vs instance models")
+    ap.add_argument("--pair", nargs=2, metavar=("RUN_A", "RUN_B"), help="paired comparison of two runs")
     args = ap.parse_args()
 
     cfg = load_config()
@@ -263,6 +287,8 @@ def main() -> None:
         h_sensitivity(cfg, seg_out, args.h_sensitivity)
     elif args.h_tuned_cv:
         h_tuned_cv(cfg, seg_out, args.h_tuned_cv)
+    elif args.pair:
+        pair(seg_out, *args.pair, cfg["seg_models"]["ablation"]["alpha"])
     elif args.figure:
         figure(cfg, seg_out, args.figure)
     else:
