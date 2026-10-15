@@ -40,9 +40,10 @@ Notebooks 09–12 restrict V2 to the primary cohort (K3): training and test tiss
 
 | Type | Meaning |
 |---|---|
-| Pre-specified | Comparisons and settings fixed before the results were seen. Notebooks 07–08: fixed in the notebook text. Notebooks 09–11: protocol cell committed to git before analysis code. |
-| Sensitivity | Pre-specified re-analysis on data that already generated the hypothesis (notebook 09); not independent confirmation |
-| Follow-up | Pre-specified, but motivated by an earlier result (notebook 11); not independent confirmation |
+| Pre-specified | Protocol documented before the analysis was run, with git history supporting that sequence: the protocol cell was committed before analysis code (notebook 10) |
+| Planned | Settings written into the notebook before its comparisons, but the timing cannot be independently verified from git history (notebooks 07–08) |
+| Sensitivity | Pre-specified (protocol committed before analysis code) re-analysis on data that already generated the hypothesis (notebook 09); not independent confirmation |
+| Follow-up | Pre-specified (protocol committed before analysis code), but motivated by an earlier result (notebook 11); not independent confirmation |
 | Exploratory | Descriptive, no hypothesis tests (notebook 12) |
 | Diagnostic | Added after seeing results, to explain them (notebook 06 grouping check; notebook 08 Section 10) |
 
@@ -59,7 +60,7 @@ Tabular Random Forest (24 features, hyperparameters from notebook 05), macro F1 
 
 Source: notebook 06 output (no CSV). No paired test was run.
 
-### R2. Image embeddings, all years (K2, V2; notebook 07; pre-specified)
+### R2. Image embeddings, all years (K2, V2; notebook 07; planned)
 
 | Model | Macro F1 | Balanced accuracy | Accuracy |
 |---|---:|---:|---:|
@@ -83,7 +84,7 @@ Source: `hybrid_fold_scores.csv`; paired tests from notebook 07 output.
 
 ### R3. Missing information, all years (K2, V2; notebook 08)
 
-Models are trained on all years. Comparisons C1–C5 are pre-specified, with Holm correction across the five macro F1 p-values.
+Models are trained on all years. Comparisons C1–C5 are planned, with Holm correction across the five macro F1 p-values.
 
 | ID | Comparison | Tissues evaluated | Tabular | Hybrid | Difference [95% CI] | p | p (Holm) |
 |---|---|---:|---:|---:|---|---:|---:|
