@@ -1,6 +1,6 @@
 # Grading Model: Findings to Date
 
-Checkpoint of the evidence from notebooks `images/06`–`images/09`. The notebooks contain the full analysis and outputs; this file records what they establish and what they do not.
+Checkpoint of the evidence from notebooks `images/06`–`images/11`. The notebooks contain the full analysis and outputs; this file records what they establish and what they do not.
 
 ## Research question
 
@@ -50,6 +50,8 @@ Can image-derived information improve donor cornea tissue grading beyond existin
 - Slit-lamp findings are missing for all 455 tissues from 2023 and almost no others. They cannot be recovered.
 - In 2023, recorded grades agree with fixed ECD thresholds (B < 2250, A 2250–2499, A+ ≥ 2500) for 95% of tissues, compared with 72–84% in other years.
 - Tabular macro F1 is 0.992 on 2023 tissues and 0.729 on other years. Pooled results (~0.85) combine the two.
+
+Later analysis (section 10) found that a tree fitted only on non-2023 tissues recovers nearly the same thresholds, so other years are anchored at similar cut points but depart from them more often.
 
 **What this does not show:** why the pattern arose. It is consistent with a change in protocol or documentation, but it is not evidence that specialists graded 2023 tissues from ECD alone, or that two official grading protocols existed.
 
@@ -104,6 +106,48 @@ On the 470 non-2023 tissues with an ECD value (out-of-fold predictions from note
 
 - The 2250/2500 thresholds were identified from the 2023 data after it had been inspected, so this is a descriptive comparison, not a test. They were not fitted to the non-2023 tissues.
 - It shows that the added value of the Random Forest over a simple ECD threshold rule has not been demonstrated, even in the subset where recorded grades depart more often from the thresholds.
+- This unmatched check was replaced by the matched, donor-grouped comparisons in sections 9 and 10.
+
+## Comparison with ECD alone (primary cohort: non-2023 tissues with ECD)
+
+Both analyses below use the 470 non-2023 tissues with an ECD value (280 donors), the same 5 × 5 donor-grouped folds, and the same Tabular and Hybrid models as notebook 09 (predictions reproduced exactly). Primary metric: macro F1; corrected repeated-CV t-test; Holm correction across the two comparisons in each notebook.
+
+### 9. Pre-specified: models vs an ECD-only Random Forest (notebook 10)
+
+| Comparison (macro F1) | Model | ECD-only RF | Difference [95% CI] | Holm p |
+|---|---:|---:|---|---:|
+| Tabular − ECD-only RF | 0.756 | 0.707 | +0.048 [+0.005, +0.092] | 0.030 |
+| Hybrid − ECD-only RF | 0.789 | 0.707 | +0.081 [+0.031, +0.132] | 0.006 |
+
+- Verdict under the protocol: **both models improved on the ECD-only Random Forest**. Grade B recall and per-year qualifiers were not triggered.
+- **Limitation:** the ECD-only Random Forest was a weak comparator. In the same notebook, the descriptive 2250/2500 rule scored 0.797 using ECD alone.
+
+### 10. Follow-up: models vs a fitted ECD-only threshold tree (notebook 11)
+
+Motivated by the weak comparator in notebook 10, so it is a follow-up, not independent confirmation. The baseline is a depth-2 decision tree on ECD alone (`min_samples_leaf=10`, balanced class weights), fixed in advance and fitted within each training fold.
+
+| Comparison (macro F1) | Model | ECD tree | Difference [95% CI] | Holm p | Folds improved |
+|---|---:|---:|---|---:|---:|
+| Tabular − ECD tree | 0.756 | 0.796 | −0.040 [−0.084, +0.004] | 0.141 | 2/25 |
+| Hybrid − ECD tree | 0.789 | 0.796 | −0.007 [−0.046, +0.031] | 0.702 | 11/25 |
+
+- Verdict under the protocol: **inconclusive for both**. No qualifier was triggered.
+- **Improvement beyond ECD alone was not established.** The models outperformed a poorly specified ECD-only learner (section 9), but not a properly fitted two-threshold ECD model.
+
+**Thresholds recovered from the labels (descriptive):**
+
+- In all 25 training folds, using non-2023 tissues only, the tree learned cut points of 2232 and 2494–2503, close to the 2250/2500 thresholds inferred from 2023. It scored 0.796 against 0.797 for the inferred rule.
+- This supports the consistency of these thresholds in the recorded labels across years. It does not show that every year followed an identical official protocol, and it does not explain why individual tissues depart from the thresholds.
+
+**Different error patterns (pooled over repeats, descriptive):**
+
+| Recall | ECD tree | Tabular | Hybrid |
+|---|---:|---:|---:|
+| A+ | 0.988 | 0.846 | 0.890 |
+| A | 0.528 | 0.599 | 0.649 |
+| B | 0.791 | 0.818 | 0.806 |
+
+The tree assigns A+ to almost every tissue with ECD of about 2500 or more, and identifies about half of grade A tissues. The hybrid recovers more grade A tissues that depart from the thresholds, at the cost of A+ recall. Its balanced accuracy is 0.014 higher, which is not significant.
 
 ## Limitations
 

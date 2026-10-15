@@ -1,4 +1,4 @@
-# Claims Audit: Notebooks 01–09
+# Claims Audit: Notebooks 01–11
 
 Purpose: decide what the paper can claim before writing the methodology and results. Each claim is traced to its source notebook and rated against the later evidence.
 
@@ -32,7 +32,8 @@ Purpose: decide what the paper can claim before writing the methodology and resu
 | T3 | Tabular RF macro F1 0.906 on the shared split | images/05 | Superseded | Single 152-tissue split, 108 donor pairs split, no uncertainty. Use 07 |
 | T4 | Tabular RF macro F1 0.844 (all 1,036) / 0.849 (image cohort), donor-grouped 5×5 CV | 06, 07 | Qualified | Hyperparameters tuned in 05 with non-grouped CV on overlapping tissues. Pooled figure averages 2023 (0.99) and other years (0.73); always report by year |
 | T5 | Morphology outperforms ECD alone; adding ECD changes nothing | 04 | Qualified | Morphology features contain ECD implicitly (count / area). Reframe as "the full Konan feature set outperforms ECD alone" |
-| T6 | The ML model adds value over an ECD threshold rule | — | **Not supported** | On non-2023 tissues the 2250/2500 rule (0.800) exceeds the tabular RF (0.758). Descriptive only, but it means the claim cannot be made |
+| T6 | The ML models add value beyond ECD alone | 10, 11 | **Not supported** | Pre-specified (10): Tabular and Hybrid beat an ECD-only Random Forest (+0.048, +0.081; Holm p 0.030, 0.006), but that comparator was weak. Follow-up (11): neither beat a depth-2 ECD tree fitted within training folds (Tabular −0.040, Hybrid −0.007; inconclusive). Report both; claim only that the models outperform an ECD-only Random Forest |
+| T7 | Recorded grades are anchored at ECD ≈ 2230 and ≈ 2500 across years | 11 | Supported as a description of the labels | Tree fitted on non-2023 tissues recovered cut points 2232 and 2494–2503 in all 25 folds. Not evidence of a single official protocol, nor of why tissues depart from the thresholds |
 
 ### Image and hybrid models
 
@@ -60,6 +61,7 @@ The evidence does not support "a model that grades corneas better" or "images im
 1. **Evaluation must respect donor structure.** Fellow eyes are strongly correlated, and ignoring them inflates performance (D3, D4).
 2. **Recorded grades follow different patterns across years, and pooled metrics hide it.** Near-perfect agreement in one year and 0.73 in others average to a misleading 0.85. Missing data is tied to the same year, which also makes test-time masking a misleading robustness check (D5, D6, I5).
 3. **Generic image features add little beyond endothelial morphology.** This held with all features available, without slit-lamp findings, and in the non-2023 subset (I4, I5, I7). The non-2023 result is consistently positive but inconclusive, a specific, testable hypothesis for future work.
+4. **Multimodal models did not outperform a fitted two-threshold ECD model.** They beat a poorly specified ECD-only learner, which shows how much the choice of baseline matters (T6). The recorded labels are anchored at consistent ECD cut points (T7), and the open question is what explains the departures from them.
 
 A possible framing: *"Evaluating machine learning for donor cornea grading: donor dependence, year-dependent grading patterns and the incremental value of specular microscopy images."*
 
@@ -69,8 +71,8 @@ Ordered by how much they affect the paper's claims.
 
 | # | Gap | Why it matters | Suggested action |
 |---|---|---|---|
-| G1 | **No pre-specified comparison with a simple ECD rule** | Any claim that ML adds value depends on it, and the descriptive check (T6) points the other way | Find the eye bank's documented grading criteria. Pre-specify a rule baseline using those thresholds (not ones inferred from 2023) and compare on donor-grouped folds, overall and by year |
-| G2 | **Explainability not redone under the final protocol** | XAI is the project's stated focus, and the existing SHAP (X1, X2) predates donor grouping and the year finding | SHAP for the donor-grouped tabular model, out-of-fold, reported by year, with derived Konan features grouped (ECD / count / area; CV / SD) |
+| G1 | ~~No pre-specified comparison with ECD alone~~ **Closed (notebooks 10–11)** | Determined whether ML adds value beyond ECD | Done: improvement beyond ECD alone was not established (T6). Documented eye-bank criteria remain unavailable; the fitted tree recovered thresholds close to 2250/2500 (T7) |
+| G2 | **Explainability not redone under the final protocol** | XAI is the project's stated focus, and the existing SHAP (X1, X2) predates donor grouping and the year finding | Exploratory analysis of grades that depart from the ECD thresholds: held-out tissues where the hybrid is correct and the ECD tree is not, with grouped SHAP (derived Konan features grouped; image components as one source). See `ANALYSIS_PLAN.md`, analysis B |
 | G3 | Hyperparameters tuned on non-grouped CV | Slight optimism in T4; may favour the tabular arm in 07 and 09 | Nested donor-grouped tuning as a sensitivity check, or state as a limitation |
 | G4 | No consolidated final-results table | Numbers are spread across 05–09 with different cohorts (1,036 vs 1,009 vs 551) | One table: final tabular model, overall and by year, with CIs and per-grade recall; cohort stated for each row |
 | G5 | Donor pairing inferred | Affects D3, D4 and every grouped result | State as a limitation; pairing rule documented in `modeling_setup.get_donor_groups` |
@@ -79,10 +81,9 @@ Ordered by how much they affect the paper's claims.
 
 ## 4. Recommendation
 
-Before any new image architecture:
+G1 is closed: improvement beyond ECD alone was not established, so the paper's contribution is the evaluation findings, and the modelling sections should say so.
 
-1. **Close G1** first. If ML does not beat the eye bank's own threshold rule, the paper's contribution is the evaluation findings, and the modelling sections should say so.
-2. **Close G2**, because the explainability component is part of the project's stated aim, and the existing SHAP results cannot be reported as they stand.
-3. **Then G4**, which mostly gathers existing numbers into one table.
+1. **Close G2** next, refocused on grades that depart from the ECD thresholds. The explainability component is part of the project's stated aim, and the existing SHAP results cannot be reported as they stand.
+2. **Then G4**, which mostly gathers existing numbers into one table, now including the ECD tree.
 
 G3, G5 and G7 can be handled as stated limitations or quick checks. G6 is future work.

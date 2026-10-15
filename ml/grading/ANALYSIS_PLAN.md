@@ -42,28 +42,42 @@ Consequently:
 
 Each analysis gets its own protocol, written and committed before any code is run, as for notebook 09. Existing donor-grouped folds (`donor_grouped_folds.csv`) are reused throughout.
 
-### A. Beyond-ECD comparison (addresses the research aim directly)
+### A. Beyond-ECD comparison — complete
 
 Question: Do the tabular and hybrid models improve on ECD alone for unseen donors?
 
-- **Comparator:** an ECD-only model trained within each donor-grouped training fold, compared with the tabular and hybrid models on the same held-out tissues.
-- **Evaluation tissues:** the 470 primary-cohort tissues with an ECD value. Handling of the 81 without ECD is to be fixed in the protocol.
-- **Descriptive extra:** a fixed two-threshold ECD rule. The protocol must state the threshold source: documented eye-bank criteria if available; otherwise, thresholds inferred from 2023 records, in which case the rule is reported as descriptive only.
-- Open protocol choices: the ECD-only model type, the primary pairwise comparisons, and multiplicity correction.
+| Analysis | Notebook | Status | Result |
+|---|---|---|---|
+| A: models vs ECD-only Random Forest | `10_beyond_ecd_comparison.ipynb` | Pre-specified | Both improved (+0.048, +0.081 macro F1; Holm p 0.030, 0.006), but the comparator was weak |
+| A2: models vs fitted ECD-only depth-2 tree | `11_fitted_ecd_threshold_comparison.ipynb` | Follow-up, motivated by A | Inconclusive for both (Tabular −0.040, Hybrid −0.007) |
 
-### B. Donor-grouped explainability (XAI)
+**Conclusion:** improvement beyond ECD alone was not established.
 
-Question: Which information sources drive the models' grade predictions in the primary cohort, and how stable are the explanations?
+- The fitted tree recovered cut points near 2230 and 2500 in every training fold. This supports the consistency of these thresholds in the recorded labels; it does not show that every year followed an identical official protocol.
+- The hybrid recovers more grade A tissues that depart from the thresholds (A recall 0.65 vs 0.53) at the cost of A+ recall (0.89 vs 0.99).
 
-- SHAP values computed out-of-fold on the donor-grouped folds, so each explanation comes from a model that did not train on that tissue.
-- Derived Konan features grouped before interpretation (ECD with cell count and area; CV with SD), and image PCA components grouped as a single image source.
-- Report global importance by source, per grade (especially B), and stability across folds and repeats.
-- Interpretation in light of analysis A: if neither model improves on ECD alone, the explanations describe model behaviour, not evidence that the other sources add information.
+### B. Explainability of departures from the ECD thresholds (exploratory)
+
+Refocused after analysis A. Ranking features by overall predictive importance is less informative when the models do not outperform ECD alone. The clinically meaningful question is narrower.
+
+**Question:** For held-out tissues whose recorded grade departs from the ECD-based prediction, which information sources are associated with the hybrid model predicting the recorded grade correctly?
+
+- **Cases of interest:** held-out tissues (evaluation set, out-of-fold, per repeat) where the hybrid predicts the recorded grade correctly and the fitted ECD tree does not. Comparison groups: tissues where both are correct, and where the hybrid is wrong and the tree is correct.
+- **Grouped SHAP**, computed with the fold model that did not train on each tissue. Features are grouped as:
+  - ECD-derived Konan features (ECD, cell count, area);
+  - variability (CV, SD);
+  - HEX;
+  - slit-lamp findings, by tissue layer;
+  - image (the 16 PCA components as one source).
+- Report by direction of departure (e.g. recorded A where ECD suggests A+), by grade, and with stability across folds and repeats.
+- **Exploratory:** no hypothesis tests or claims of improvement. SHAP values describe associations in the model, not clinical explanations or causal evidence. Any pattern is a hypothesis for clinical review.
+
+A protocol will be written and committed before analysis code, as for notebooks 09–11.
 
 ### C. Consolidated results
 
-One table for the primary cohort (tabular, hybrid, ECD comparator), with corrected confidence intervals and per-grade recall, plus the all-year results as context, with each row's cohort stated.
+One table for the primary cohort (ECD tree, ECD-only Random Forest, tabular, hybrid), with corrected confidence intervals and per-grade recall, plus the all-year results as context, with each row's cohort stated.
 
 ### Recommended order
 
-A, then B, then C. Analysis A determines how the explanations in B can be interpreted.
+B, then C.
