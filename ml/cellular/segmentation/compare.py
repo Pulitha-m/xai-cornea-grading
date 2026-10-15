@@ -12,6 +12,7 @@ Holm-corrected.
 
 Usage (from ml/cellular/; on Colab after the setup cell):
     python -m segmentation.compare --classical                  # score the classical baseline (once)
+    python -m segmentation.compare --rescore                    # re-score all runs from saved masks
     python -m segmentation.compare                              # table + statistics
     python -m segmentation.compare --figure round1_019 round1_002
 """
@@ -51,6 +52,15 @@ def classical_run(cfg: dict, seg_out: Path) -> None:
     print_summary("classical", scores)
 
 
+def rescore(cfg: dict, seg_out: Path) -> None:
+    """Re-score every run from its saved masks (after a metric is added); no model is re-run."""
+    samples = load_samples(cfg, "raw")
+    for mask_dir in sorted(seg_out.glob("*/masks")):
+        preds = {f.stem: cv2.imread(str(f), cv2.IMREAD_GRAYSCALE) for f in mask_dir.glob("*.png")}
+        scores = score_run(samples, preds, mask_dir.parent)
+        print(f"Re-scored {mask_dir.parent.name}: {len(scores)} crops")
+
+
 def holm(pvals: dict[str, float]) -> dict[str, float]:
     """Holm-Bonferroni adjusted p-values."""
     order = sorted(pvals, key=pvals.get)
@@ -69,11 +79,13 @@ def comparison(seg_out: Path, n_crops: int) -> None:
 
     table = pd.DataFrame({name: summarise(df, METRICS) for name, df in runs.items()}).T
     table["area_ratio_median"] = [runs[n]["area_ratio"].median() for n in table.index]
+    table["area_ratio_tess_median"] = [runs[n]["area_ratio_tess"].median() if "area_ratio_tess" in runs[n]
+                                       else float("nan") for n in table.index]
     table["cell_f1_challenging"] = [runs[n].loc[runs[n]["difficulty"] == "challenging", "cell_f1"].mean()
                                     for n in table.index]
     table = table.sort_values("cell_f1_mean", ascending=False)
     cols = ["n_crops"] + [f"{m}_{s}" for m in METRICS for s in ("mean", "sd")] + \
-           ["cell_f1_challenging", "area_ratio_median"]
+           ["cell_f1_challenging", "area_ratio_median", "area_ratio_tess_median"]
     table[cols].to_csv(seg_out / "comparison.csv")
     pd.set_option("display.width", 220)
     print("Mean +- SD over folds (sorted by cell F1):")
@@ -139,6 +151,7 @@ def main() -> None:
     ap = argparse.ArgumentParser(description="Segmentation model comparison.")
     ap.add_argument("--classical", action="store_true", help="score the classical baseline on the folds")
     ap.add_argument("--figure", nargs="+", metavar="CROP_ID", help="overlay figure for these crops")
+    ap.add_argument("--rescore", action="store_true", help="re-score all runs from their saved masks")
     args = ap.parse_args()
 
     cfg = load_config()
@@ -146,6 +159,8 @@ def main() -> None:
     seg_out.mkdir(parents=True, exist_ok=True)
     if args.classical:
         classical_run(cfg, seg_out)
+    elif args.rescore:
+        rescore(cfg, seg_out)
     elif args.figure:
         figure(cfg, seg_out, args.figure)
     else:
