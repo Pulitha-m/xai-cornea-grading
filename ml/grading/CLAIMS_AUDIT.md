@@ -1,4 +1,4 @@
-# Claims Audit: Notebooks 01–11
+# Claims Audit: Notebooks 01–12
 
 Purpose: decide what the paper can claim before writing the methodology and results. Each claim is traced to its source notebook and rated against the later evidence.
 
@@ -51,8 +51,11 @@ Purpose: decide what the paper can claim before writing the methodology and resu
 
 | # | Claim | Source | Status | Notes |
 |---|---|---|---|---|
-| X1 | ECD is the most important feature, followed by SD and total area | 05 (SHAP) | Qualified | Model trained with non-grouped CV, explained on 200 training tissues. ECD, SD, area and count are derived from one another, so SHAP splits credit among them. Importance is dominated by the 2023 subset |
-| X2 | Clinical findings contribute meaningfully to grading decisions | 05 (SHAP) | Not yet supported | Slit-lamp features exist only outside 2023; their SHAP values reflect half the data. Needs a by-year analysis |
+| X1 | ECD is the most important feature, followed by SD and total area | 05 (SHAP) | Superseded | Non-grouped CV, explained on training tissues, derived features splitting credit, dominated by 2023. Replaced by X3–X5 (notebook 12): ECD-derived features carry the largest grouped SHAP when both models are correct (+0.164) |
+| X2 | Clinical findings contribute meaningfully to grading decisions | 05 (SHAP) | **Not supported** | In notebook 12, slit-lamp groups other than stroma contribute ≈ 0; stroma contributes modestly (X5). SHAP does not show what drives specialists' decisions |
+| X3 | Image features provide reliable additional information about departures from the ECD thresholds | 12 | **Not supported** | Image has the largest grouped SHAP in hybrid-only-correct cases (+0.063), but pushes the model away from the recorded grade in tree-only-correct cases (−0.033) at similar magnitude. Model reliance, not demonstrated signal |
+| X4 | The hybrid recovers some grades recorded below the ECD thresholds | 12 | Supported, with its cost | About 29% of downgrade pairs (131 of 445), but 151 incorrect departures, so departures are right about as often as wrong |
+| X5 | Endothelial variability and stromal findings are associated with correctly predicted downgrades | 12 | Qualified: exploratory association | Variability SHAP positive in hybrid-only-correct cases in all repeats and ≈ 0 in tree-only-correct cases; stroma similar but smaller. Raw data: downgraded tissues had higher CV/SD, lower HEX, more stromal scar and cell dropout. Selected by the model's predictions; not causal; hypotheses for clinical review |
 
 ## 2. The strongest defensible contribution
 
@@ -72,7 +75,7 @@ Ordered by how much they affect the paper's claims.
 | # | Gap | Why it matters | Suggested action |
 |---|---|---|---|
 | G1 | ~~No pre-specified comparison with ECD alone~~ **Closed (notebooks 10–11)** | Determined whether ML adds value beyond ECD | Done: improvement beyond ECD alone was not established (T6). Documented eye-bank criteria remain unavailable; the fitted tree recovered thresholds close to 2250/2500 (T7) |
-| G2 | **Explainability not redone under the final protocol** | XAI is the project's stated focus, and the existing SHAP (X1, X2) predates donor grouping and the year finding | Exploratory analysis of grades that depart from the ECD thresholds: held-out tissues where the hybrid is correct and the ECD tree is not, with grouped SHAP (derived Konan features grouped; image components as one source). See `ANALYSIS_PLAN.md`, analysis B |
+| G2 | ~~Explainability not redone under the final protocol~~ **Closed for model explanations (notebook 12)** | XAI is the project's stated focus | Done: out-of-fold grouped SHAP on the primary cohort (X3–X5). Not addressed: what drives specialists' downgrades independently of any model. A model-free comparison of all tissues graded below the ECD thresholds would be post hoc and is optional |
 | G3 | Hyperparameters tuned on non-grouped CV | Slight optimism in T4; may favour the tabular arm in 07 and 09 | Nested donor-grouped tuning as a sensitivity check, or state as a limitation |
 | G4 | No consolidated final-results table | Numbers are spread across 05–09 with different cohorts (1,036 vs 1,009 vs 551) | One table: final tabular model, overall and by year, with CIs and per-grade recall; cohort stated for each row |
 | G5 | Donor pairing inferred | Affects D3, D4 and every grouped result | State as a limitation; pairing rule documented in `modeling_setup.get_donor_groups` |
@@ -83,7 +86,8 @@ Ordered by how much they affect the paper's claims.
 
 G1 is closed: improvement beyond ECD alone was not established, so the paper's contribution is the evaluation findings, and the modelling sections should say so.
 
-1. **Close G2** next, refocused on grades that depart from the ECD thresholds. The explainability component is part of the project's stated aim, and the existing SHAP results cannot be reported as they stand.
-2. **Then G4**, which mostly gathers existing numbers into one table, now including the ECD tree.
+G2 is closed for model explanations: the earlier SHAP results (X1, X2) are replaced by the notebook 12 findings (X3–X5).
+
+Next: **G4**, one consolidated results table (analysis C in `ANALYSIS_PLAN.md`).
 
 G3, G5 and G7 can be handled as stated limitations or quick checks. G6 is future work.

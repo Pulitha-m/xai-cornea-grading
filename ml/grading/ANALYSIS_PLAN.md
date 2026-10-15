@@ -56,7 +56,20 @@ Question: Do the tabular and hybrid models improve on ECD alone for unseen donor
 - The fitted tree recovered cut points near 2230 and 2500 in every training fold. This supports the consistency of these thresholds in the recorded labels; it does not show that every year followed an identical official protocol.
 - The hybrid recovers more grade A tissues that depart from the thresholds (A recall 0.65 vs 0.53) at the cost of A+ recall (0.89 vs 0.99).
 
-### B. Explainability of departures from the ECD thresholds (exploratory)
+### B. Explainability of departures from the ECD thresholds (exploratory) — complete
+
+**Status:** complete in `12_threshold_departure_explainability.ipynb`. The protocol was not committed separately before execution (recorded in the notebook's deviations log).
+
+**Results:**
+
+- The hybrid recovers about 29% of grades recorded below the ECD thresholds (131 of 445 tissue–repeat pairs), but makes a similar number of incorrect departures (151).
+- The image group dominates both kinds of disagreement (+0.063 toward the recorded grade where the hybrid is right, −0.033 where it is wrong), so it does not establish useful image signal.
+- Variability (CV, SD) and, more weakly, stromal findings are the more consistent associations.
+- Raw data on downgraded tissues (higher variability, lower HEX, more stromal scar and cell dropout) is descriptive and hypothesis-generating.
+
+**Not done:** a model-free comparison of all tissues graded below the ECD thresholds, regardless of model predictions. Post hoc; optional.
+
+The original specification follows.
 
 Refocused after analysis A. Ranking features by overall predictive importance is less informative when the models do not outperform ECD alone. The clinically meaningful question is narrower.
 
@@ -74,10 +87,17 @@ Refocused after analysis A. Ranking features by overall predictive importance is
 
 A protocol will be written and committed before analysis code, as for notebooks 09–11.
 
-### C. Consolidated results
+### C. Consolidated results — next
 
-One table for the primary cohort (ECD tree, ECD-only Random Forest, tabular, hybrid), with corrected confidence intervals and per-grade recall, plus the all-year results as context, with each row's cohort stated.
+One reporting document that brings together existing results; no new models. It should cover:
+
+- **Cohorts:** all labelled (1,036), image cohort (1,009), primary non-2023 cohort (551), and its ECD evaluation set (470). Each result is labelled with its cohort.
+- **Validation designs:** the earlier row-level holdout and shared split (superseded), and the 5 × 5 donor-grouped CV used from notebook 06 on.
+- **Model performance:** ECD tree, ECD-only Random Forest, tabular, hybrid and image-only models, with macro F1, balanced accuracy, accuracy and per-grade recall. All-year and by-year results are kept separate.
+- **Paired comparisons:** differences, corrected 95% CIs, p-values, the multiplicity correction applied, and whether each was pre-specified, a follow-up or exploratory.
+- **Explainability summary:** from notebook 12.
+- **Limitations:** for each result.
 
 ### Recommended order
 
-B, then C.
+C is the remaining planned analysis.

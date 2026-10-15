@@ -1,6 +1,6 @@
 # Grading Model: Findings to Date
 
-Checkpoint of the evidence from notebooks `images/06`–`images/11`. The notebooks contain the full analysis and outputs; this file records what they establish and what they do not.
+Checkpoint of the evidence from notebooks `images/06`–`images/12`. The notebooks contain the full analysis and outputs; this file records what they establish and what they do not.
 
 ## Research question
 
@@ -148,6 +148,55 @@ Motivated by the weak comparator in notebook 10, so it is a follow-up, not indep
 | B | 0.791 | 0.818 | 0.806 |
 
 The tree assigns A+ to almost every tissue with ECD of about 2500 or more, and identifies about half of grade A tissues. The hybrid recovers more grade A tissues that depart from the thresholds, at the cost of A+ recall. Its balanced accuracy is 0.014 higher, which is not significant.
+
+## Explainability of threshold departures
+
+### 11. Where the hybrid departs from the ECD tree (notebook 12, exploratory)
+
+Exploratory and descriptive: no hypothesis tests. SHAP values describe associations within the fitted model, not clinical explanations or causal evidence. Same 470 tissues, folds, hybrid and ECD tree as notebook 11 (reproduced exactly). Each tissue is explained by the fold model that did not train on it, for the probability of its recorded grade, with SHAP summed within eight feature groups. The protocol was not committed separately before execution (recorded in the notebook's deviations log).
+
+**Disagreements between the models** (470 tissues × 5 repeats = 2,350 tissue–repeat pairs):
+
+| Group | Pairs | Unique tissues | Typical case |
+|---|---:|---:|---|
+| Hybrid-only correct | 133 | 37 | Recorded A where the tree predicts A+ (119 pairs) |
+| Both correct | 1,739 | 366 | |
+| Tree-only correct | 151 | 58 | Recorded A+ where the hybrid predicts A (121 pairs) |
+| Both wrong | 327 | 78 | Recorded A where both predict A+ (256 pairs) |
+
+- 131 of 133 hybrid-only-correct pairs are **downgrades**: the recorded grade is below the tree's ECD-based prediction. 30 tissues fall in this group in at least 3 of 5 repeats, and 14 in all 5.
+- The hybrid recovers 131 of the 445 downgrade pairs (about 29%), but makes a **similar number of incorrect departures** (151 tree-only-correct pairs). Its departures from the ECD thresholds are right about as often as wrong.
+
+**Grouped SHAP toward the recorded grade** (mean signed value):
+
+| Feature group | Hybrid-only correct | Both correct | Tree-only correct |
+|---|---:|---:|---:|
+| ECD-derived | +0.029 | +0.164 | +0.075 |
+| Variability (CV, SD) | +0.027 | +0.056 | −0.000 |
+| HEX | +0.008 | +0.004 | −0.004 |
+| Slit-lamp: stroma | +0.019 | +0.017 | +0.009 |
+| Other slit-lamp groups | ≈ 0 | ≈ 0 to +0.006 | ≈ 0 |
+| Image | +0.063 | +0.050 | −0.033 |
+
+- **Image dominates both kinds of disagreement.** It ranks first in hybrid-only-correct cases in all 5 repeats, but pushes the model away from the recorded grade in tree-only-correct cases, and its magnitude is similar in every group (mean |SHAP| 0.060–0.073). This reflects model reliance, not useful image signal. Image components have no clinical labels and are not interpreted.
+- **Variability is the more consistent association.** It is positive in hybrid-only-correct cases in every repeat (+0.020 to +0.029) and roughly zero in tree-only-correct cases, so it does not drive the hybrid's incorrect departures. Stromal findings show a smaller version of the same pattern.
+
+**Downgraded tissues in the raw data (descriptive, hypothesis-generating):**
+
+Hybrid-only-correct downgrades where the tree predicted A+ (33 tissues), compared with both-correct tissues where the tree predicted A+ (230 tissues):
+
+| | Downgrades | Both correct |
+|---|---:|---:|
+| Median ECD | 2611 | 2821 |
+| Median CV / SD | 40 / 149 | 37 / 130 |
+| Median HEX | 50 | 55 |
+| Stromal scar | 15% | 0% |
+| Endothelial cell dropout | 27% | 12% |
+| Epithelial arcus | 70% | 55% |
+| Stromal edema / epithelial haze | 6% / 9% | 1% / 3% |
+
+- These differences are clinically plausible reasons for downgrading but are **hypotheses for clinical review**, not explanations of the specialists' grades.
+- **Selection effect:** the downgrade tissues were selected because the hybrid predicted the recorded A, so features the model uses differ by construction. A model-free comparison of all tissues graded below the ECD thresholds was not run (possible post hoc work).
 
 ## Limitations
 
