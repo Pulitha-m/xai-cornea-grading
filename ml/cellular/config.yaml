@@ -143,6 +143,10 @@ seg_models:
     batch_size: 4
     learning_rate: 1.0e-4             # fine-tuning rate (lower than training from scratch)
     seed: 42
+  nnunet:                             # nnU-Net v2, 2D configuration; installed in the Colab notebook only
+    dataset_id: 501                   # "flat" inputs -> 501, "raw" inputs -> 502
+    trainer: nnUNetTrainer_100epochs  # reduced budget (nnU-Net default: 1000 epochs); final checkpoint
+                                      # is used, so the test fold never selects a checkpoint
 
 # -----------------------------------------------------------------------------
 # Validation targets from the research scope (Phase 7).
