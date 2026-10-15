@@ -135,6 +135,14 @@ seg_models:
     batch_size: 1
     keep_checkpoints: false           # fine-tuned models are ~1.2 GB each -> Colab disk only, not Drive
     seed: 42
+  stardist:                           # StarDist 2D (TensorFlow); installed in the Colab notebook only
+    pretrained: 2D_versatile_fluo     # fine-tuned from this model (bright objects on darker background)
+    n_val_crops: 4                    # taken from each fold's TRAINING crops: best checkpoint + thresholds
+    epochs: 100
+    steps_per_epoch: 50
+    batch_size: 4
+    learning_rate: 1.0e-4             # fine-tuning rate (lower than training from scratch)
+    seed: 42
 
 # -----------------------------------------------------------------------------
 # Validation targets from the research scope (Phase 7).
