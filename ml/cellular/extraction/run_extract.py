@@ -31,18 +31,20 @@ from scipy.stats import spearmanr
 from config import load_config
 from data_prep.check_annotations import IGNORE
 from extraction.cells import ExtractionParams, extract_cells, instances_from_mask, overlay_sides, summarise_cells
-from segmentation.infer_full import images_of
+from segmentation.infer_full import images_of, run_root
 
 
-def paths(cfg: dict, run: str, split: str):
-    seg = cfg["paths"]["outputs_dir"] / "seg" / f"full_{split}" / run / "masks"
-    out = cfg["paths"]["outputs_dir"] / "extraction" / f"full_{split}" / run
+def paths(cfg: dict, run: str, split: str, norm: str):
+    """Masks from segmentation.infer_full (same --norm) and the matching extraction folder."""
+    seg = run_root(cfg, split, norm, run) / run / "masks"
+    suffix = "" if (norm == "image" or run == "classical") else "_litnorm"
+    out = cfg["paths"]["outputs_dir"] / "extraction" / f"full_{split}{suffix}" / run
     return seg, out
 
 
-def extract_all(cfg: dict, run: str, split: str) -> None:
+def extract_all(cfg: dict, run: str, split: str, norm: str) -> None:
     p = ExtractionParams.from_config(cfg)
-    seg, out = paths(cfg, run, split)
+    seg, out = paths(cfg, run, split, norm)
     (out / "cells").mkdir(parents=True, exist_ok=True)
     rows, t0 = [], time.time()
     images = images_of(cfg, split)
@@ -60,8 +62,31 @@ def extract_all(cfg: dict, run: str, split: str) -> None:
     print(f"Results: {out}")
 
 
-def compare(cfg: dict, run: str, split: str) -> None:
-    _, out = paths(cfg, run, split)
+def open_sensitivity(cfg: dict, run: str, split: str, norm: str, limits: list[float]) -> None:
+    """Sensitivity analysis only (decision rule stays max_open_fraction): HEX % vs Konan when the
+    open-ring limit is relaxed. Recomputed from the stored raw side counts, no re-extraction."""
+    _, out = paths(cfg, run, split, norm)
+    ref = images_of(cfg, split).set_index("image_id")["hex"]
+    rows = []
+    for t in limits:
+        hex_pct, known = {}, []
+        for f in sorted((out / "cells").glob("*.csv")):
+            df = pd.read_csv(f)
+            s = df.loc[df["open_fraction"] <= t, "sides_raw"]
+            hex_pct[f.stem] = 100 * (s == 6).mean() if len(s) else np.nan
+            known.append(len(s) / max(len(df), 1))
+        h = pd.Series(hex_pct).dropna()
+        k = ref.loc[h.index]
+        rows.append({"max_open_fraction": t, "share of cells with sides": np.median(known),
+                     "rho HEX": spearmanr(h, k).correlation, "HEX mean (ours)": h.mean(),
+                     "HEX mean (Konan)": k.mean(), "HEX MAE (points)": (h - k).abs().mean()})
+    official = cfg["extraction"]["max_open_fraction"]
+    print(f"Open-ring sensitivity (official limit {official}; for interpretation only):")
+    print(pd.DataFrame(rows).set_index("max_open_fraction").round(3).to_string())
+
+
+def compare(cfg: dict, run: str, split: str, norm: str) -> None:
+    _, out = paths(cfg, run, split, norm)
     ref = images_of(cfg, split)[["image_id", "hex", "cv", "mean_area", "num_cells", "ecd_band"]]
     s = pd.read_csv(out / "summary.csv").merge(ref, on="image_id")
     print(f"{run}: {len(s)} {split} images; median per image: {s['n_cells'].median():.0f} complete cells, "
@@ -83,9 +108,9 @@ def compare(cfg: dict, run: str, split: str) -> None:
         for b, g in s.groupby("ecd_band")))
 
 
-def figure(cfg: dict, run: str, split: str, image_ids: list[str]) -> None:
+def figure(cfg: dict, run: str, split: str, norm: str, image_ids: list[str]) -> None:
     p = ExtractionParams.from_config(cfg)
-    seg, out = paths(cfg, run, split)
+    seg, out = paths(cfg, run, split, norm)
     man = images_of(cfg, split).set_index("image_id")
     (out / "figures").mkdir(parents=True, exist_ok=True)
     for iid in image_ids:
@@ -108,15 +133,21 @@ def main() -> None:
     ap = argparse.ArgumentParser(description="Cell extraction on full validation images.")
     ap.add_argument("--run", default=cfg["extraction"]["run"])
     ap.add_argument("--split", default="val", choices=["val"], help="test stays frozen until Phase 7")
+    ap.add_argument("--norm", default="lit", choices=["lit", "image"],
+                    help="which segmentation masks: lit-area normalisation (default) or the first run")
     ap.add_argument("--compare", action="store_true")
+    ap.add_argument("--open-sensitivity", type=float, nargs="+", metavar="LIMIT",
+                    help="sensitivity analysis: HEX % with other open-ring limits")
     ap.add_argument("--figure", nargs="+", metavar="IMAGE_ID")
     args = ap.parse_args()
     if args.compare:
-        compare(cfg, args.run, args.split)
+        compare(cfg, args.run, args.split, args.norm)
+    elif args.open_sensitivity:
+        open_sensitivity(cfg, args.run, args.split, args.norm, args.open_sensitivity)
     elif args.figure:
-        figure(cfg, args.run, args.split, args.figure)
+        figure(cfg, args.run, args.split, args.norm, args.figure)
     else:
-        extract_all(cfg, args.run, args.split)
+        extract_all(cfg, args.run, args.split, args.norm)
 
 
 if __name__ == "__main__":

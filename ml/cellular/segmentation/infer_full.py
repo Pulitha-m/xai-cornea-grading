@@ -51,10 +51,29 @@ from segmentation.preprocess import Preprocessor
 from segmentation.train_final import final_dir
 
 RUNS = ("classical", "cellpose_finetune_flat", "stardist_finetune_flat")
+NORMS = ("lit", "image")
 
 
-def make_predictor(cfg: dict, run: str):
-    """Return f(uint8 image) -> mask (0 interior / 1 wall / 2 ignore) for this run."""
+def run_root(cfg: dict, split: str, norm: str, run: str) -> Path:
+    """Output folder of a run. The classical method does not depend on the model normalisation."""
+    base = cfg["paths"]["outputs_dir"] / "seg" / f"full_{split}"
+    return base if (run == "classical" or norm == "image") else base.with_name(f"full_{split}_litnorm")
+
+
+def normalise_lit(x: np.ndarray, lit: np.ndarray, pmin: float, pmax: float) -> np.ndarray:
+    """Percentile normalisation over the LIT tissue only, clipped to 0..1 (dark area -> 0).
+    Training crops were fully lit, so this reproduces their normalisation on full images;
+    whole-image percentiles are pulled down by the dark area (the original 'image' mode)."""
+    lo, hi = np.percentile(x[lit], [pmin, pmax]) if lit.any() else (0.0, 1.0)
+    out = np.clip((x - lo) / (hi - lo + 1e-6), 0, 1).astype(np.float32)
+    out[~lit] = 0
+    return out
+
+
+def make_predictor(cfg: dict, run: str, norm: str = "lit"):
+    """Return f(uint8 image) -> mask (0 interior / 1 wall / 2 ignore) for this run.
+    norm = 'lit'   : model input normalised over the lit tissue (consistent with training; default)
+           'image' : the models' own whole-image normalisation (first step 2.7 run, kept for comparison)"""
     params = ClassicalParams.from_config(cfg)
     lit = lambda img: flatten_illumination(img, params)[1]
 
@@ -71,17 +90,24 @@ def make_predictor(cfg: dict, run: str):
     if run.startswith("cellpose"):
         from segmentation.run_cellpose import load_model
         model, diameter = load_model(info["model_path"]), cfg["seg_models"]["cellpose"]["diameter"]
-        instances = lambda x: model.eval(x, diameter=diameter)[0]
+        if norm == "lit":                                   # Cellpose's own default percentiles: 1 / 99
+            instances = lambda x, m: model.eval(normalise_lit(x, m, 1, 99), diameter=diameter, normalize=False)[0]
+        else:
+            instances = lambda x, m: model.eval(x, diameter=diameter)[0]
     else:
         from segmentation.run_stardist import to_input
         from stardist.models import StarDist2D
         model_dir = Path(info["model_dir"])
         model = StarDist2D(None, name=model_dir.name, basedir=str(model_dir.parent))
-        instances = lambda x: model.predict_instances(to_input(x))[0]
+        if norm == "lit":                                   # same percentiles as training (to_input: 1 / 99.8)
+            instances = lambda x, m: model.predict_instances(normalise_lit(x, m, 1, 99.8))[0]
+        else:
+            instances = lambda x, m: model.predict_instances(to_input(x))[0]
 
     def f(img):
-        mask = instances_to_mask(instances(pre(img)))
-        mask[~lit(img)] = IGNORE
+        m = lit(img)
+        mask = instances_to_mask(instances(pre(img), m))
+        mask[~m] = IGNORE
         return mask
     return f
 
@@ -102,17 +128,17 @@ def images_of(cfg: dict, split: str) -> pd.DataFrame:
     return man[(man["split"] == split) & (man["status"] == "included")].reset_index(drop=True)
 
 
-def run_images(cfg: dict, run: str, split: str, out_root: Path) -> None:
-    out = out_root / run
+def run_images(cfg: dict, run: str, split: str, norm: str) -> None:
+    out = run_root(cfg, split, norm, run) / run
     (out / "masks").mkdir(parents=True, exist_ok=True)
     meas_csv = out / "measures.csv"
     done = pd.read_csv(meas_csv) if meas_csv.exists() else pd.DataFrame(columns=["image_id"])
     todo = images_of(cfg, split)
     todo = todo[~todo["image_id"].isin(done["image_id"])]
     if todo.empty:
-        print(f"{run}: all images done already")
+        print(f"{run}: all images done already ({out})")
         return
-    predict = make_predictor(cfg, run)
+    predict = make_predictor(cfg, run, norm)
     um = cfg["scale"]["um_per_px_prelim"]
     t0, rows = time.time(), []
     for i, r in enumerate(todo.itertuples(index=False), 1):
@@ -130,11 +156,13 @@ def spearman(a: pd.Series, b: pd.Series) -> float:
     return float(spearmanr(a, b).correlation)
 
 
-def compare(cfg: dict, split: str, out_root: Path) -> None:
+def compare(cfg: dict, split: str, norm: str) -> None:
     fi = cfg["seg_models"]["full_image"]
+    out_root = run_root(cfg, split, norm, RUNS[1])
+    print(f"Model input normalisation: {norm}  ({out_root})")
     ref = images_of(cfg, split)[["image_id", "ecd", "cv", "mean_area", "num_cells", "ecd_band"]]
-    runs = {r: pd.read_csv(out_root / r / "measures.csv").merge(ref, on="image_id")
-            for r in RUNS if (out_root / r / "measures.csv").exists()}
+    meas = {r: run_root(cfg, split, norm, r) / r / "measures.csv" for r in RUNS}
+    runs = {r: pd.read_csv(p).merge(ref, on="image_id") for r, p in meas.items() if p.exists()}
     if not runs:
         print("No runs measured yet.")
         return
@@ -161,7 +189,8 @@ def compare(cfg: dict, split: str, out_root: Path) -> None:
     print("\nrho = Spearman rank correlation; ECD uses the PRELIMINARY scale (orientation only).")
     allruns = pd.concat(runs, names=["run"]).reset_index(level=0)
     for band, g in allruns[allruns["image_id"].isin(common)].groupby("ecd_band"):
-        print(f"  ECD band {band}: " + ", ".join(
+        n = g["image_id"].nunique()
+        print(f"  ECD band {band} (n={n}{', too few to interpret' if n < 20 else ''}): " + ", ".join(
             f"{r} rho {spearman(gg['mean_area_px'], gg['mean_area']):.2f}" for r, gg in g.groupby("run")))
 
     finalists = [r for r in RUNS[1:] if r in runs]
@@ -186,15 +215,16 @@ def compare(cfg: dict, split: str, out_root: Path) -> None:
                   "(simpler, smaller, faster).")
 
 
-def figure(cfg: dict, split: str, out_root: Path, image_ids: list[str]) -> None:
+def figure(cfg: dict, split: str, norm: str, image_ids: list[str]) -> None:
     man = images_of(cfg, split).set_index("image_id")
-    fig_dir = out_root / "figures"
+    fig_dir = run_root(cfg, split, norm, RUNS[1]) / "figures"
     fig_dir.mkdir(parents=True, exist_ok=True)
     for iid in image_ids:
         img = cv2.imread(str(cfg["paths"]["images_dir"] / man.loc[iid, "image_file"]), cv2.IMREAD_GRAYSCALE)
         tiles = []
         for run in RUNS:
-            mask = cv2.imread(str(out_root / run / "masks" / f"{iid}.png"), cv2.IMREAD_GRAYSCALE)
+            mask = cv2.imread(str(run_root(cfg, split, norm, run) / run / "masks" / f"{iid}.png"),
+                              cv2.IMREAD_GRAYSCALE)
             view = cv2.cvtColor(img, cv2.COLOR_GRAY2BGR)
             if mask is not None:
                 view[mask == WALL] = (0, 0, 255)
@@ -215,15 +245,16 @@ def main() -> None:
     ap.add_argument("--compare", action="store_true", help="compare measured runs with Konan")
     ap.add_argument("--figure", nargs="+", metavar="IMAGE_ID", help="side-by-side overlays")
     ap.add_argument("--split", default=fi["split"], choices=["val"], help="test stays frozen until Phase 7")
+    ap.add_argument("--norm", default="lit", choices=NORMS,
+                    help="model input normalisation: lit tissue only (default) or whole image (first run)")
     args = ap.parse_args()
 
-    out_root = cfg["paths"]["outputs_dir"] / "seg" / f"full_{args.split}"
     if args.run:
-        run_images(cfg, args.run, args.split, out_root)
+        run_images(cfg, args.run, args.split, args.norm)
     elif args.compare:
-        compare(cfg, args.split, out_root)
+        compare(cfg, args.split, args.norm)
     elif args.figure:
-        figure(cfg, args.split, out_root, args.figure)
+        figure(cfg, args.split, args.norm, args.figure)
     else:
         ap.print_help()
 

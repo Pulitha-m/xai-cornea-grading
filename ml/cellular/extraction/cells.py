@@ -37,7 +37,7 @@ from skimage.segmentation import expand_labels
 from data_prep.check_annotations import INTERIOR
 
 CELL_COLUMNS = ["cell_id", "area_px", "perimeter_px", "compactness", "eccentricity", "eq_diameter_px",
-                "orientation", "cx", "cy", "sides", "sides_poly", "n_neighbours", "open_fraction",
+                "orientation", "cx", "cy", "sides", "sides_raw", "sides_poly", "n_neighbours", "open_fraction",
                 "flag_small", "flag_large"]
 
 
@@ -103,6 +103,7 @@ def side_counts(tess: np.ndarray, ids: np.ndarray, p: ExtractionParams) -> pd.Da
         poly = cv2.approxPolyDP(c, p.poly_epsilon_fraction * cv2.arcLength(c, True), True)
         rows.append({"cell_id": int(lab),
                      "sides": sides if open_fraction <= p.max_open_fraction else np.nan,
+                     "sides_raw": sides,                  # before the open-ring rule (sensitivity analysis only)
                      "sides_poly": len(poly), "n_neighbours": len(labs), "open_fraction": open_fraction})
     return pd.DataFrame(rows)
 
