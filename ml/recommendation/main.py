@@ -4,6 +4,7 @@ From ml/:
     uv run python -m recommendation.main matching
     uv run python -m recommendation.main matching --config my_config.yaml --no-rebuild
     uv run python -m recommendation.main ranker
+    uv run python -m recommendation.main explain
 """
 import argparse
 
@@ -15,6 +16,7 @@ from recommendation.config import load_config
 TASKS = {
     "matching": pipeline.run_matching,
     "ranker": pipeline.run_ranker,
+    "explain": pipeline.run_explain,
     "trajectory": pipeline.run_trajectory,
     "risk": pipeline.run_risk,
     "followup": pipeline.run_followup,
@@ -39,8 +41,27 @@ def main() -> None:
     elif a.task == "ranker":
         res = pipeline.run_ranker(cfg)
         _print_ranker(res, cfg)
+    elif a.task == "explain":
+        res = pipeline.run_explain(cfg)
+        _print_explain(res, cfg)
     else:
         TASKS[a.task](cfg)
+
+
+def _print_explain(res: dict, cfg: dict) -> None:
+    print("\n1. What changes the order of candidates (share of |SHAP|, relative to each pool):")
+    for k, v in res["reason_importance"].items():
+        print(f"   {k:<18} {v:>5.0%}  {'#' * round(v * 50)}")
+    print("\n2. Why #1? Examples from held-out test requests:")
+    for ex in res["examples"]:
+        print(f"\n   {ex['request']}: wants {ex['requested_grade']}, {ex['surgery']}, {ex['pool']} candidates"
+              f" (allocated cornea ranked #{ex['allocated_rank']:.0f})")
+        for c in ex["top3"]:
+            tag = "  <- allocated" if c["Label_Allocated"] == 1 else ""
+            print(f"     #{c['ML_Rank']:.0f} {c['Candidate_Record_ID']} grade {c['Cand_Tissue_Grade']}, "
+                  f"{c['Cand_Days_In_Storage']} d in storage: {c['Why']}{tag}")
+    out = f"{cfg['paths']['outputs']}/explain"
+    print(f"\nSaved: {out}/shap_summary.md, {out}/shap_global_reasons.png, {out}/explanations.xlsx")
 
 
 def _print_ranker(res: dict, cfg: dict) -> None:
