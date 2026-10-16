@@ -45,12 +45,12 @@ image:
   cell_spacing_px: 28.2               # median cell centre-to-centre distance (audit, FFT)
 
 # -----------------------------------------------------------------------------
-# Physical scale (Phase 4). um_per_px stays null until calibrated.
+# Physical scale. um_per_px calibrated in Phase 4 (calibration/scale.py; docs/phase/phase_4_scale.md).
 # um_per_px_prelim comes from the audit (calibration split only) and may be used
 # for rough sanity checks before Phase 4 — never for reported results.
 # -----------------------------------------------------------------------------
 scale:
-  um_per_px: null
+  um_per_px: 0.7945                   # Phase 4 (2026-10-16): median of 69 calibration images, 95% CI 0.7888-0.8046
   um_per_px_prelim: 0.752
 
 # Scale calibration (Phase 4). Rules fixed before any calibration result was seen.
