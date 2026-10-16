@@ -5,6 +5,7 @@ From ml/:
     uv run python -m recommendation.main matching --config my_config.yaml --no-rebuild
     uv run python -m recommendation.main ranker
     uv run python -m recommendation.main explain
+    uv run python -m recommendation.main report     # every stage -> one HTML page
 """
 import argparse
 
@@ -17,6 +18,7 @@ TASKS = {
     "matching": pipeline.run_matching,
     "ranker": pipeline.run_ranker,
     "explain": pipeline.run_explain,
+    "report": None,
     "trajectory": pipeline.run_trajectory,
     "risk": pipeline.run_risk,
     "followup": pipeline.run_followup,
@@ -41,6 +43,14 @@ def main() -> None:
     elif a.task == "ranker":
         res = pipeline.run_ranker(cfg)
         _print_ranker(res, cfg)
+    elif a.task == "report":
+        from recommendation.reporting.stage_report import build_report
+
+        path, log = build_report(cfg)
+        print()
+        for line in log:
+            print(" OK", line)
+        print(f"\nReport: {path}")
     elif a.task == "explain":
         res = pipeline.run_explain(cfg)
         _print_explain(res, cfg)
