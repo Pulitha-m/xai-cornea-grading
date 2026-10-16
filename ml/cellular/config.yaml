@@ -191,6 +191,19 @@ extraction:
   max_area_factor: 3.0                # ... and > 3 x the median
 
 # -----------------------------------------------------------------------------
+# Biomarkers (Phase 5, Sub-component 3.4). Rules fixed before any biomarker result was seen.
+# Per image, from the Phase 3 per-cell table and the Phase 4 scale; ALL complete cells (flagged cells
+# kept: Phase 3 showed they change almost nothing). Error vs Konan = 100 x (ours - Konan) / Konan;
+# an image meets a target if |error| <= targets.<biomarker>_pct_error. CV and HEX are also reported
+# as absolute differences in percentage points.
+# -----------------------------------------------------------------------------
+biomarkers:
+  run: stardist_finetune_flat
+  split: val                          # test stays frozen until Phase 7
+  min_cells: 30
+  worst_n: 6                          # images with the largest |ECD error| get overlay figures
+
+# -----------------------------------------------------------------------------
 # Validation targets from the research scope (Phase 7).
 # -----------------------------------------------------------------------------
 targets:
