@@ -5,6 +5,7 @@ From ml/:
     uv run python -m recommendation.main matching --config my_config.yaml --no-rebuild
     uv run python -m recommendation.main ranker
     uv run python -m recommendation.main explain
+    uv run python -m recommendation.main analysis   # ablation, learning curve, subgroups, errors
     uv run python -m recommendation.main report     # every stage -> one HTML page
 """
 import argparse
@@ -18,6 +19,7 @@ TASKS = {
     "matching": pipeline.run_matching,
     "ranker": pipeline.run_ranker,
     "explain": pipeline.run_explain,
+    "analysis": pipeline.run_analysis,
     "report": None,
     "trajectory": pipeline.run_trajectory,
     "risk": pipeline.run_risk,
@@ -43,6 +45,8 @@ def main() -> None:
     elif a.task == "ranker":
         res = pipeline.run_ranker(cfg)
         _print_ranker(res, cfg)
+    elif a.task == "analysis":
+        _print_analysis(pipeline.run_analysis(cfg), cfg)
     elif a.task == "report":
         from recommendation.reporting.stage_report import build_report
 
@@ -56,6 +60,25 @@ def main() -> None:
         _print_explain(res, cfg)
     else:
         TASKS[a.task](cfg)
+
+
+def _print_analysis(res: dict, cfg: dict) -> None:
+    abl = pd.DataFrame(res["ablation"]).T
+    print("\n1. Ablation (remove one factor at a time):")
+    print(abl[["top3", "mrr", "mrr_change"]].to_string(
+        formatters={"top3": "{:.3f}".format, "mrr": "{:.3f}".format, "mrr_change": "{:+.3f}".format}))
+    curve = pd.DataFrame(res["learning_curve"]).set_index("train_requests")
+    print("\n2. Learning curve (does more data help?):")
+    print(curve[["ml_top3", "ml_mrr", "mcda_mrr"]].to_string(float_format="{:.3f}".format))
+    sub = pd.DataFrame(res["subgroups"]).set_index(["subgroup", "level"])
+    print("\n3. Subgroups (ML vs MCDA):")
+    print(sub[["requests", "ml_top3", "mcda_top3", "ml_mrr", "mcda_mrr"]].to_string(float_format="{:.3f}".format))
+    e = res["errors"]
+    print(f"\n4. Errors: allocated cornea ranked below #5 in {e['missed']} of {e['requests']} requests "
+          f"({e['missed_share']:.0%}). In those requests:")
+    print(pd.DataFrame(e["comparison"]).T.to_string(float_format="{:.2f}".format))
+    out = f"{cfg['paths']['outputs']}/analysis"
+    print(f"\nSaved: {out}/analysis_summary.md, {out}/ablation.png, {out}/learning_curve.png")
 
 
 def _print_explain(res: dict, cfg: dict) -> None:

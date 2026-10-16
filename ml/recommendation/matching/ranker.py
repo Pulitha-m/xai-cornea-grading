@@ -39,10 +39,15 @@ CANDIDATES = [
 class Ranker:
     settings: dict
     estimator: object = field(default=None, repr=False)
+    features: list[str] | None = None  # None = all 23; a subset is used for ablation
+
+    @property
+    def cols(self) -> list[str]:
+        return self.features or FEATURES
 
     def fit(self, pairs: pd.DataFrame, seed: int = 42) -> "Ranker":
         p = pairs.sort_values(["Request_ID", "Candidate_Record_ID"])  # LightGBM needs grouped rows
-        X, y = build_features(p), p["Label_Allocated"]
+        X, y = build_features(p)[self.cols], p["Label_Allocated"]
         s = self.settings
         if s["model"] == "logistic":
             self.estimator = make_pipeline(
@@ -62,7 +67,7 @@ class Ranker:
         return self
 
     def score(self, pairs: pd.DataFrame) -> np.ndarray:
-        X = build_features(pairs)
+        X = build_features(pairs)[self.cols]
         if self.settings["model"] == "logistic":
             return self.estimator.decision_function(X)
         return self.estimator.predict(X)
@@ -80,7 +85,7 @@ class Ranker:
         if self.settings["model"] != "logistic":
             return None
         coef = self.estimator[-1].coef_[0]
-        return pd.Series(coef, index=FEATURES).sort_values(key=abs, ascending=False)
+        return pd.Series(coef, index=self.cols).sort_values(key=abs, ascending=False)
 
 
 def cross_validate(pairs: pd.DataFrame, settings: dict, folds: int = 5, seed: int = 42) -> dict:

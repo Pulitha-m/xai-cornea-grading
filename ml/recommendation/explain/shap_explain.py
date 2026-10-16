@@ -16,7 +16,7 @@ import numpy as np
 import pandas as pd
 import shap
 
-from recommendation.matching.features import FEATURES, build_features
+from recommendation.matching.features import build_features
 from recommendation.matching.ranker import Ranker
 
 # Each feature belongs to one clinician-facing reason.
@@ -46,17 +46,17 @@ def shap_values(ranker: Ranker, pairs: pd.DataFrame, background: pd.DataFrame) -
     ``background`` is the data used as the 'average candidate' (normally the
     training pairs).
     """
-    X = build_features(pairs)
+    X = build_features(pairs)[ranker.cols]
     if ranker.settings["model"] == "logistic":
         imputer, scaler, lr = ranker.estimator
         to_model = lambda d: scaler.transform(imputer.transform(d))  # noqa: E731
-        bg = to_model(build_features(background))
+        bg = to_model(build_features(background)[ranker.cols])
         explainer = shap.LinearExplainer(lr, shap.maskers.Independent(bg, max_samples=len(bg)))
         values = explainer.shap_values(to_model(X))
     else:
         explainer = shap.TreeExplainer(ranker.estimator)
         values = explainer.shap_values(X)
-    return pd.DataFrame(np.asarray(values), index=pairs.index, columns=FEATURES)
+    return pd.DataFrame(np.asarray(values), index=pairs.index, columns=ranker.cols)
 
 
 def by_reason(values: pd.DataFrame) -> pd.DataFrame:

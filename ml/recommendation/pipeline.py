@@ -4,6 +4,7 @@ Implemented:
     run_matching   build matching dataset -> MCDA ranking -> evaluation
     run_ranker     train the ML ranker on the same split and compare it with MCDA
     run_explain    SHAP explanations for the trained ranker (global + "Why #1?")
+    run_analysis   ablation, learning curve, subgroup and error analysis of the ranker
 
 Planned (need recipient follow-up data from NEBSL):
     run_trajectory, run_risk, run_followup
@@ -212,6 +213,113 @@ def _write_explain_md(path: Path, settings, feat_imp, reason_imp, examples) -> N
                          f"{c['Cand_Days_In_Storage']} d in storage): {c['Why']}{tag}")
         lines.append("")
     lines += ["![reasons](shap_global_reasons.png)"]
+    path.write_text("\n".join(lines) + "\n", encoding="utf-8")
+
+
+def run_analysis(cfg: dict, repeats: int = 5) -> dict:
+    """Ablation, learning curve, subgroups and errors; charts + summary in outputs/analysis/."""
+    import joblib
+    import matplotlib
+
+    matplotlib.use("Agg")
+    import matplotlib.pyplot as plt
+
+    from recommendation.evaluation import analysis as A
+
+    paths, m, seed = cfg["paths"], cfg["matching"], cfg["split"]["seed"]
+    model_file = Path(paths["models"]) / "matching_ranker.joblib"
+    settings = joblib.load(model_file)["settings"] if model_file.exists() else {"model": "logistic", "C": 1.0}
+    pairs = pd.read_excel(paths["matching_dataset"], sheet_name="Ranking_Pairs")
+    scored = score(pairs, Weights(**m["weights"]))
+    kw = {"repeats": repeats, "seed": seed}
+
+    abl = A.ablation(scored, settings, **kw)
+    curve = A.learning_curve(scored, settings, **kw)
+    ranks = A.cv_ranks(scored, settings, **kw)
+    sub = A.subgroups(scored, ranks)
+    err = A.errors(scored, ranks, settings)
+
+    out = Path(paths["outputs"]) / "analysis"
+    out.mkdir(parents=True, exist_ok=True)
+    ink, ink2, muted, grid, base, bg = "#0b0b0b", "#52514e", "#898781", "#e1e0d9", "#c3c2b7", "#fcfcfb"
+    blue, orange = "#2a78d6", "#eb6834"
+
+    def style(ax, title, xlabel, ylabel):
+        ax.set_facecolor(bg)
+        ax.set_title(title, loc="left", color=ink, fontsize=11, fontweight="bold")
+        ax.set_xlabel(xlabel, color=ink2)
+        ax.set_ylabel(ylabel, color=ink2)
+        ax.tick_params(colors=muted, length=0)
+        ax.set_axisbelow(True)
+        for side in ("top", "right", "left"):
+            ax.spines[side].set_visible(False)
+        ax.spines["bottom"].set_color(base)
+
+    # Ablation: how much MRR drops without each reason
+    drop = (-abl["mrr_change"].drop("all features")).sort_values()
+    fig, ax = plt.subplots(figsize=(7, 3.6), facecolor=bg)
+    bars = ax.barh([i.replace("without ", "") for i in drop.index], drop.values, color=blue, height=0.6)
+    for b in bars:
+        ax.annotate(f"{b.get_width():+.3f}", (max(b.get_width(), 0), b.get_y() + b.get_height() / 2),
+                    xytext=(3, 0), textcoords="offset points", va="center", color=ink2, fontsize=8)
+    ax.grid(axis="x", color=grid)
+    ax.set_xlim(min(0, drop.min()) * 1.2, drop.max() * 1.3 + 0.002)
+    style(ax, "Ablation: MRR lost when a factor is removed", "Drop in MRR (higher = factor matters more)", "")
+    fig.tight_layout()
+    fig.savefig(out / "ablation.png", dpi=150, facecolor=bg)
+    plt.close(fig)
+
+    # Learning curve: ML vs MCDA as training data grows
+    fig, ax = plt.subplots(figsize=(7, 3.6), facecolor=bg)
+    ax.plot(curve["train_requests"], curve["ml_mrr"], color=blue, marker="o", linewidth=2, label="ML ranker")
+    ax.plot(curve["train_requests"], curve["mcda_mrr"], color=orange, linewidth=2, linestyle="--",
+            label="MCDA (no training)")
+    for x, y in zip(curve["train_requests"], curve["ml_mrr"]):
+        ax.annotate(f"{y:.3f}", (x, y), xytext=(0, 7), textcoords="offset points", ha="center",
+                    color=ink2, fontsize=8)
+    ax.grid(axis="y", color=grid)
+    ax.set_xticks(curve["train_requests"])
+    ax.legend(frameon=False, labelcolor=ink2, fontsize=9, loc="upper left")
+    style(ax, "Learning curve: does more data help?", "Training requests", "MRR")
+    fig.tight_layout()
+    fig.savefig(out / "learning_curve.png", dpi=150, facecolor=bg)
+    plt.close(fig)
+
+    results = {
+        "settings": settings, "repeats": repeats,
+        "ablation": abl.round(4).to_dict(orient="index"),
+        "learning_curve": curve.round(4).to_dict(orient="records"),
+        "subgroups": sub.round(4).to_dict(orient="records"),
+        "errors": {k: v for k, v in err.items() if k != "comparison"}
+                  | {"comparison": err["comparison"].round(2).to_dict(orient="index")},
+    }
+    (out / "analysis.json").write_text(json.dumps(results, indent=2, default=str))
+    _write_analysis_md(out / "analysis_summary.md", abl, curve, sub, err)
+    return results
+
+
+def _write_analysis_md(path: Path, abl, curve, sub, err) -> None:
+    f3 = "{:.3f}".format
+    lines = ["# Model analysis of the ML ranker", "",
+             "Repeated 5-fold grouped cross-validation over all requests.", "",
+             "## 1. Ablation (remove one factor at a time)", "",
+             "| model | top-3 | MRR | MRR change |", "|---|---|---|---|"]
+    lines += [f"| {i} | {f3(r.top3)} | {f3(r.mrr)} | {r.mrr_change:+.3f} |" for i, r in abl.iterrows()]
+    lines += ["", "## 2. Learning curve", "",
+              "| training requests | ML top-3 | ML MRR | MCDA MRR |", "|---|---|---|---|"]
+    lines += [f"| {int(r.train_requests)} | {f3(r.ml_top3)} | {f3(r.ml_mrr)} | {f3(r.mcda_mrr)} |"
+              for r in curve.itertuples()]
+    lines += ["", "## 3. Subgroups", "",
+              "| subgroup | level | requests | ML top-3 | MCDA top-3 | ML MRR | MCDA MRR |",
+              "|---|---|---|---|---|---|---|"]
+    lines += [f"| {r.subgroup} | {r.level} | {r.requests} | {f3(r.ml_top3)} | {f3(r.mcda_top3)} | "
+              f"{f3(r.ml_mrr)} | {f3(r.mcda_mrr)} |" for r in sub.itertuples()]
+    lines += ["", "## 4. Errors", "",
+              f"Requests where the allocated cornea ranked below #5 on average: "
+              f"**{err['missed']} of {err['requests']}** ({err['missed_share']:.0%}).", "",
+              "| (mean over missed requests) | allocated cornea | model's #1 |", "|---|---|---|"]
+    lines += [f"| {i} | {r.iloc[0]:.2f} | {r.iloc[1]:.2f} |" for i, r in err["comparison"].iterrows()]
+    lines += ["", "![ablation](ablation.png)", "", "![learning curve](learning_curve.png)"]
     path.write_text("\n".join(lines) + "\n", encoding="utf-8")
 
 

@@ -10,6 +10,7 @@ HTML page (charts embedded), for supervisors, panels and the thesis:
   5. MCDA baseline           rule-based ranking vs random and grade-only
   6. ML ranker               model selection and three evaluations
   7. SHAP explanations       what drives the ranking, "Why #1?" examples
+  8. Model analysis          ablation, learning curve, subgroups, errors
 
 Only summaries are shown (counts, means, metrics, study codes). The report is
 written to outputs/report/ which is git-ignored.
@@ -213,6 +214,32 @@ def build_report(cfg: dict) -> tuple[Path, list[str]]:
                           body))
     top = max(ex["reason_importance"], key=ex["reason_importance"].get)
     log.append(f"Stage 7 SHAP: strongest reason '{top}'")
+
+    # Stage 8: model analysis
+    an = pipeline.run_analysis(cfg)
+    abl = pd.DataFrame(an["ablation"]).T[["top3", "mrr", "mrr_change"]]
+    curve = pd.DataFrame(an["learning_curve"]).set_index("train_requests")[["ml_top3", "ml_mrr", "mcda_mrr"]]
+    sub = pd.DataFrame(an["subgroups"]).set_index(["subgroup", "level"])
+    sub.index = [f"{a}: {b}" for a, b in sub.index]
+    sub.index.name = "subgroup"
+    e = an["errors"]
+    comp = pd.DataFrame(e["comparison"]).T
+    adir = outputs / "analysis"
+    body = '<div class="grid2">' + _img(adir / "ablation.png") + _img(adir / "learning_curve.png") + "</div>"
+    body += "<h3>a. Ablation: remove one factor at a time</h3>" + _table(abl, highlight="all features")
+    body += "<h3>b. Learning curve</h3>" + _table(curve)
+    body += "<h3>c. Subgroups (ML vs MCDA)</h3>" + _table(sub)
+    body += (f"<h3>d. Errors: allocated cornea ranked below #5 in {e['missed']} of {e['requests']} "
+             f"requests ({e['missed_share']:.0%})</h3>") + _table(comp, fmt="{:.2f}")
+    body += ('<p class="note">Where the model misses, the cornea actually chosen was more often a lower '
+             "grade and older than the model's #1, which suggests the clinician used information not in "
+             "the data (e.g. surgeon preference, timing or logistics).</p>")
+    parts.append(_section(8, "Model analysis",
+                          "Which factors matter, whether more data would help, where the model works "
+                          "best and where it fails (repeated grouped cross-validation).", body))
+    worst = abl["mrr_change"].drop("all features").idxmin().replace("without ", "")
+    log.append(f"Stage 8 analysis: most important factor '{worst}', "
+               f"{e['missed']} of {e['requests']} requests missed")
 
     page = (f"<!doctype html><html lang='en'><head><meta charset='utf-8'>"
             f"<meta name='viewport' content='width=device-width,initial-scale=1'>"
