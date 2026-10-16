@@ -80,9 +80,10 @@ def scale_of(cfg: dict) -> float:
         if not f.exists():
             raise SystemExit(f"No ROI scale ({f}) - run python -m calibration.scale --roi first.")
         return round(json.loads(f.read_text())["um_per_px"], 4)
-    if not cfg["scale"]["um_per_px"]:
+    um = cfg["scale"].get("um_per_px_no_roi") or cfg["scale"]["um_per_px"]   # whole-lit-area pipeline (Phase 5)
+    if not um:
         raise SystemExit("scale.um_per_px is not set - run Phase 4 (calibration.scale) first.")
-    return cfg["scale"]["um_per_px"]
+    return um
 
 
 def load(cfg: dict) -> pd.DataFrame:

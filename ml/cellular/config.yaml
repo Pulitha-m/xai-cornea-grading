@@ -50,7 +50,10 @@ image:
 # for rough sanity checks before Phase 4 — never for reported results.
 # -----------------------------------------------------------------------------
 scale:
-  um_per_px: 0.7945                   # Phase 4 (2026-10-16): median of 69 calibration images, 95% CI 0.7888-0.8046
+  um_per_px: 0.7960                   # OFFICIAL (Phase 6, pipeline with ROI): median of 69 calibration images
+                                      # measured inside the ROI, 95% CI 0.7914-0.8062
+  um_per_px_no_roi: 0.7945            # Phase 4 (whole lit area, no ROI), 95% CI 0.7888-0.8046; used only to
+                                      # reproduce the Phase 4-5 results (biomarkers.validate without --roi)
   um_per_px_prelim: 0.752
 
 # Scale calibration (Phase 4). Rules fixed before any calibration result was seen.
