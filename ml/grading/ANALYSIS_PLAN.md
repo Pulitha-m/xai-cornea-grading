@@ -87,7 +87,7 @@ Refocused after analysis A. Ranking features by overall predictive importance is
 
 A protocol will be written and committed before analysis code, as for notebooks 09–11.
 
-### C. Consolidated results — next
+### C. Consolidated results — complete
 
 One reporting document that brings together existing results; no new models. It should cover:
 
@@ -98,6 +98,27 @@ One reporting document that brings together existing results; no new models. It 
 - **Explainability summary:** from notebook 12.
 - **Limitations:** for each result.
 
-### Recommended order
+**Status:** complete in `RESULTS.md`.
 
-C is the remaining planned analysis.
+### D. Nested tuning and application model — complete
+
+**Status:** complete in `13_nested_tuning_model_selection.ipynb`. The protocol, selection rule and inner design (3 donor-grouped folds) were fixed before execution but not committed separately.
+
+**Result:**
+
+- Neither the tuned tabular model (+0.009) nor the tuned hybrid (−0.003) convincingly outperformed the fitted ECD tree (Holm p = 1.00), so the **ECD tree was selected** for the application.
+- Tuning raised the tabular model by +0.049; the hybrid's earlier edge over tabular disappeared once both were tuned.
+
+**Application:**
+
+- Exported by `scripts/train_grading_model.py` to `ml-service/models/grading_ecd_tree.json`.
+- Served by `ml-service` from an `ecd` request field, with `review_required` when ECD is missing and band grade distributions instead of a confidence value.
+- Documented in `ml-service/README.md`.
+
+### Remaining work
+
+No planned analyses remain. Possible future work:
+
+- Validation on new, independently graded tissues (notebook 09, Section 9).
+- A model-free comparison of tissues graded below the ECD thresholds (post hoc).
+- Microscopy-specific image representations under a new protocol.

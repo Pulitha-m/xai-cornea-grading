@@ -1,4 +1,4 @@
-# Claims Audit: Notebooks 01–12
+# Claims Audit: Notebooks 01–13
 
 Purpose: decide what the paper can claim before writing the methodology and results. Each claim is traced to its source notebook and rated against the later evidence.
 
@@ -34,6 +34,7 @@ Purpose: decide what the paper can claim before writing the methodology and resu
 | T5 | Morphology outperforms ECD alone; adding ECD changes nothing | 04 | Qualified | Morphology features contain ECD implicitly (count / area). Reframe as "the full Konan feature set outperforms ECD alone" |
 | T6 | The ML models add value beyond ECD alone | 10, 11 | **Not supported** | Pre-specified (10): Tabular and Hybrid beat an ECD-only Random Forest (+0.048, +0.081; Holm p 0.030, 0.006), but that comparator was weak. Follow-up (11): neither beat a depth-2 ECD tree fitted within training folds (Tabular −0.040, Hybrid −0.007; inconclusive). Report both; claim only that the models outperform an ECD-only Random Forest |
 | T7 | Recorded grades are anchored at ECD ≈ 2230 and ≈ 2500 across years | 11 | Supported as a description of the labels | Tree fitted on non-2023 tissues recovered cut points 2232 and 2494–2503 in all 25 folds. Not evidence of a single official protocol, nor of why tissues depart from the thresholds |
+| T8 | A tuned tabular model outperforms ECD alone | 13 | **Not supported** | Nested CV: +0.009 [−0.010, +0.028] over the fitted ECD tree, Holm p = 1.00. Tuning raised it by +0.049 over the notebook 05 settings |
 
 ### Image and hybrid models
 
@@ -45,7 +46,8 @@ Purpose: decide what the paper can claim before writing the methodology and resu
 | I4 | Adding frozen embeddings does not significantly improve the full-feature model (+0.010, CI −0.012 to +0.031) | 07 | Supported | Not robust to PCA size; grade B recall fell 0.851 → 0.819 |
 | I5 | Images help when slit-lamp findings are missing | 08 | **Not supported** | C1 is confounded with 2023; C3 is a masking artefact with lower grade B recall; C5 (cleanest) shows no gain |
 | I6 | Images can substitute for Konan measurements | 08 | **Not supported** | Both arms collapse (C4); hybrid B recall 0.04 |
-| I7 | On non-2023 tissues the hybrid improves macro F1 (+0.038, CI −0.013 to +0.088) | 09 | Qualified: **inconclusive** | Pre-specified sensitivity analysis, not independent of the exploratory 08 result. Direction positive in all repeats and years |
+| I7 | On non-2023 tissues the hybrid improves macro F1 (+0.038, CI −0.013 to +0.088) | 09 | Qualified: **inconclusive** | Pre-specified sensitivity analysis, not independent of the exploratory 08 result. Direction positive in all repeats and years. Notebook 13: once the tabular model is tuned in nested CV, the hybrid is slightly worse (−0.012, Holm p = 1.00), so the earlier positive direction was largely due to an under-tuned tabular comparator |
+| I8 | Tuning the hybrid makes it outperform the ECD tree or the tuned tabular model | 13 | **Not supported** | Nested CV: hybrid − ECD tree −0.003; hybrid − tuned tabular −0.012; both Holm p = 1.00. Tuning raised the hybrid by only +0.005 |
 
 ### Explainability (the project's XAI component)
 
@@ -76,7 +78,7 @@ Ordered by how much they affect the paper's claims.
 |---|---|---|---|
 | G1 | ~~No pre-specified comparison with ECD alone~~ **Closed (notebooks 10–11)** | Determined whether ML adds value beyond ECD | Done: improvement beyond ECD alone was not established (T6). Documented eye-bank criteria remain unavailable; the fitted tree recovered thresholds close to 2250/2500 (T7) |
 | G2 | ~~Explainability not redone under the final protocol~~ **Closed for model explanations (notebook 12)** | XAI is the project's stated focus | Done: out-of-fold grouped SHAP on the primary cohort (X3–X5). Not addressed: what drives specialists' downgrades independently of any model. A model-free comparison of all tissues graded below the ECD thresholds would be post hoc and is optional |
-| G3 | Hyperparameters tuned on non-grouped CV | Slight optimism in T4; may favour the tabular arm in 07 and 09 | Nested donor-grouped tuning as a sensitivity check, or state as a limitation |
+| G3 | ~~Hyperparameters tuned on non-grouped CV~~ **Closed (notebook 13)** | The notebook 05 settings turned out to disadvantage the tabular arm, not favour it | Done: nested donor-grouped tuning (I7, I8, T8). The earlier comparisons stand as reported, with this context |
 | G4 | No consolidated final-results table | Numbers are spread across 05–09 with different cohorts (1,036 vs 1,009 vs 551) | One table: final tabular model, overall and by year, with CIs and per-grade recall; cohort stated for each row |
 | G5 | Donor pairing inferred | Affects D3, D4 and every grouped result | State as a limitation; pairing rule documented in `modeling_setup.get_donor_groups` |
 | G6 | Images represented only by generic frozen features | Limits I4 and I7 to "generic features" | Future work; any new representation needs its own pre-specified protocol |
@@ -88,6 +90,6 @@ G1 is closed: improvement beyond ECD alone was not established, so the paper's c
 
 G2 is closed for model explanations: the earlier SHAP results (X1, X2) are replaced by the notebook 12 findings (X3–X5).
 
-Next: **G4**, one consolidated results table (analysis C in `ANALYSIS_PLAN.md`).
+G4 is closed by `RESULTS.md`. G3 is closed by notebook 13, which selected the ECD tree for the application.
 
 G3, G5 and G7 can be handled as stated limitations or quick checks. G6 is future work.

@@ -1,6 +1,6 @@
 # Grading Model: Findings to Date
 
-Checkpoint of the evidence from notebooks `images/06`–`images/12`. The notebooks contain the full analysis and outputs; this file records what they establish and what they do not.
+Checkpoint of the evidence from notebooks `images/06`–`images/13`. The notebooks contain the full analysis and outputs; this file records what they establish and what they do not.
 
 ## Research question
 
@@ -198,10 +198,46 @@ Hybrid-only-correct downgrades where the tree predicted A+ (33 tissues), compare
 - These differences are clinically plausible reasons for downgrading but are **hypotheses for clinical review**, not explanations of the specialists' grades.
 - **Selection effect:** the downgrade tissues were selected because the hybrid predicted the recorded A, so features the model uses differ by construction. A model-free comparison of all tissues graded below the ECD thresholds was not run (possible post hoc work).
 
+## Nested tuning and application model
+
+### 12. Tuned models vs the ECD tree (notebook 13)
+
+A new nested cross-validation analysis. It uses the same outer folds as notebooks 09–12, which influenced earlier decisions, so it is **not an untouched confirmation**. The protocol was not committed separately before execution. Hyperparameters were tuned by 3-fold donor-grouped inner CV within each outer training fold: tabular 24 settings, hybrid 72 (including PCA size and class weighting). The ECD tree was not tuned and reproduced notebook 11 exactly. Evaluated on the 470 tissues with ECD.
+
+| Comparison (macro F1) | Model | Baseline | Difference [95% CI] | Holm p | Folds improved |
+|---|---:|---:|---|---:|---:|
+| T1: Tuned hybrid − ECD tree | 0.793 | 0.796 | −0.003 [−0.034, +0.029] | 1.00 | 11/25 |
+| T2: Tuned tabular − ECD tree | 0.805 | 0.796 | +0.009 [−0.010, +0.028] | 1.00 | 18/25 |
+| T3: Tuned hybrid − tuned tabular | 0.793 | 0.805 | −0.012 [−0.045, +0.022] | 1.00 | 8/25 |
+
+- **Neither tuned model convincingly outperformed the ECD tree.** Under the pre-set rule, the **ECD tree was selected for the application**. Tuning did not establish improvement beyond ECD alone.
+- **Tuning raised the tabular model by +0.049 macro F1** (higher in 24 of 25 folds) but the hybrid by only +0.005. Every fold in both arms selected `max_features=0.3`, and the tabular arm mostly selected no class weighting.
+- **Once the tabular model is tuned, the hybrid's advantage disappears** (−0.012). The hybrid's earlier edge over tabular (notebooks 09–11) was largely due to an under-tuned tabular comparator: the notebook 05 settings. Those results stand as reported but should be read with this context.
+
+**Final application tree** (fitted on all 470 primary-cohort tissues with ECD; recorded grades in each band):
+
+| ECD band (cells/mm²) | Grade | A+ | A | B |
+|---|---|---:|---:|---:|
+| ≤ 2232 | B | 0 | 0 | 53 |
+| 2232–2497 | A | 2 | 84 | 8 |
+| > 2497 | A+ | 242 | 75 | 6 |
+
+Six grade B tissues have ECD above 2497 and are graded A+ by the tree. ECD alone cannot identify them, which is why the application presents the grade as decision support requiring specialist confirmation.
+
+### 13. Application integration
+
+- `ml/grading/scripts/train_grading_model.py` rebuilds the tree, checks it against notebook 13 (cohort, cut points, dataset hash) and exports `ml-service/models/grading_ecd_tree.json`. The spec holds cut points and per-band counts only, no tissue-level data.
+- `ml-service` grades from an `ecd` request field, never from the cellular placeholder. It returns `review_required` without a grade when ECD is missing, and reports the band's training grade distribution instead of a confidence value, since no calibration was assessed.
+- The cellular pipeline now reports `not_implemented` instead of fixed placeholder values.
+- Tests check that API grades match the fitted scikit-learn tree, including at the cut points, and that the backend DTOs accept the service's responses.
+- The frontend analysis page collects case ID, image URL and optional ECD (validated to the API range). It shows the grade with its ECD band, the band's training grade distribution (labelled as not model confidence) and the specialist-confirmation caveat, or a manual-grading notice when ECD is missing.
+- The backend passes `ml-service` validation errors (HTTP 422) through instead of returning 500.
+- **End-to-end check:** frontend request contract → backend → `ml-service` from a clean, Dockerfile-equivalent copy (`app/`, `pipelines/`, `models/`, no dev dependencies). Grades at and around both cut points matched the tree. The backend ran with database auto-configuration disabled, since its analysis endpoints do not use the database. A real `docker build` was not run because Docker was not running.
+
 ## Limitations
 
 - Donor pairs are inferred from consecutive serial numbers and donor details, not confirmed against a register.
-- RF hyperparameters were tuned in notebook 05 for tabular features with non-grouped CV, which may slightly favour the tabular arm.
+- RF hyperparameters in notebooks 07–12 came from notebook 05 (tabular features, non-grouped CV). Notebook 13 showed these settings disadvantaged the tabular model: tuned within donor-grouped folds, it gained +0.049 macro F1.
 - Image features are generic (ImageNet, frozen); a representation adapted to specular microscopy has not been tested.
 - 2023 slit-lamp findings are permanently missing; their absence is tied to a subset with a distinct grade pattern.
 

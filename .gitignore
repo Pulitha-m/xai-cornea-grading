@@ -46,6 +46,10 @@ data/
 # ML generated artifacts
 # =========================
 **/models/
+# The ECD grading spec holds only cut points and aggregate counts (no tissue-level data)
+!ml-service/models/
+ml-service/models/*
+!ml-service/models/grading_ecd_tree.json
 **/checkpoints/
 **/outputs/
 **/runs/

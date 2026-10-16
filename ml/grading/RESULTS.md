@@ -1,6 +1,6 @@
 # Consolidated Results (Analysis C)
 
-All results for the cornea grading models, drawn from saved outputs of notebooks `05` and `images/02`–`images/12`. No models were rerun for this document. Interpretation and claim status are in `CLAIMS_AUDIT.md`; the analysis history is in `ANALYSIS_PLAN.md`.
+All results for the cornea grading models, drawn from saved outputs of notebooks `05` and `images/02`–`images/13`. No models were rerun for this document. Interpretation and claim status are in `CLAIMS_AUDIT.md`; the analysis history is in `ANALYSIS_PLAN.md`.
 
 ## How to read this document
 
@@ -41,7 +41,7 @@ Notebooks 09–12 restrict V2 to the primary cohort (K3): training and test tiss
 | Type | Meaning |
 |---|---|
 | Pre-specified | Protocol documented before the analysis was run, with git history supporting that sequence: the protocol cell was committed before analysis code (notebook 10) |
-| Planned | Settings written into the notebook before its comparisons, but the timing cannot be independently verified from git history (notebooks 07–08) |
+| Planned | Settings written into the notebook before its comparisons, but the timing cannot be independently verified from git history (notebooks 07–08 and 13) |
 | Sensitivity | Pre-specified (protocol committed before analysis code) re-analysis on data that already generated the hypothesis (notebook 09); not independent confirmation |
 | Follow-up | Pre-specified (protocol committed before analysis code), but motivated by an earlier result (notebook 11); not independent confirmation |
 | Exploratory | Descriptive, no hypothesis tests (notebook 12) |
@@ -203,7 +203,34 @@ No hypothesis tests. SHAP values describe associations within the hybrid model, 
 
 Source: `threshold_departure_shap.csv` (group means recomputed); raw-data prevalences from notebook 12 output.
 
-### R7. Superseded results (not comparable with R1–R6)
+### R6b. Nested tuning and application model selection (K4, V2 restricted + inner CV; notebook 13; planned)
+
+The protocol was written before execution but not committed separately, so this is labelled "planned".
+
+- **Outer folds:** as R5.
+- **Inner tuning:** 3-fold donor-grouped CV within each outer training fold (tabular 24 settings, hybrid 72).
+- **Training cohorts:** the ECD tree is untuned and trained on K4 tissues; the tuned models are trained on K3 tissues.
+
+All rows are evaluated on the same 470 tissues and are directly comparable with each other and with R5.
+
+| Model | Macro F1 | Balanced accuracy | Accuracy | Grade B recall |
+|---|---:|---:|---:|---:|
+| ECD tree | 0.796 ± 0.038 | 0.768 ± 0.043 | 0.804 ± 0.031 | 0.790 ± 0.117 |
+| Tuned tabular | 0.805 ± 0.034 | 0.781 ± 0.037 | 0.809 ± 0.030 | 0.793 ± 0.115 |
+| Tuned hybrid | 0.793 ± 0.047 | 0.775 ± 0.050 | 0.797 ± 0.040 | 0.789 ± 0.130 |
+
+| Comparison (macro F1) | Difference [95% CI] | p | p (Holm) | Folds improved |
+|---|---|---:|---:|---:|
+| T1: Tuned hybrid − ECD tree | −0.003 [−0.034, +0.029] | 0.873 | 1.00 | 11/25 |
+| T2: Tuned tabular − ECD tree | +0.009 [−0.010, +0.028] | 0.342 | 1.00 | 18/25 |
+| T3: Tuned hybrid − tuned tabular | −0.012 [−0.045, +0.022] | 0.481 | 1.00 | 8/25 |
+
+- **Selection rule outcome:** the ECD tree. Final cut points 2232 / 2497, fitted on all 470 K4 tissues.
+- **Tuning gain over the notebook 05 settings (descriptive):** tabular +0.049 (24/25 folds), hybrid +0.005 (15/25).
+
+Sources: `nested_tuning_fold_scores.csv`, `nested_tuning_results.csv`, `nested_tuning_selections.csv`, `selected_grading_model.json`. The selected-settings table in the notebook was corrected after the run from `nested_tuning_selections.csv`; see its deviations log.
+
+### R7. Superseded results (not comparable with R1–R6b)
 
 Listed for completeness. These designs split fellow eyes across training and test and have no uncertainty estimates.
 
@@ -235,12 +262,12 @@ Source: notebook outputs only.
 - Donor counts depend on the inferred pairing rule; no donor register was available.
 - The provenance of the 2250/2500 thresholds as eye-bank criteria; no documentation was available. They are treated as inferred throughout.
 - Whether the notebook 07–08 settings were fixed before results. This is stated in the notebooks but was not committed to git separately, unlike notebooks 09–11.
-- Whether the notebook 12 protocol preceded its analysis code. It was not committed separately; recorded in its deviations log.
+- Whether the notebook 12 and 13 protocols preceded their analysis code. They were not committed separately; recorded in their deviations logs.
 - Exact data versions: SHA-256 hashes of the dataset, folds and embeddings are printed in notebooks 09–12. The data files are not in git.
 
 ## 6. Limitations (all results)
 
-- **Hyperparameters:** Random Forest settings were tuned in notebook 05 with non-grouped CV on tissues that later appear in V2 test folds. This applies equally to the tabular and hybrid arms but may favour the tabular features they were tuned for.
+- **Hyperparameters:** R2–R6 use Random Forest settings from notebook 05 (non-grouped CV, tabular features). R6b shows these settings disadvantaged the tabular model by about 0.05 macro F1. Comparisons in R2–R6 that involve the tabular arm should be read with this in mind.
 - **Donor grouping** is inferred.
 - **Generalisability:** the primary cohort excludes 2023 because slit-lamp findings are unavailable. Results may not generalise to 2023 or to periods with similar documentation patterns.
 - **Image features** are generic: frozen ImageNet ResNet-50 at full resolution, reduced by PCA. Microscopy-specific representations were not tested.
