@@ -1,0 +1,397 @@
+{
+  "schema": "grading_tabular_features",
+  "version": 1,
+  "source": "ml/grading/scripts/modeling_setup.py (ALL_FEATURES, make_preprocessor)",
+  "feature_count": 24,
+  "order": [
+    "ECD_CD_cells_per_mm2",
+    "CV",
+    "HEX_percent",
+    "SD",
+    "Total_Cell_Count",
+    "Total_Area_um2",
+    "Stroma_Is_Clear",
+    "Stroma_Is_Compact",
+    "Stroma_Has_Arcus",
+    "Stroma_Has_Edema",
+    "Stroma_Has_Scar",
+    "Epi_Has_Arcus",
+    "Epi_Has_Defect",
+    "Epi_Has_Exposure",
+    "Epi_Has_Haze",
+    "Endo_Has_Stress_Lines",
+    "Endo_Has_RBC",
+    "Endo_Has_Cell_Dropout",
+    "Descemet_Has_Folds",
+    "Descemet_Fold_Severity",
+    "Descemet_Fold_Relative_Number",
+    "Endo_Stress_Line_Location",
+    "Stroma_Arcus_Severity",
+    "Epi_Exposure_Severity"
+  ],
+  "features": [
+    {
+      "name": "ECD_CD_cells_per_mm2",
+      "group": "konan_measurement",
+      "type": "number",
+      "unit": "cells/mm²",
+      "description": "Endothelial cell density",
+      "source": "Specular microscopy (Konan) report",
+      "integer": false,
+      "valid": {
+        "min_exclusive": 0,
+        "max_inclusive": null
+      },
+      "training_range": {
+        "min": 676.0,
+        "max": 4484.0
+      },
+      "missing": "allowed: replaced by the training-fold median (SimpleImputer, strategy='median')"
+    },
+    {
+      "name": "CV",
+      "group": "konan_measurement",
+      "type": "number",
+      "unit": "%",
+      "description": "Coefficient of variation of cell area",
+      "source": "Specular microscopy (Konan) report",
+      "integer": false,
+      "valid": {
+        "min_exclusive": 0,
+        "max_inclusive": null
+      },
+      "training_range": {
+        "min": 24.0,
+        "max": 74.0
+      },
+      "missing": "allowed: replaced by the training-fold median (SimpleImputer, strategy='median')"
+    },
+    {
+      "name": "HEX_percent",
+      "group": "konan_measurement",
+      "type": "number",
+      "unit": "%",
+      "description": "Proportion of hexagonal cells",
+      "source": "Specular microscopy (Konan) report",
+      "integer": false,
+      "valid": {
+        "min_exclusive": 0,
+        "max_inclusive": 100
+      },
+      "training_range": {
+        "min": 27.0,
+        "max": 76.0
+      },
+      "missing": "allowed: replaced by the training-fold median (SimpleImputer, strategy='median')"
+    },
+    {
+      "name": "SD",
+      "group": "konan_measurement",
+      "type": "number",
+      "unit": "µm²",
+      "description": "Standard deviation of cell area",
+      "source": "Specular microscopy (Konan) report",
+      "integer": false,
+      "valid": {
+        "min_exclusive": 0,
+        "max_inclusive": null
+      },
+      "training_range": {
+        "min": 86.0,
+        "max": 753.0
+      },
+      "missing": "allowed: replaced by the training-fold median (SimpleImputer, strategy='median')"
+    },
+    {
+      "name": "Total_Cell_Count",
+      "group": "konan_measurement",
+      "type": "number",
+      "unit": "cells",
+      "description": "Number of cells analysed",
+      "source": "Specular microscopy (Konan) report",
+      "integer": true,
+      "valid": {
+        "min_exclusive": 0,
+        "max_inclusive": null
+      },
+      "training_range": {
+        "min": 10.0,
+        "max": 204.0
+      },
+      "missing": "allowed: replaced by the training-fold median (SimpleImputer, strategy='median')"
+    },
+    {
+      "name": "Total_Area_um2",
+      "group": "konan_measurement",
+      "type": "number",
+      "unit": "µm²",
+      "description": "Total analysed area",
+      "source": "Specular microscopy (Konan) report",
+      "integer": false,
+      "valid": {
+        "min_exclusive": 0,
+        "max_inclusive": null
+      },
+      "training_range": {
+        "min": 5071.0,
+        "max": 100692.0
+      },
+      "missing": "allowed: replaced by the training-fold median (SimpleImputer, strategy='median')"
+    },
+    {
+      "name": "Stroma_Is_Clear",
+      "group": "slit_lamp_finding",
+      "type": "binary",
+      "unit": null,
+      "description": "Stroma Is Clear",
+      "source": "Slit-lamp examination (specialist)",
+      "allowed": [
+        0,
+        1
+      ],
+      "missing": "allowed: encoded as its own category (constant -1, one-hot)"
+    },
+    {
+      "name": "Stroma_Is_Compact",
+      "group": "slit_lamp_finding",
+      "type": "binary",
+      "unit": null,
+      "description": "Stroma Is Compact",
+      "source": "Slit-lamp examination (specialist)",
+      "allowed": [
+        0,
+        1
+      ],
+      "missing": "allowed: encoded as its own category (constant -1, one-hot)"
+    },
+    {
+      "name": "Stroma_Has_Arcus",
+      "group": "slit_lamp_finding",
+      "type": "binary",
+      "unit": null,
+      "description": "Stroma Has Arcus",
+      "source": "Slit-lamp examination (specialist)",
+      "allowed": [
+        0,
+        1
+      ],
+      "missing": "allowed: encoded as its own category (constant -1, one-hot)"
+    },
+    {
+      "name": "Stroma_Has_Edema",
+      "group": "slit_lamp_finding",
+      "type": "binary",
+      "unit": null,
+      "description": "Stroma Has Edema",
+      "source": "Slit-lamp examination (specialist)",
+      "allowed": [
+        0,
+        1
+      ],
+      "missing": "allowed: encoded as its own category (constant -1, one-hot)"
+    },
+    {
+      "name": "Stroma_Has_Scar",
+      "group": "slit_lamp_finding",
+      "type": "binary",
+      "unit": null,
+      "description": "Stroma Has Scar",
+      "source": "Slit-lamp examination (specialist)",
+      "allowed": [
+        0,
+        1
+      ],
+      "missing": "allowed: encoded as its own category (constant -1, one-hot)"
+    },
+    {
+      "name": "Epi_Has_Arcus",
+      "group": "slit_lamp_finding",
+      "type": "binary",
+      "unit": null,
+      "description": "Epi Has Arcus",
+      "source": "Slit-lamp examination (specialist)",
+      "allowed": [
+        0,
+        1
+      ],
+      "missing": "allowed: encoded as its own category (constant -1, one-hot)"
+    },
+    {
+      "name": "Epi_Has_Defect",
+      "group": "slit_lamp_finding",
+      "type": "binary",
+      "unit": null,
+      "description": "Epi Has Defect",
+      "source": "Slit-lamp examination (specialist)",
+      "allowed": [
+        0,
+        1
+      ],
+      "missing": "allowed: encoded as its own category (constant -1, one-hot)"
+    },
+    {
+      "name": "Epi_Has_Exposure",
+      "group": "slit_lamp_finding",
+      "type": "binary",
+      "unit": null,
+      "description": "Epi Has Exposure",
+      "source": "Slit-lamp examination (specialist)",
+      "allowed": [
+        0,
+        1
+      ],
+      "missing": "allowed: encoded as its own category (constant -1, one-hot)"
+    },
+    {
+      "name": "Epi_Has_Haze",
+      "group": "slit_lamp_finding",
+      "type": "binary",
+      "unit": null,
+      "description": "Epi Has Haze",
+      "source": "Slit-lamp examination (specialist)",
+      "allowed": [
+        0,
+        1
+      ],
+      "missing": "allowed: encoded as its own category (constant -1, one-hot)"
+    },
+    {
+      "name": "Endo_Has_Stress_Lines",
+      "group": "slit_lamp_finding",
+      "type": "binary",
+      "unit": null,
+      "description": "Endo Has Stress Lines",
+      "source": "Slit-lamp examination (specialist)",
+      "allowed": [
+        0,
+        1
+      ],
+      "missing": "allowed: encoded as its own category (constant -1, one-hot)"
+    },
+    {
+      "name": "Endo_Has_RBC",
+      "group": "slit_lamp_finding",
+      "type": "binary",
+      "unit": null,
+      "description": "Endo Has RBC",
+      "source": "Slit-lamp examination (specialist)",
+      "allowed": [
+        0,
+        1
+      ],
+      "missing": "allowed: encoded as its own category (constant -1, one-hot)"
+    },
+    {
+      "name": "Endo_Has_Cell_Dropout",
+      "group": "slit_lamp_finding",
+      "type": "binary",
+      "unit": null,
+      "description": "Endo Has Cell Dropout",
+      "source": "Slit-lamp examination (specialist)",
+      "allowed": [
+        0,
+        1
+      ],
+      "missing": "allowed: encoded as its own category (constant -1, one-hot)"
+    },
+    {
+      "name": "Descemet_Has_Folds",
+      "group": "slit_lamp_finding",
+      "type": "binary",
+      "unit": null,
+      "description": "Descemet Has Folds",
+      "source": "Slit-lamp examination (specialist)",
+      "allowed": [
+        0,
+        1
+      ],
+      "missing": "allowed: encoded as its own category (constant -1, one-hot)"
+    },
+    {
+      "name": "Descemet_Fold_Severity",
+      "group": "slit_lamp_finding",
+      "type": "category",
+      "unit": null,
+      "description": "Descemet Fold Severity",
+      "source": "Slit-lamp examination (specialist)",
+      "allowed": [
+        "Mild",
+        "Moderate",
+        "Unspecified",
+        "Very mild"
+      ],
+      "missing": "allowed: encoded as its own category ('__MISSING__', one-hot)"
+    },
+    {
+      "name": "Descemet_Fold_Relative_Number",
+      "group": "slit_lamp_finding",
+      "type": "category",
+      "unit": null,
+      "description": "Descemet Fold Relative Number",
+      "source": "Slit-lamp examination (specialist)",
+      "allowed": [
+        "Mild",
+        "Moderate",
+        "Several",
+        "Several/Moderate",
+        "Unspecified"
+      ],
+      "missing": "allowed: encoded as its own category ('__MISSING__', one-hot)"
+    },
+    {
+      "name": "Endo_Stress_Line_Location",
+      "group": "slit_lamp_finding",
+      "type": "category",
+      "unit": null,
+      "description": "Endo Stress Line Location",
+      "source": "Slit-lamp examination (specialist)",
+      "allowed": [
+        "Central",
+        "Central + Peripheral",
+        "Peripheral",
+        "Unspecified"
+      ],
+      "missing": "allowed: encoded as its own category ('__MISSING__', one-hot)"
+    },
+    {
+      "name": "Stroma_Arcus_Severity",
+      "group": "slit_lamp_finding",
+      "type": "category",
+      "unit": null,
+      "description": "Stroma Arcus Severity",
+      "source": "Slit-lamp examination (specialist)",
+      "allowed": [
+        "Mild",
+        "Moderate",
+        "Unspecified"
+      ],
+      "missing": "allowed: encoded as its own category ('__MISSING__', one-hot)"
+    },
+    {
+      "name": "Epi_Exposure_Severity",
+      "group": "slit_lamp_finding",
+      "type": "category",
+      "unit": null,
+      "description": "Epi Exposure Severity",
+      "source": "Slit-lamp examination (specialist)",
+      "allowed": [
+        "Mild",
+        "Unspecified",
+        "Very mild"
+      ],
+      "missing": "allowed: encoded as its own category ('__MISSING__', one-hot)"
+    }
+  ],
+  "cross_field_checks": [
+    {
+      "rule": "ECD_CD_cells_per_mm2 ≈ Total_Cell_Count / Total_Area_um2 × 10^6 (within 1%)",
+      "evidence": "holds for all 940 labelled tissues with complete Konan measurements",
+      "on_failure": "warning (values reviewed, not rejected)"
+    }
+  ],
+  "deployed_model_uses": [
+    "ECD_CD_cells_per_mm2"
+  ],
+  "data_sha256": "0ce9b384a51a4c47c8a8a6616b8cd36a829f142493d73287534305ae5c15ffce",
+  "training_rows": 1036
+}

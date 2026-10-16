@@ -1,15 +1,32 @@
 from pydantic import BaseModel, Field
 
+# Valid ECD range (cells/mm²): ECD_MIN_EXCLUSIVE < ecd <= ECD_MAX_INCLUSIVE.
+ECD_MIN_EXCLUSIVE = 0.0
+ECD_MAX_INCLUSIVE = 6000.0
 
-class AnalyzeRequest(BaseModel):
-    imageUrl: str = Field(..., description="URL of the corneal image")
-    caseId: str = Field(..., description="Case identifier")
-    ecd: float | None = Field(
-        None,
-        gt=0,
-        le=6000,
-        description="Endothelial cell density (cells/mm²) from the specular microscopy report",
+
+class ErrorDetail(BaseModel):
+    code: str
+    field: str | None = None
+    message: str
+
+
+class RejectedResponse(BaseModel):
+    """Returned with HTTP 4xx/5xx when the request is refused before any analysis runs."""
+
+    status: str = "rejected"
+    error: ErrorDetail
+
+
+class ImageValidation(BaseModel):
+    domainStatus: str = Field(
+        ...,
+        description="VALID_CORNEAL_IMAGE, or UNVALIDATED_DEV_MODE when the development bypass is enabled",
     )
+    qualityAssessed: bool = Field(False, description="Image quality and cell detail are not assessed by this version")
+    width: int
+    height: int
+    format: str
 
 
 class CellularResult(BaseModel):
@@ -60,6 +77,7 @@ class RecommendationResult(BaseModel):
 class AnalyzeResponse(BaseModel):
     caseId: str
     status: str
+    imageValidation: ImageValidation
     cellular: CellularResult
     grading: GradingResult
     disease: DiseaseResult

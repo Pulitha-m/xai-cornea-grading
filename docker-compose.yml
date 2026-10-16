@@ -9,11 +9,16 @@ services:
     ports:
       - "8080:8080"
 
+    # Secrets (DB, JWT, SUPABASE_SERVICE_ROLE_KEY, ...) come from .env, which is never committed.
     env_file:
       - .env
 
     environment:
       ML_SERVICE_URL: http://ml-service:8000
+      # Image storage: private Supabase bucket, server-side key only (see .env.example).
+      SUPABASE_URL: ${SUPABASE_URL:-}
+      SUPABASE_SERVICE_ROLE_KEY: ${SUPABASE_SERVICE_ROLE_KEY:-}
+      SUPABASE_STORAGE_BUCKET: ${SUPABASE_STORAGE_BUCKET:-specular-images}
 
     depends_on:
       - ml-service
@@ -29,6 +34,13 @@ services:
 
     ports:
       - "8000:8000"
+
+    # Same image limits as the backend (app.analysis.images). No secrets are needed here.
+    environment:
+      IMAGE_MAX_BYTES: ${IMAGE_MAX_BYTES:-15728640}
+      IMAGE_MIN_SIDE: ${IMAGE_MIN_SIDE:-224}
+      IMAGE_MAX_SIDE: ${IMAGE_MAX_SIDE:-8000}
+      IMAGE_MAX_PIXELS: ${IMAGE_MAX_PIXELS:-40000000}
 
     restart: unless-stopped
 

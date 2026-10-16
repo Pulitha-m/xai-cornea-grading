@@ -10,6 +10,8 @@ export function moduleStatus(status: string): { label: string; tone: StatusTone 
             return { label: "Failed", tone: "danger" }
         case "review_required":
             return { label: "Manual grading required", tone: "warning" }
+        case "partial":
+            return { label: "Partially completed", tone: "info" }
         case "not_implemented":
             return { label: "Not available yet", tone: "neutral" }
         default:

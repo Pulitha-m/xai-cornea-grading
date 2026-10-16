@@ -1,11 +1,49 @@
+import { useRef, useState } from "react"
 import { useMutation } from "@tanstack/react-query"
-import {
-    analyzeCornea,
-    type AnalyzeRequest,
-} from "@/api/analysis"
+import { analyzeCornea, uploadImage, type AnalyzeResponse } from "@/api/analysis"
 
-export function useAnalysis() {
-    return useMutation({
-        mutationFn: (request: AnalyzeRequest) => analyzeCornea(request),
+export interface ImageAnalysisInput {
+    caseId: string
+    file: File
+    ecd: number | null
+}
+
+export type AnalysisStage = "idle" | "uploading" | "analysing"
+
+/**
+ * Uploads the image, then requests the analysis by image id. If the same file and case
+ * were already uploaded (e.g. retrying after correcting the ECD), the stored image is reused.
+ */
+export function useImageAnalysis() {
+    const [stage, setStage] = useState<AnalysisStage>("idle")
+    const [progress, setProgress] = useState(0)
+    const uploaded = useRef<{ file: File; caseId: string; imageId: string } | null>(null)
+
+    const mutation = useMutation<AnalyzeResponse, Error, ImageAnalysisInput>({
+        mutationFn: async ({ caseId, file, ecd }) => {
+            try {
+                let imageId = uploaded.current?.file === file && uploaded.current.caseId === caseId
+                    ? uploaded.current.imageId
+                    : null
+                if (imageId === null) {
+                    setStage("uploading")
+                    setProgress(0)
+                    const result = await uploadImage(caseId, file, setProgress)
+                    imageId = result.imageId
+                    uploaded.current = { file, caseId, imageId }
+                }
+                setStage("analysing")
+                return await analyzeCornea({ caseId, imageId, ecd })
+            } finally {
+                setStage("idle")
+            }
+        },
     })
+
+    /** Forget the uploaded image, e.g. after it was rejected, so a replacement is uploaded fresh. */
+    function resetUpload() {
+        uploaded.current = null
+    }
+
+    return { ...mutation, stage, progress, resetUpload }
 }

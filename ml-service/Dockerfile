@@ -1,3 +1,22 @@
+# ---------------------------------------------------------------------------
+# Stage 1: regenerate the domain validator's ONNX backbone from versioned sources
+# (torchvision ResNet-18 IMAGENET1K_V1) and verify it byte-for-byte against the
+# SHA-256 recorded in the trained classifier. A mismatch fails the build.
+# ---------------------------------------------------------------------------
+FROM python:3.11-slim AS backbone
+
+RUN pip install --no-cache-dir --index-url https://download.pytorch.org/whl/cpu \
+        torch==2.14.1 torchvision==0.29.1 \
+    && pip install --no-cache-dir onnx==1.23.2 onnxruntime==1.31.0 numpy
+
+WORKDIR /build
+COPY scripts/export_domain_backbone.py ./
+COPY models/domain_validator/classifier.json ./
+RUN python export_domain_backbone.py /out/resnet18_backbone.onnx --verify classifier.json
+
+# ---------------------------------------------------------------------------
+# Stage 2: the service (no torch; inference uses onnxruntime)
+# ---------------------------------------------------------------------------
 FROM python:3.11-slim
 
 COPY --from=ghcr.io/astral-sh/uv:0.8 /uv /bin/uv
@@ -16,6 +35,7 @@ RUN uv sync --frozen --no-dev --no-install-project
 COPY app ./app
 COPY pipelines ./pipelines
 COPY models ./models
+COPY --from=backbone /out/resnet18_backbone.onnx ./models/domain_validator/resnet18_backbone.onnx
 
 EXPOSE 8000
 

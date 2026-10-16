@@ -59,6 +59,15 @@ Purpose: decide what the paper can claim before writing the methodology and resu
 | X4 | The hybrid recovers some grades recorded below the ECD thresholds | 12 | Supported, with its cost | About 29% of downgrade pairs (131 of 445), but 151 incorrect departures, so departures are right about as often as wrong |
 | X5 | Endothelial variability and stromal findings are associated with correctly predicted downgrades | 12 | Qualified: exploratory association | Variability SHAP positive in hybrid-only-correct cases in all repeats and ≈ 0 in tree-only-correct cases; stroma similar but smaller. Raw data: downgraded tissues had higher CV/SD, lower HEX, more stromal scar and cell dropout. Selected by the model's predictions; not causal; hypotheses for clinical review |
 
+### Application (engineering claims, not clinical)
+
+| # | Claim | Source | Status | Notes |
+|---|---|---|---|---|
+| A1 | The application rejects non-corneal images before analysis | `train_domain_validator.py`, ml-service tests | Supported for the evaluated image types | 0 of 1,295 held-out photos, documents, screenshots and content-free images accepted; 197/197 specular images accepted. Regression test for content-free images passes (v2) |
+| A2 | The domain validator is clinically validated | — | **Not supported** | Engineering evaluation only. Not tested: other microscopes, near-domain images (other microscopy, eye photographs), image quality |
+| A3 | The application assesses image quality or cell visibility | — | **Not supported** | Not implemented; reported as not assessed. Blurred specular images pass the domain check |
+| A4 | The deployed grade uses the 24-feature model | — | **Not supported** | Deployed grade uses ECD only (T6, T8). The 24-feature schema is enforced by a validator for future tabular inference, but no tabular model is served |
+
 ## 2. The strongest defensible contribution
 
 The evidence does not support "a model that grades corneas better" or "images improve grading". It does support a careful evaluation study with three findings that matter to anyone building grading models from eye-bank records:

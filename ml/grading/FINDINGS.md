@@ -1,6 +1,6 @@
 # Grading Model: Findings to Date
 
-Checkpoint of the evidence from notebooks `images/06`–`images/13`. The notebooks contain the full analysis and outputs; this file records what they establish and what they do not.
+Checkpoint of the evidence from notebooks `images/06`–`images/13`, plus the application's image validation (sections 14–15). The notebooks contain the full analysis and outputs; this file records what they establish and what they do not.
 
 ## Research question
 
@@ -230,9 +230,44 @@ Six grade B tissues have ECD above 2497 and are graded A+ by the tree. ECD alone
 - `ml-service` grades from an `ecd` request field, never from the cellular placeholder. It returns `review_required` without a grade when ECD is missing, and reports the band's training grade distribution instead of a confidence value, since no calibration was assessed.
 - The cellular pipeline now reports `not_implemented` instead of fixed placeholder values.
 - Tests check that API grades match the fitted scikit-learn tree, including at the cut points, and that the backend DTOs accept the service's responses.
-- The frontend analysis page collects case ID, image URL and optional ECD (validated to the API range). It shows the grade with its ECD band, the band's training grade distribution (labelled as not model confidence) and the specialist-confirmation caveat, or a manual-grading notice when ECD is missing.
-- The backend passes `ml-service` validation errors (HTTP 422) through instead of returning 500.
-- **End-to-end check:** frontend request contract → backend → `ml-service` from a clean, Dockerfile-equivalent copy (`app/`, `pipelines/`, `models/`, no dev dependencies). Grades at and around both cut points matched the tree. The backend ran with database auto-configuration disabled, since its analysis endpoints do not use the database. A real `docker build` was not run because Docker was not running.
+- The frontend analysis page shows the grade with its ECD band, the band's training grade distribution (labelled as not model confidence) and the specialist-confirmation caveat, or a manual-grading notice when ECD is missing.
+- Superseded in part by section 14: images are now uploaded and validated rather than referenced by URL.
+
+### 14. Image upload and corneal-image domain validation (engineering evidence)
+
+This section describes software behaviour and a non-clinical evaluation. It is **not** evidence of clinical validity.
+
+**Upload and analysis flow:**
+
+- Images are uploaded to the backend, checked (size, real file signature, header dimensions) and stored in a private Supabase bucket under a server-generated path.
+- Analysis requests reference the image by id. The backend checks that the caller uploaded it, verifies the stored bytes against their SHA-256, and sends the bytes to `ml-service`.
+- `ml-service` decodes the image safely and runs a domain validator before any module. If the image is rejected, no grade is produced.
+- Every attempt is recorded (`analysis_runs`), including rejections.
+
+**Domain validator.** Frozen ImageNet ResNet-18 features + logistic regression, trained on greyscale images. Positives: 1,024 specular microscopy images, split by inferred donor. Negatives: COCO val2017, synthetic documents/screenshots and synthetic content-free images. Thresholds were set on the validation split only.
+
+| Held-out test images | n | Accepted as corneal |
+|---|---:|---:|
+| Non-corneal (COCO, documents, screenshots, content-free) | 1,295 | 0 (95% upper bound ≈ 0.23%) |
+| Specular microscopy images | 197 | 197 (false-rejection 95% upper bound ≈ 1.5%) |
+| … grade B tissues | 30 | 30 |
+
+- **Revision:** v1 lacked content-free negatives. A regression test written before training showed it accepted flat grey, black and noise images (scores 0.94–0.995). v2 added such negatives; v1 results are kept in `evaluation_v1.json`.
+- **Not evaluated:**
+  - specular images from other microscopes or eye banks;
+  - near-domain images (other microscopy, histology, eye photographs);
+  - image quality and cell visibility, which are reported as not assessed (blurred specular images were accepted).
+
+### 15. Deployment verification
+
+- **Docker:** a clean `ml-service` build regenerates the ONNX backbone from pinned torchvision ResNet-18 weights and verifies its SHA-256 against the trained classifier. CPU build on Linux and CUDA build on Windows gave the same hash.
+- **Container smoke test:**
+  - specular image + ECD 2400 → valid, grade A;
+  - no ECD → `review_required`;
+  - COCO photo → `INVALID_IMAGE_DOMAIN`;
+  - ECD 7000 → `FEATURE_OUT_OF_RANGE`;
+  - text file → `IMAGE_DECODE_FAILED`.
+- **Not tested end to end:** real Supabase Storage, because no credentials were available. Storage is mocked in backend tests.
 
 ## Limitations
 

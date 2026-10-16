@@ -1,7 +1,14 @@
 {
   "completed": {
     "caseId": "case-1",
-    "status": "completed",
+    "status": "partial",
+    "imageValidation": {
+      "domainStatus": "VALID_CORNEAL_IMAGE",
+      "qualityAssessed": false,
+      "width": 1296,
+      "height": 972,
+      "format": "JPEG"
+    },
     "cellular": {
       "status": "not_implemented",
       "error": "Cellular analysis is not implemented yet.",
@@ -30,22 +37,29 @@
       "message": "Grade based on ECD only (cut points 2232, 2497 cells/mm²). Slit-lamp findings and other morphology are not considered and may justify a lower grade. Specialist confirmation required."
     },
     "disease": {
-      "status": "completed",
-      "error": null,
-      "disease": "none_detected",
-      "severity": "normal",
-      "confidence": 0.95
+      "status": "not_implemented",
+      "error": "Disease analysis is not integrated yet.",
+      "disease": null,
+      "severity": null,
+      "confidence": null
     },
     "recommendation": {
-      "status": "completed",
-      "error": null,
-      "recommendation": "Suitable for further evaluation",
-      "confidence": 0.88
+      "status": "not_implemented",
+      "error": "Recommendation is not available until the modules it depends on are validated.",
+      "recommendation": null,
+      "confidence": null
     }
   },
   "review_required": {
-    "caseId": "case-2",
-    "status": "completed",
+    "caseId": "case-1",
+    "status": "partial",
+    "imageValidation": {
+      "domainStatus": "VALID_CORNEAL_IMAGE",
+      "qualityAssessed": false,
+      "width": 1296,
+      "height": 972,
+      "format": "JPEG"
+    },
     "cellular": {
       "status": "not_implemented",
       "error": "Cellular analysis is not implemented yet.",
@@ -67,17 +81,25 @@
       "message": "ECD is required for automated grading. Grade this tissue manually."
     },
     "disease": {
-      "status": "completed",
-      "error": null,
-      "disease": "none_detected",
-      "severity": "normal",
-      "confidence": 0.95
+      "status": "not_implemented",
+      "error": "Disease analysis is not integrated yet.",
+      "disease": null,
+      "severity": null,
+      "confidence": null
     },
     "recommendation": {
-      "status": "completed",
-      "error": null,
-      "recommendation": "Suitable for further evaluation",
-      "confidence": 0.88
+      "status": "not_implemented",
+      "error": "Recommendation is not available until the modules it depends on are validated.",
+      "recommendation": null,
+      "confidence": null
+    }
+  },
+  "rejected_domain": {
+    "status": "rejected",
+    "error": {
+      "code": "INVALID_IMAGE_DOMAIN",
+      "field": "image",
+      "message": "Upload a specular microscopy image showing corneal endothelial cells."
     }
   }
 }

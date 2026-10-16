@@ -2,6 +2,10 @@ package com.cornealai.backend.security;
 
 import com.cornealai.backend.analysis.client.MlServiceClient;
 import com.cornealai.backend.analysis.dto.AnalyzeResponse;
+import com.cornealai.backend.analysis.dto.GradingResult;
+import com.cornealai.backend.analysis.entity.AnalysisImage;
+import com.cornealai.backend.analysis.repository.AnalysisImageRepository;
+import com.cornealai.backend.analysis.storage.ImageStorage;
 import com.cornealai.backend.support.IntegrationTestSupport;
 import com.cornealai.backend.user.entity.AppUser;
 import com.cornealai.backend.user.entity.RoleName;
@@ -11,7 +15,12 @@ import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.EnumSource;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
+
+import java.security.MessageDigest;
+import java.util.HexFormat;
+import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
@@ -24,17 +33,49 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 
 class RoleBasedAccessIntegrationTests extends IntegrationTestSupport {
 
+    private static final byte[] IMAGE_BYTES = {1, 2, 3, 4};
+
+    /** For requests refused before the image is looked up; the id does not exist. */
     private static final String ANALYZE_BODY = """
-            {"imageUrl":"https://example.com/cornea.jpg","caseId":"CASE-1"}
-            """;
+            {"caseId":"CASE-1","imageId":"%s"}
+            """.formatted(UUID.randomUUID());
 
     @MockitoBean
     private MlServiceClient mlServiceClient;
 
+    @MockitoBean
+    private ImageStorage imageStorage;
+
+    @Autowired
+    private AnalysisImageRepository imageRepository;
+
     @BeforeEach
     void stubMlService() {
-        when(mlServiceClient.analyze(any()))
-                .thenReturn(new AnalyzeResponse("CASE-1", "completed", null, null, null, null));
+        when(mlServiceClient.analyze(any(), any(), any(), any()))
+                .thenReturn(new AnalyzeResponse(null, "CASE-1", "partial", null, null,
+                        new GradingResult("review_required", null, null, "ecd_threshold_tree", null, null, null,
+                                null, true, "ECD is required for automated grading."),
+                        null, null));
+        when(imageStorage.read(any())).thenReturn(IMAGE_BYTES);
+    }
+
+    /** Stores an image record owned by {@code owner} and returns an analysis body referencing it. */
+    private String analyzeBodyFor(AppUser owner) throws Exception {
+        AnalysisImage image = new AnalysisImage();
+        image.setId(UUID.randomUUID());
+        image.setCaseId("CASE-1");
+        image.setBucket("test-bucket");
+        image.setObjectPath("CASE-1/" + image.getId() + ".jpg");
+        image.setContentType("image/jpeg");
+        image.setSizeBytes(IMAGE_BYTES.length);
+        image.setSha256(HexFormat.of().formatHex(MessageDigest.getInstance("SHA-256").digest(IMAGE_BYTES)));
+        image.setWidth(1296);
+        image.setHeight(972);
+        image.setUploadedBy(owner.getId());
+        imageRepository.saveAndFlush(image);
+        return """
+                {"caseId":"CASE-1","imageId":"%s"}
+                """.formatted(image.getId());
     }
 
     // ---------- Administrative endpoints ----------
@@ -151,7 +192,7 @@ class RoleBasedAccessIntegrationTests extends IntegrationTestSupport {
 
         // Same, unchanged access token: authorities are re-read from the database.
         mockMvc.perform(post("/api/analysis").header(HttpHeaders.AUTHORIZATION, supportToken)
-                        .contentType(MediaType.APPLICATION_JSON).content(ANALYZE_BODY))
+                        .contentType(MediaType.APPLICATION_JSON).content(analyzeBodyFor(support)))
                 .andExpect(status().isOk());
     }
 
@@ -220,7 +261,7 @@ class RoleBasedAccessIntegrationTests extends IntegrationTestSupport {
         AppUser doctor = createUser("dr.analysis", RoleName.DOCTOR);
 
         mockMvc.perform(post("/api/analysis").header(HttpHeaders.AUTHORIZATION, bearer(doctor))
-                        .contentType(MediaType.APPLICATION_JSON).content(ANALYZE_BODY))
+                        .contentType(MediaType.APPLICATION_JSON).content(analyzeBodyFor(doctor)))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.caseId").value("CASE-1"));
     }
@@ -230,7 +271,7 @@ class RoleBasedAccessIntegrationTests extends IntegrationTestSupport {
         AppUser nurse = createUser("nurse.analysis", RoleName.NURSE);
 
         mockMvc.perform(post("/api/analysis").header(HttpHeaders.AUTHORIZATION, bearer(nurse))
-                        .contentType(MediaType.APPLICATION_JSON).content(ANALYZE_BODY))
+                        .contentType(MediaType.APPLICATION_JSON).content(analyzeBodyFor(nurse)))
                 .andExpect(status().isOk());
     }
 
@@ -243,7 +284,7 @@ class RoleBasedAccessIntegrationTests extends IntegrationTestSupport {
                         .contentType(MediaType.APPLICATION_JSON).content(ANALYZE_BODY))
                 .andExpect(status().isForbidden());
 
-        verify(mlServiceClient, never()).analyze(any());
+        verify(mlServiceClient, never()).analyze(any(), any(), any(), any());
     }
 
     @Test
@@ -252,7 +293,7 @@ class RoleBasedAccessIntegrationTests extends IntegrationTestSupport {
                         .contentType(MediaType.APPLICATION_JSON).content(ANALYZE_BODY))
                 .andExpect(status().isUnauthorized());
 
-        verify(mlServiceClient, never()).analyze(any());
+        verify(mlServiceClient, never()).analyze(any(), any(), any(), any());
     }
 
     @Test

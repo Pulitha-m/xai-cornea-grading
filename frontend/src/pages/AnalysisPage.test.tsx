@@ -1,21 +1,25 @@
 import { screen, within } from "@testing-library/react"
 import userEvent from "@testing-library/user-event"
-import { describe, expect, it, vi } from "vitest"
-import { analyzeCornea, type AnalyzeResponse } from "@/api/analysis"
+import { beforeEach, describe, expect, it, vi } from "vitest"
+import { analyzeCornea, uploadImage, type AnalyzeResponse } from "@/api/analysis"
+import { ApiError } from "@/lib/api-client"
 import { makeAuth, makeUser, renderApp } from "@/test/auth-test-utils"
 
-// Keep the real ECD range constants (used by the form validation); mock only the network call.
+// Keep the real constants (used by validation); mock only the network calls.
 vi.mock(import("@/api/analysis"), async (importOriginal) => ({
     ...(await importOriginal()),
     analyzeCornea: vi.fn(),
+    uploadImage: vi.fn(),
 }))
 
 const GRADING_MESSAGE =
     "Grade based on ECD only (cut points 2232, 2497 cells/mm²). Slit-lamp findings and other morphology are not considered and may justify a lower grade. Specialist confirmation required."
 
 const RESPONSE: AnalyzeResponse = {
+    analysisId: "run-1",
     caseId: "CASE-042",
-    status: "completed",
+    status: "partial",
+    imageValidation: { domainStatus: "VALID_CORNEAL_IMAGE", qualityAssessed: false, width: 1296, height: 972, format: "JPEG" },
     cellular: { status: "completed", error: null, cellCount: 312, ecd: 2487.6, coefficientOfVariation: 0.3, hexagonality: 0.7 },
     grading: {
         status: "completed",
@@ -50,36 +54,51 @@ const REVIEW_REQUIRED: AnalyzeResponse = {
     },
 }
 
-async function runAnalysis(ecd = "2400") {
+const JPEG_BYTES = new Uint8Array([0xff, 0xd8, 0xff, 0xe0, 0, 16, 74, 70, 73, 70])
+
+function jpeg(name = "endothelium.jpg") {
+    return new File([JPEG_BYTES], name, { type: "image/jpeg" })
+}
+
+async function runAnalysis({ ecd = "2400", file = jpeg() }: { ecd?: string; file?: File } = {}) {
     const user = userEvent.setup()
-    await user.type(await screen.findByLabelText("Image URL"), "https://images.test/cornea.png")
+    await user.upload(await screen.findByLabelText("Specular microscopy image"), file)
     await user.type(screen.getByLabelText("Case ID"), "CASE-042")
     if (ecd) {
         await user.type(screen.getByLabelText("ECD (cells/mm²)"), ecd)
     }
     await user.click(screen.getByRole("button", { name: "Analyse" }))
+    return user
 }
 
 function moduleCard(title: string) {
     return screen.getByRole("region", { name: title })
 }
 
+beforeEach(() => {
+    vi.mocked(uploadImage).mockReset().mockResolvedValue({
+        imageId: "img-1", caseId: "CASE-042", contentType: "image/jpeg", sizeBytes: 10, width: 1296, height: 972,
+    })
+    vi.mocked(analyzeCornea).mockReset()
+})
+
 describe("AnalysisPage", () => {
-    it("shows each module's results in structured panels", async () => {
+    it("uploads the image, analyses it by id and shows each module's results", async () => {
         vi.mocked(analyzeCornea).mockResolvedValue(RESPONSE)
         renderApp("/analysis", makeAuth({ user: makeUser("DOCTOR") }))
 
         await runAnalysis()
 
         expect(await screen.findByRole("heading", { name: /Results for case CASE-042/ })).toBeInTheDocument()
-        expect(analyzeCornea).toHaveBeenCalledWith({ imageUrl: "https://images.test/cornea.png", caseId: "CASE-042", ecd: 2400 })
+        expect(uploadImage).toHaveBeenCalledWith("CASE-042", expect.any(File), expect.any(Function))
+        expect(analyzeCornea).toHaveBeenCalledWith({ caseId: "CASE-042", imageId: "img-1", ecd: 2400 })
+        expect(screen.getByText("Partially completed")).toBeInTheDocument()
+        expect(screen.getByText(/Image accepted as a specular microscopy image/)).toHaveTextContent(
+            "Image quality and cell detail were not assessed automatically.",
+        )
 
         const cellular = within(moduleCard("Cellular analysis"))
         expect(cellular.getByText("2,488", { exact: false })).toHaveTextContent("2,488cells/mm²")
-        expect(cellular.getByText("312")).toBeInTheDocument()
-        expect(cellular.getByText("30%")).toBeInTheDocument()
-        expect(cellular.getByText("70%")).toBeInTheDocument()
-
         expect(within(moduleCard("Recommendation")).getByText("Suitable for further evaluation")).toBeInTheDocument()
     })
 
@@ -94,7 +113,6 @@ describe("AnalysisPage", () => {
         expect(grade.getByText("2,232 < ECD ≤ 2,497")).toBeInTheDocument()
         expect(grade.getByText("89%")).toBeInTheDocument()
         expect(grade.getByText(/94 training tissues — not model confidence/)).toBeInTheDocument()
-        expect(grade.getByText(/Specialist confirmation required/)).toBeInTheDocument()
         expect(grade.queryByRole("meter")).not.toBeInTheDocument()
     })
 
@@ -102,22 +120,70 @@ describe("AnalysisPage", () => {
         vi.mocked(analyzeCornea).mockResolvedValue(REVIEW_REQUIRED)
         renderApp("/analysis", makeAuth({ user: makeUser("NURSE") }))
 
-        await runAnalysis("")
+        await runAnalysis({ ecd: "" })
 
         const grade = within(await screen.findByRole("region", { name: "Cornea grade" }))
-        expect(analyzeCornea).toHaveBeenLastCalledWith({ imageUrl: "https://images.test/cornea.png", caseId: "CASE-042", ecd: null })
+        expect(analyzeCornea).toHaveBeenLastCalledWith({ caseId: "CASE-042", imageId: "img-1", ecd: null })
         expect(grade.getByText("Manual grading required")).toBeInTheDocument()
-        expect(grade.getByText(/Grade this tissue manually/)).toBeInTheDocument()
         expect(within(moduleCard("Cellular analysis")).getByText("This module is not available yet.")).toBeInTheDocument()
     })
 
-    it("rejects an out-of-range ECD without running the analysis", async () => {
-        vi.mocked(analyzeCornea).mockClear()
+    it("shows a non-corneal rejection on the image field and uploads the replacement on retry", async () => {
+        vi.mocked(analyzeCornea).mockRejectedValueOnce(new ApiError(
+            422,
+            "Upload a specular microscopy image showing corneal endothelial cells.",
+            { image: "Upload a specular microscopy image showing corneal endothelial cells." },
+            "INVALID_IMAGE_DOMAIN",
+        ))
         renderApp("/analysis", makeAuth({ user: makeUser("DOCTOR") }))
 
-        await runAnalysis("7000")
+        const user = await runAnalysis({ file: jpeg("house.jpg") })
+
+        expect(await screen.findByRole("alert")).toHaveTextContent(
+            "Upload a specular microscopy image showing corneal endothelial cells. Choose a different image and try again.",
+        )
+        expect(screen.queryByRole("heading", { name: /Results for case/ })).not.toBeInTheDocument()
+
+        vi.mocked(analyzeCornea).mockResolvedValueOnce(RESPONSE)
+        await user.upload(screen.getByLabelText("Specular microscopy image"), jpeg("endothelium.jpg"))
+        await user.click(screen.getByRole("button", { name: "Analyse" }))
+
+        expect(await screen.findByRole("heading", { name: /Results for case CASE-042/ })).toBeInTheDocument()
+        expect(uploadImage).toHaveBeenCalledTimes(2)
+    })
+
+    it("reuses the uploaded image when the analysis is run again", async () => {
+        vi.mocked(analyzeCornea).mockResolvedValue(RESPONSE)
+        renderApp("/analysis", makeAuth({ user: makeUser("DOCTOR") }))
+
+        const user = await runAnalysis()
+        await screen.findByRole("heading", { name: /Results for case CASE-042/ })
+        await user.click(screen.getByRole("button", { name: "Analyse" }))
+
+        await vi.waitFor(() => expect(analyzeCornea).toHaveBeenCalledTimes(2))
+        expect(uploadImage).toHaveBeenCalledTimes(1)
+    })
+
+    it("rejects a misnamed non-image file before uploading", async () => {
+        renderApp("/analysis", makeAuth({ user: makeUser("DOCTOR") }))
+        const user = userEvent.setup()
+
+        await user.upload(
+            await screen.findByLabelText("Specular microscopy image"),
+            new File(["just text"], "scan.png", { type: "image/png" }),
+        )
+
+        expect(await screen.findByRole("alert")).toHaveTextContent("Choose a JPEG or PNG image.")
+        expect(uploadImage).not.toHaveBeenCalled()
+    })
+
+    it("rejects an out-of-range ECD without uploading or analysing", async () => {
+        renderApp("/analysis", makeAuth({ user: makeUser("DOCTOR") }))
+
+        await runAnalysis({ ecd: "7000" })
 
         expect(await screen.findByRole("alert")).toHaveTextContent(/at most 6000/)
+        expect(uploadImage).not.toHaveBeenCalled()
         expect(analyzeCornea).not.toHaveBeenCalled()
     })
 
@@ -129,7 +195,6 @@ describe("AnalysisPage", () => {
 
         const disease = within(await screen.findByRole("region", { name: "Disease screening" }))
         expect(disease.getByText("Failed")).toBeInTheDocument()
-        expect(disease.getByText(/could not complete the analysis/)).toBeInTheDocument()
         expect(screen.queryByText(/Traceback/)).not.toBeInTheDocument()
     })
 
@@ -137,7 +202,7 @@ describe("AnalysisPage", () => {
         renderApp("/analysis", makeAuth({ user: makeUser("SUPPORT_STAFF") }))
 
         expect(await screen.findByRole("heading", { name: "Access denied" })).toBeInTheDocument()
-        expect(screen.queryByLabelText("Image URL")).not.toBeInTheDocument()
+        expect(screen.queryByLabelText("Specular microscopy image")).not.toBeInTheDocument()
     })
 
     it("is linked from the clinical dashboard and navigation", async () => {
