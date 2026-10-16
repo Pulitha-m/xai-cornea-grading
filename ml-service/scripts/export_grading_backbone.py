@@ -8,9 +8,10 @@ embeddings (ml/grading/notebooks/images/07_hybrid_evaluation.ipynb). Image heigh
 and width are dynamic because the embeddings were computed at full resolution
 (1296 x 972). Exported with ONNX opset 17.
 
-With --verify, the exported file's SHA-256 must equal the one recorded in
-models/grading_hybrid_rf.json, so a build can never pair the trained model with a
-different backbone.
+With --verify, the exported backbone must reproduce the reference output recorded
+in models/grading_hybrid_rf.json (see backbone_check.py), so a build can never
+pair the trained model with a different backbone. Byte hashes are not compared:
+they vary across CPUs.
 
 Licences: torchvision code is BSD-3-Clause. The pretrained weights were trained on
 ImageNet; see https://pytorch.org/vision/stable/models.html for the terms that
@@ -22,12 +23,13 @@ Usage:
 import argparse
 import hashlib
 import json
-import sys
 from pathlib import Path
 
 import numpy as np
 import torch
 import torchvision
+
+from backbone_check import verify_and_record
 
 
 def export(output: Path) -> str:
@@ -57,17 +59,17 @@ def export(output: Path) -> str:
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("output", type=Path)
-    parser.add_argument("--verify", type=Path, help="grading_hybrid_rf.json whose backbone sha256 must match")
+    parser.add_argument("--verify", type=Path, help="grading_hybrid_rf.json whose reference output the backbone must reproduce")
     args = parser.parse_args()
 
     digest = export(args.output)
     print(f"{args.output}: sha256 {digest} (torch {torch.__version__}, torchvision {torchvision.__version__})")
     if args.verify:
-        expected = json.loads(args.verify.read_text(encoding="utf-8"))["backbone"]["sha256"]
-        if digest != expected:
-            print(f"SHA-256 mismatch: expected {expected}", file=sys.stderr)
-            sys.exit(1)
-        print("Matches the trained model.")
+        backbone = json.loads(args.verify.read_text(encoding="utf-8"))["backbone"]
+        max_diff = verify_and_record(args.output, backbone["reference"])
+        same_bytes = "identical to" if digest == backbone["sha256"] else "different bytes from"
+        print(f"Matches the trained model's reference output (max abs difference {max_diff:.2e}); "
+              f"{same_bytes} the training export.")
 
 
 if __name__ == "__main__":

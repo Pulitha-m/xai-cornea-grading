@@ -260,7 +260,7 @@ This section describes software behaviour and a non-clinical evaluation. It is *
 
 ### 15. Deployment verification
 
-- **Docker:** a clean `ml-service` build regenerates the ONNX backbone from pinned torchvision ResNet-18 weights and verifies its SHA-256 against the trained classifier. CPU build on Linux and CUDA build on Windows gave the same hash.
+- **Docker:** a clean `ml-service` build regenerates the ONNX backbones from pinned torchvision weights and checks that each reproduces the reference output recorded with its trained model. (Byte hashes were compared at first, but a GitHub runner's CPU produced a different file from the same sources, so the check is now functional; see `ml-service/README.md`.)
 - **Container smoke test:**
   - specular image + ECD 2400 → valid, grade A;
   - no ECD → `review_required`;
@@ -276,13 +276,13 @@ Project decision recorded as Amendment 2 in `ANALYSIS_PLAN.md`: the application 
 - **Inputs:** the uploaded image and all 24 features. "Not recorded" is sent as `null` and handled as in training (median imputation for measurements, a separate category for slit-lamp findings). It is never read as zero or "No".
 - **Validation:** every request is validated against `grading_feature_schema.json`. Malformed or impossible values are rejected per field. Values outside the training range, an ECD inconsistent with count and area, and an image not of the training size (1296 × 972) are returned as warnings and mark the case for review.
 - **Model:** PCA 32 components, `min_samples_leaf=1, max_depth=15, max_features=0.3`, no class weighting, chosen by notebook 13's inner tuning on all K3 tissues.
-- **Served backbone:** ResNet-50 exported to ONNX and checked by SHA-256 at load. 551 of 551 training tissues get the same prediction with the served ONNX embeddings as with the research embeddings (largest tree-vote difference 0.060; embeddings differ by at most 0.4% relative).
+- **Served backbone:** ResNet-50 exported to ONNX, checked against the model's reference output at export, and against its verified SHA-256 at load. 551 of 551 training tissues get the same prediction with the served ONNX embeddings as with the research embeddings (largest tree-vote difference 0.060; embeddings differ by at most 0.4% relative).
 - **Output:**
   - the grade;
   - the share of trees voting for each grade, labelled as not calibrated and not a confidence;
   - the list of inputs not recorded;
   - the ECD tree's grade and band distribution, when ECD was recorded.
-- **Tests:** the served pipeline reproduces the exported model on 61 golden cases (synthetic features and synthetic embeddings), and the model and backbone files are checked by SHA-256 at load. The frontend feature list is checked against the exported schema.
+- **Tests:** the served pipeline reproduces the exported model on 61 golden cases (synthetic features and synthetic embeddings), the model file is checked by SHA-256 at load, and the backbone against its verification record. The frontend feature list is checked against the exported schema.
 
 ## Limitations
 

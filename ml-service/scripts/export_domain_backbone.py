@@ -6,9 +6,10 @@ hash prefix in the file name). The final classification layer is removed, leavin
 the 512-d pooled features. Exported with ONNX opset 17.
 
 Used by ml/grading/scripts/train_domain_validator.py (training) and by the
-ml-service Dockerfile (build). With --verify, the exported file's SHA-256 must
-equal the one recorded in models/domain_validator/classifier.json, so a build can
-never pair the trained classifier with a different backbone.
+ml-service Dockerfile (build). With --verify, the exported backbone must reproduce
+the reference output recorded in models/domain_validator/classifier.json (see
+backbone_check.py), so a build can never pair the trained classifier with a
+different backbone. Byte hashes are not compared: they vary across CPUs.
 
 Licences: torchvision code is BSD-3-Clause. The pretrained weights were trained on
 ImageNet; see https://pytorch.org/vision/stable/models.html for the terms that
@@ -20,12 +21,13 @@ Usage:
 import argparse
 import hashlib
 import json
-import sys
 from pathlib import Path
 
 import numpy as np
 import torch
 import torchvision
+
+from backbone_check import verify_and_record
 
 
 def export(output: Path) -> str:
@@ -55,17 +57,17 @@ def export(output: Path) -> str:
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("output", type=Path)
-    parser.add_argument("--verify", type=Path, help="classifier.json whose backbone sha256 must match")
+    parser.add_argument("--verify", type=Path, help="classifier.json whose reference output the backbone must reproduce")
     args = parser.parse_args()
 
     digest = export(args.output)
     print(f"{args.output}: sha256 {digest} (torch {torch.__version__}, torchvision {torchvision.__version__})")
     if args.verify:
-        expected = json.loads(args.verify.read_text())["backbone"]["sha256"]
-        if digest != expected:
-            print(f"SHA-256 mismatch: expected {expected}", file=sys.stderr)
-            sys.exit(1)
-        print("Matches the trained classifier.")
+        backbone = json.loads(args.verify.read_text(encoding="utf-8"))["backbone"]
+        max_diff = verify_and_record(args.output, backbone["reference"])
+        same_bytes = "identical to" if digest == backbone["sha256"] else "different bytes from"
+        print(f"Matches the trained classifier's reference output (max abs difference {max_diff:.2e}); "
+              f"{same_bytes} the training export.")
 
 
 if __name__ == "__main__":

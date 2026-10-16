@@ -6,9 +6,9 @@ for Konan measurements; missing-as-category one-hot encoding for slit-lamp
 findings; standardisation and PCA for the image embedding), so features are passed
 exactly as recorded, with None for "not recorded".
 
-Fails closed: if the model or its ONNX backbone is missing or does not match the
-SHA-256 recorded at training, grading raises HybridModelNotReady and no grade is
-given.
+Fails closed: if the model does not match its recorded SHA-256, or the ONNX
+backbone is missing or not verified against this model (pipelines/image/backbone.py),
+grading raises HybridModelNotReady and no grade is given.
 """
 import hashlib
 import json
@@ -20,6 +20,7 @@ import numpy as np
 import pandas as pd
 from PIL import Image
 
+from pipelines.image.backbone import verification_error
 from pipelines.image.embedding import to_embedding_input
 
 DEFAULT_DIR = Path(__file__).resolve().parents[2] / "models"
@@ -58,10 +59,9 @@ def load_backbone():
     """ONNX session for the ResNet-50 backbone the model was trained with."""
     _, meta = load_classifier()
     backbone = _directory() / meta["backbone"]["file"]
-    if not backbone.exists():
-        raise HybridModelNotReady(f"Grading backbone not found ({backbone.name})")
-    if _sha256(backbone) != meta["backbone"]["sha256"]:
-        raise HybridModelNotReady("Grading backbone does not match the trained model")
+    problem = verification_error(backbone, meta["backbone"]["reference"])
+    if problem:
+        raise HybridModelNotReady(f"Grading backbone: {problem}")
 
     import onnxruntime as ort
 

@@ -359,6 +359,8 @@ def main():
 
     # ---------------- artifacts
     onnx_sha = hashlib.sha256(ONNX_PATH.read_bytes()).hexdigest()
+    from backbone_check import reference, verify_and_record  # ml-service/scripts, on sys.path since export
+    backbone_reference = reference(ONNX_PATH)
     classifier = {
         "model": "corneal_domain_validator",
         "version": 2,
@@ -371,6 +373,8 @@ def main():
             "sha256": onnx_sha,
             "source": "torchvision resnet18 IMAGENET1K_V1, fc removed, ONNX opset 17",
             "output_dim": int(X.shape[1]),
+            # Exports verify against this output, not the bytes (ml-service/scripts/backbone_check.py).
+            "reference": backbone_reference,
         },
         "preprocessing": "pipelines/image/preprocess.py: greyscale, short side 256, centre crop 224, "
                          "3 channels, ImageNet normalisation",
@@ -400,6 +404,7 @@ def main():
         },
     }
     (OUT_DIR / "classifier.json").write_text(json.dumps(classifier, indent=2) + "\n")
+    verify_and_record(ONNX_PATH, backbone_reference)  # lets the local service load this backbone
     (OUT_DIR / "evaluation.json").write_text(json.dumps(report, indent=2) + "\n")
     np.savez_compressed(CACHE_PATH, X=X, y=y, split=data["split"].to_numpy(), subset=data["subset"].to_numpy())
 

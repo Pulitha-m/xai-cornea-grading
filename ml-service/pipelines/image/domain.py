@@ -12,7 +12,6 @@ image is refused with MODEL_NOT_READY, unless the development-only bypass
 DOMAIN_VALIDATOR_DEV_BYPASS=true is set, in which case images are marked
 UNVALIDATED_DEV_MODE and never as valid.
 """
-import hashlib
 import json
 import os
 from dataclasses import dataclass
@@ -22,6 +21,7 @@ from pathlib import Path
 import numpy as np
 from PIL import Image
 
+from pipelines.image.backbone import verification_error
 from pipelines.image.preprocess import to_model_input
 
 DEFAULT_DIR = Path(__file__).resolve().parents[2] / "models" / "domain_validator"
@@ -60,10 +60,9 @@ class DomainValidator:
         spec = json.loads(spec_path.read_text())
 
         backbone = directory / spec["backbone"]["file"]
-        if not backbone.exists():
-            raise ModelNotReady(f"Domain validator backbone not found ({backbone.name})")
-        if hashlib.sha256(backbone.read_bytes()).hexdigest() != spec["backbone"]["sha256"]:
-            raise ModelNotReady("Domain validator backbone does not match its classifier")
+        problem = verification_error(backbone, spec["backbone"]["reference"])
+        if problem:
+            raise ModelNotReady(f"Domain validator: {problem}")
 
         import onnxruntime as ort  # imported lazily so the service starts without it in dev-bypass mode
 

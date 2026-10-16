@@ -52,6 +52,9 @@ from sklearn.preprocessing import StandardScaler
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import modeling_setup as ms  # noqa: E402
 
+sys.path.insert(0, str(Path(__file__).resolve().parents[3] / "ml-service" / "scripts"))
+from backbone_check import reference, verify_and_record  # noqa: E402
+
 SEED = ms.RANDOM_STATE
 REVIEW_IDS = ["NEB-2024-08-16259 R", "NEB-2025-09-17471 R"]
 MANIFEST = ms.PROCESSED_DIR.parent.parent / "image" / "data" / "processed" / "clean_image_manifest.csv"
@@ -235,6 +238,8 @@ def main():
             "preprocessing": "8-bit greyscale at full resolution, /255, repeated to 3 channels, "
                              "ImageNet mean/std normalisation (notebook 07)",
             "training_image_size": TRAINING_IMAGE_SIZE,
+            # Exports verify against this output, not the bytes (ml-service/scripts/backbone_check.py).
+            "reference": reference(args.backbone),
             "parity_with_training_embeddings": parity,
         },
         "training": {
@@ -255,6 +260,7 @@ def main():
                            "tabular model. See ANALYSIS_PLAN.md, Amendment 2.",
     }
     (MODEL_DIR / "grading_hybrid_rf.json").write_text(json.dumps(meta, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
+    verify_and_record(args.backbone, meta["backbone"]["reference"])  # lets the local service load this backbone
 
     inputs = synthetic_inputs(cohort)
     seeds = [1000 + i for i in range(len(inputs))]
