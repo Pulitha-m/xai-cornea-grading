@@ -244,7 +244,8 @@ def main() -> None:
     ap.add_argument("--run", choices=RUNS, help="segment all images of the split with this run")
     ap.add_argument("--compare", action="store_true", help="compare measured runs with Konan")
     ap.add_argument("--figure", nargs="+", metavar="IMAGE_ID", help="side-by-side overlays")
-    ap.add_argument("--split", default=fi["split"], choices=["val"], help="test stays frozen until Phase 7")
+    ap.add_argument("--split", default=fi["split"], choices=["val", "calibration"],
+                    help="calibration: Phase 4 scale only; test stays frozen until Phase 7")
     ap.add_argument("--norm", default="lit", choices=NORMS,
                     help="model input normalisation: lit tissue only (default) or whole image (first run)")
     args = ap.parse_args()

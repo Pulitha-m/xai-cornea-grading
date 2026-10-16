@@ -53,6 +53,19 @@ scale:
   um_per_px: null
   um_per_px_prelim: 0.752
 
+# Scale calibration (Phase 4). Rules fixed before any calibration result was seen.
+# Per calibration image: s_i = sqrt(Konan mean cell area [um^2] / our mean cell area [px^2]),
+# our area = Phase 3 extraction, all complete cells, centre-line area (the quantity Phase 5 reports).
+# um_per_px = MEDIAN of s_i (robust to region mismatch: Konan ~110 operator-chosen cells, we measure
+# the whole lit area); 95 % CI by bootstrap over images. Validation images only CHECK the scale.
+calibration:
+  split: calibration                  # 69 images carved out of train in Phase 0, used for nothing else
+  run: stardist_finetune_flat         # Phase 2 winner, lit-tissue normalisation
+  min_cells: 30                       # images with fewer complete cells are not used
+  n_bootstrap: 2000
+  seed: 23
+  check_split: val
+
 # -----------------------------------------------------------------------------
 # Classical baseline segmenter (Phase 1). Factors are multiples of
 # image.cell_spacing_px so the method adapts if the cell size estimate changes.

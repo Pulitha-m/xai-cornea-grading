@@ -132,7 +132,8 @@ def main() -> None:
     cfg = load_config()
     ap = argparse.ArgumentParser(description="Cell extraction on full validation images.")
     ap.add_argument("--run", default=cfg["extraction"]["run"])
-    ap.add_argument("--split", default="val", choices=["val"], help="test stays frozen until Phase 7")
+    ap.add_argument("--split", default="val", choices=["val", "calibration"],
+                    help="calibration: Phase 4 scale only; test stays frozen until Phase 7")
     ap.add_argument("--norm", default="lit", choices=["lit", "image"],
                     help="which segmentation masks: lit-area normalisation (default) or the first run")
     ap.add_argument("--compare", action="store_true")
