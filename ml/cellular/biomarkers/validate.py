@@ -18,6 +18,8 @@ Usage (from ml/cellular/; CPU is enough):
     python -m biomarkers.validate
     python -m biomarkers.validate --compare
     python -m biomarkers.validate --figure
+    python -m biomarkers.validate --roi [--compare | --figure]   # Phase 6: inside the ROI, with the
+                                                                # scale calibrated inside the ROI
 """
 
 from __future__ import annotations
@@ -44,17 +46,15 @@ PAIRS = {"ecd_cells_per_mm2": ("ecd", "ecd_pct_error", "cells/mm2", "ECD"),
 
 
 def out_dir(cfg: dict, b: dict):
-    d = cfg["paths"]["outputs_dir"] / "biomarkers" / b["split"] / b["run"]
+    d = cfg["paths"]["outputs_dir"] / "biomarkers" / b["split"] / (b["run"] + ("_roi" if cfg.get("_roi") else ""))
     (d / "json").mkdir(parents=True, exist_ok=True)
     return d
 
 
 def compute_all(cfg: dict) -> None:
     b = cfg["biomarkers"]
-    um = cfg["scale"]["um_per_px"]
-    if not um:
-        raise SystemExit("scale.um_per_px is not set - run Phase 4 (calibration.scale) first.")
-    _, ext = paths(cfg, b["run"], b["split"], "lit")
+    um = scale_of(cfg)
+    _, ext = paths(cfg, b["run"], b["split"], "lit", bool(cfg.get("_roi")))
     d = out_dir(cfg, b)
     rows = []
     for r in images_of(cfg, b["split"]).itertuples(index=False):
@@ -70,6 +70,19 @@ def compute_all(cfg: dict) -> None:
                      **{f"sides_{k}_pct": v for k, v in bm["side_distribution_pct"].items()}})
     pd.DataFrame(rows).to_csv(d / "biomarkers.csv", index=False)
     print(f"{len(rows)} {b['split']} images, scale {um} um/px -> {d}")
+
+
+def scale_of(cfg: dict) -> float:
+    """config scale.um_per_px (whole lit area); with --roi the scale calibrated inside the ROI
+    (calibration.scale --roi), because the scale must come from the same pipeline it is applied to."""
+    if cfg.get("_roi"):
+        f = cfg["paths"]["outputs_dir"] / "calibration" / f"{cfg['calibration']['run']}_roi" / "scale.json"
+        if not f.exists():
+            raise SystemExit(f"No ROI scale ({f}) - run python -m calibration.scale --roi first.")
+        return round(json.loads(f.read_text())["um_per_px"], 4)
+    if not cfg["scale"]["um_per_px"]:
+        raise SystemExit("scale.um_per_px is not set - run Phase 4 (calibration.scale) first.")
+    return cfg["scale"]["um_per_px"]
 
 
 def load(cfg: dict) -> pd.DataFrame:
@@ -105,7 +118,8 @@ def compare(cfg: dict) -> None:
     table = pd.DataFrame({f"{lab} ({unit})": agreement_row(s[ours], s[ref], t[key] if key else None)
                           for ours, (ref, key, unit, lab) in PAIRS.items()}).T
     table.to_csv(d / "agreement.csv")
-    print(f"Biomarkers vs Konan - {len(s)} {b['split']} images ({b['run']}, scale {cfg['scale']['um_per_px']} um/px)")
+    print(f"Biomarkers vs Konan - {len(s)} {b['split']} images ({b['run']}{', inside the ROI' if cfg.get('_roi') else ''}, "
+          f"scale {scale_of(cfg)} um/px)")
     print("error = 100 x (ours - Konan) / Konan; 'within target' = share of images with |error| <= target %")
     print(table.round(3).to_string())
 
@@ -174,7 +188,7 @@ def figure(cfg: dict) -> None:
 
     worst = pd.read_csv(d / "worst.csv") if (d / "worst.csv").exists() else None
     if worst is not None:
-        overlay(cfg, b["run"], b["split"], "lit", list(worst["image_id"]))
+        overlay(cfg, b["run"], b["split"], "lit", list(worst["image_id"]), bool(cfg.get("_roi")))
 
 
 def main() -> None:
@@ -182,7 +196,9 @@ def main() -> None:
     ap = argparse.ArgumentParser(description="Phase 5: biomarkers vs Konan.")
     ap.add_argument("--compare", action="store_true")
     ap.add_argument("--figure", action="store_true")
+    ap.add_argument("--roi", action="store_true", help="cells measured only inside the Phase 6 ROI")
     args = ap.parse_args()
+    cfg["_roi"] = args.roi
     if args.compare:
         compare(cfg)
     elif args.figure:

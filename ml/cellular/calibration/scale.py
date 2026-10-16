@@ -25,6 +25,7 @@ Usage (from ml/cellular/; CPU is enough once the masks are extracted):
     python -m calibration.scale
     python -m calibration.scale --check
     python -m calibration.scale --figure
+    python -m calibration.scale --roi [--check]   # Phase 6: the same, measured only inside the ROI
 """
 
 from __future__ import annotations
@@ -82,7 +83,7 @@ def agreement(ours, ref, target_pct: float) -> dict:
 
 
 def out_dir(cfg: dict):
-    d = cfg["paths"]["outputs_dir"] / "calibration" / cfg["calibration"]["run"]
+    d = cfg["paths"]["outputs_dir"] / "calibration" / (cfg["calibration"]["run"] + ("_roi" if cfg.get("_roi") else ""))
     d.mkdir(parents=True, exist_ok=True)
     return d
 
@@ -90,7 +91,7 @@ def out_dir(cfg: dict):
 def load(cfg: dict, split: str) -> pd.DataFrame:
     """Phase 3 extraction summary of a split joined with Konan; images with too few cells dropped."""
     c = cfg["calibration"]
-    _, ext = paths(cfg, c["run"], split, "lit")
+    _, ext = paths(cfg, c["run"], split, "lit", bool(cfg.get("_roi")))
     if not (ext / "summary.csv").exists():
         raise SystemExit(f"No extraction for '{split}' ({ext}). Run segmentation.infer_full and "
                          f"extraction.run_extract with --split {split} first.")
@@ -202,7 +203,9 @@ def main() -> None:
     ap = argparse.ArgumentParser(description="Phase 4: um/px from the calibration subset.")
     ap.add_argument("--check", action="store_true", help="apply the scale to the validation images")
     ap.add_argument("--figure", action="store_true")
+    ap.add_argument("--roi", action="store_true", help="cells measured only inside the Phase 6 ROI")
     args = ap.parse_args()
+    cfg["_roi"] = args.roi
     if args.check:
         check(cfg)
     elif args.figure:

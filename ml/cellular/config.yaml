@@ -118,6 +118,41 @@ roi:
     seed: 12
 
 # -----------------------------------------------------------------------------
+# ROI selection model (Phase 6, Sub-component 3.1). Rules fixed before any ROI model result.
+# Target: tile is ANALYSABLE (good / usable) vs POOR (Phase 1: the distinction labelled consistently,
+# kappa 0.80). Train = round1 + round2 train tiles (40 tissues); the 10 round-1 val images are only
+# used for the final ROI IoU (scope target roi_iou). Three methods, same folds (grouped by image):
+#   lit     tile analysable if > lit_min_share of it is lit (the mask used so far; no learning)
+#   logreg  tile quality features + logistic regression
+#   cnn     EfficientNet-B0 (ImageNet) fine-tuned on the tile (channels raw / flat / lit)
+# Decision: primary = mean per-image tile IoU of the analysable area (CV, threshold fixed);
+# a more complex method (lit < logreg < cnn) replaces a simpler one only if it has the higher mean
+# AND a paired Wilcoxon test over the train images gives p < alpha; otherwise the simpler one stays.
+# ROI map: windows of one tile with half-tile stride, probabilities averaged per pixel,
+# ROI = (p >= threshold) AND lit; islands and holes smaller than min_island_tiles x tile removed.
+# All analysable regions form the ROI (largest connected region reported as a sensitivity check).
+# -----------------------------------------------------------------------------
+roi_model:
+  rounds: [round1, round2]
+  n_folds: 5
+  fold_seed: 17
+  threshold: 0.5
+  alpha: 0.05
+  lit_min_share: 0.5                  # same "more than half" rule as the labelling protocol
+  logreg_C: 1.0
+  cnn:
+    arch: efficientnet_b0
+    pretrained: true                  # torchvision ImageNet weights
+    input_px: 224                     # 162 px tile resized to the network's native size
+    epochs: 15                        # fixed; no early stopping on the held-out fold
+    batch_size: 32
+    lr: 3.0e-4
+    weight_decay: 1.0e-4
+    seed: 42
+  stride_px: 81                       # half a tile
+  min_island_tiles: 0.5               # ROI parts / holes smaller than half a tile are removed
+
+# -----------------------------------------------------------------------------
 # Segmentation model comparison (Phase 2). Every model uses the SAME folds
 # (splits/seg_folds_<round>.csv), the same reference masks (expert-revised where
 # they exist) and the same metrics. Rules fixed before any results:

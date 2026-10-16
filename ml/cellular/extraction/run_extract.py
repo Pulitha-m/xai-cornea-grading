@@ -16,6 +16,7 @@ Usage (from ml/cellular/; CPU is enough):
     python -m extraction.run_extract
     python -m extraction.run_extract --compare
     python -m extraction.run_extract --figure "<image_id>" ...
+    python -m extraction.run_extract --split val --roi     # Phase 6: only inside the ROI (roi.run --apply)
 """
 
 from __future__ import annotations
@@ -34,17 +35,31 @@ from extraction.cells import ExtractionParams, extract_cells, instances_from_mas
 from segmentation.infer_full import images_of, run_root
 
 
-def paths(cfg: dict, run: str, split: str, norm: str):
-    """Masks from segmentation.infer_full (same --norm) and the matching extraction folder."""
+def paths(cfg: dict, run: str, split: str, norm: str, roi: bool = False):
+    """Masks from segmentation.infer_full (same --norm) and the matching extraction folder
+    (suffix _roi: measured only inside the Phase 6 ROI)."""
     seg = run_root(cfg, split, norm, run) / run / "masks"
     suffix = "" if (norm == "image" or run == "classical") else "_litnorm"
-    out = cfg["paths"]["outputs_dir"] / "extraction" / f"full_{split}{suffix}" / run
+    out = cfg["paths"]["outputs_dir"] / "extraction" / f"full_{split}{suffix}{'_roi' if roi else ''}" / run
     return seg, out
 
 
-def extract_all(cfg: dict, run: str, split: str, norm: str) -> None:
+def analysable(cfg: dict, mask: np.ndarray, split: str, image_id: str, roi: bool) -> np.ndarray:
+    """Pixels where cells are measured: not ignored by the segmentation (lit), and inside the
+    Phase 6 ROI if requested (masks from roi.run --apply)."""
+    keep = mask != IGNORE
+    if roi:
+        f = cfg["paths"]["outputs_dir"] / "roi" / "masks" / split / f"{image_id}.png"
+        r = cv2.imread(str(f), cv2.IMREAD_GRAYSCALE)
+        if r is None:
+            raise SystemExit(f"No ROI mask {f} - run python -m roi.run --apply --split {split} first.")
+        keep &= r > 0
+    return keep
+
+
+def extract_all(cfg: dict, run: str, split: str, norm: str, roi: bool = False) -> None:
     p = ExtractionParams.from_config(cfg)
-    seg, out = paths(cfg, run, split, norm)
+    seg, out = paths(cfg, run, split, norm, roi)
     (out / "cells").mkdir(parents=True, exist_ok=True)
     rows, t0 = [], time.time()
     images = images_of(cfg, split)
@@ -53,7 +68,7 @@ def extract_all(cfg: dict, run: str, split: str, norm: str) -> None:
         if mask is None:
             print(f"  missing mask: {r.image_id} - run segmentation.infer_full --run {run} first")
             continue
-        df, _, _ = extract_cells(instances_from_mask(mask), mask != IGNORE, p)
+        df, _, _ = extract_cells(instances_from_mask(mask), analysable(cfg, mask, split, r.image_id, roi), p)
         df.to_csv(out / "cells" / f"{r.image_id}.csv", index=False)
         rows.append({"image_id": r.image_id, **summarise_cells(df)})
         if i % 25 == 0 or i == len(images):
@@ -62,10 +77,10 @@ def extract_all(cfg: dict, run: str, split: str, norm: str) -> None:
     print(f"Results: {out}")
 
 
-def open_sensitivity(cfg: dict, run: str, split: str, norm: str, limits: list[float]) -> None:
+def open_sensitivity(cfg: dict, run: str, split: str, norm: str, limits: list[float], roi: bool = False) -> None:
     """Sensitivity analysis only (decision rule stays max_open_fraction): HEX % vs Konan when the
     open-ring limit is relaxed. Recomputed from the stored raw side counts, no re-extraction."""
-    _, out = paths(cfg, run, split, norm)
+    _, out = paths(cfg, run, split, norm, roi)
     ref = images_of(cfg, split).set_index("image_id")["hex"]
     rows = []
     for t in limits:
@@ -85,8 +100,8 @@ def open_sensitivity(cfg: dict, run: str, split: str, norm: str, limits: list[fl
     print(pd.DataFrame(rows).set_index("max_open_fraction").round(3).to_string())
 
 
-def compare(cfg: dict, run: str, split: str, norm: str) -> None:
-    _, out = paths(cfg, run, split, norm)
+def compare(cfg: dict, run: str, split: str, norm: str, roi: bool = False) -> None:
+    _, out = paths(cfg, run, split, norm, roi)
     ref = images_of(cfg, split)[["image_id", "hex", "cv", "mean_area", "num_cells", "ecd_band"]]
     s = pd.read_csv(out / "summary.csv").merge(ref, on="image_id")
     print(f"{run}: {len(s)} {split} images; median per image: {s['n_cells'].median():.0f} complete cells, "
@@ -108,15 +123,15 @@ def compare(cfg: dict, run: str, split: str, norm: str) -> None:
         for b, g in s.groupby("ecd_band")))
 
 
-def figure(cfg: dict, run: str, split: str, norm: str, image_ids: list[str]) -> None:
+def figure(cfg: dict, run: str, split: str, norm: str, image_ids: list[str], roi: bool = False) -> None:
     p = ExtractionParams.from_config(cfg)
-    seg, out = paths(cfg, run, split, norm)
+    seg, out = paths(cfg, run, split, norm, roi)
     man = images_of(cfg, split).set_index("image_id")
     (out / "figures").mkdir(parents=True, exist_ok=True)
     for iid in image_ids:
         img = cv2.imread(str(cfg["paths"]["images_dir"] / man.loc[iid, "image_file"]), cv2.IMREAD_GRAYSCALE)
         mask = cv2.imread(str(seg / f"{iid}.png"), cv2.IMREAD_GRAYSCALE)
-        df, _, complete = extract_cells(instances_from_mask(mask), mask != IGNORE, p)
+        df, _, complete = extract_cells(instances_from_mask(mask), analysable(cfg, mask, split, iid, roi), p)
         view = overlay_sides(img, complete, df)
         sm = summarise_cells(df)
         cv2.putText(view, f"{run}: HEX {sm['hex_pct']:.0f}% (Konan {man.loc[iid, 'hex']:.0f}%), "
@@ -140,15 +155,16 @@ def main() -> None:
     ap.add_argument("--open-sensitivity", type=float, nargs="+", metavar="LIMIT",
                     help="sensitivity analysis: HEX % with other open-ring limits")
     ap.add_argument("--figure", nargs="+", metavar="IMAGE_ID")
+    ap.add_argument("--roi", action="store_true", help="measure only inside the Phase 6 ROI")
     args = ap.parse_args()
     if args.compare:
-        compare(cfg, args.run, args.split, args.norm)
+        compare(cfg, args.run, args.split, args.norm, args.roi)
     elif args.open_sensitivity:
-        open_sensitivity(cfg, args.run, args.split, args.norm, args.open_sensitivity)
+        open_sensitivity(cfg, args.run, args.split, args.norm, args.open_sensitivity, args.roi)
     elif args.figure:
-        figure(cfg, args.run, args.split, args.norm, args.figure)
+        figure(cfg, args.run, args.split, args.norm, args.figure, args.roi)
     else:
-        extract_all(cfg, args.run, args.split, args.norm)
+        extract_all(cfg, args.run, args.split, args.norm, args.roi)
 
 
 if __name__ == "__main__":
