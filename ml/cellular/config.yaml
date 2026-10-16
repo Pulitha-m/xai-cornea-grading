@@ -214,4 +214,6 @@ targets:
   cv_pct_error: 10.0
   hex_pct_error: 10.0
   mean_area_pct_error: 8.0
-  compactness_cv: 15.0
+  compactness_cv: 15.0                # not defined in the scope (confirmed 2026-10-16); OUR definition (Phase 5):
+                                      # CV of per-cell compactness within an image <= 15 %
+                                      # (supporting: mean compactness vs reference masks on the 40 crops)
