@@ -1,6 +1,2 @@
-def run_disease_analysis(image_url: str) -> dict:
-    return {
-        "disease": "none_detected",
-        "severity": "normal",
-        "confidence": 0.95,
-    }
+def run_disease_analysis(image) -> dict:
+    raise NotImplementedError("Disease analysis is not integrated yet.")

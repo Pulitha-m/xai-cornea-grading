@@ -16,6 +16,12 @@ spring:
     # {vendor} resolves to e.g. "postgresql", for database-specific migrations
     locations: classpath:db/migration,classpath:db/vendor/{vendor}
 
+  servlet:
+    multipart:
+      # Slightly above app.analysis.images.max-bytes so the inspector reports the precise limit.
+      max-file-size: 16MB
+      max-request-size: 17MB
+
 server:
   port: 8080
 
@@ -29,7 +35,21 @@ ml:
   service:
     url: ${ML_SERVICE_URL:http://localhost:8000}
 
+
 app:
+  analysis:
+    images:
+      # Keep in line with ml-service's IMAGE_MAX_BYTES / IMAGE_MIN_SIDE / IMAGE_MAX_SIDE / IMAGE_MAX_PIXELS.
+      max-bytes: ${IMAGE_MAX_BYTES:15728640}
+      min-side: ${IMAGE_MIN_SIDE:224}
+      max-side: ${IMAGE_MAX_SIDE:8000}
+      max-pixels: ${IMAGE_MAX_PIXELS:40000000}
+    storage:
+      # Server-only. The service-role key must never reach the browser or logs.
+      supabase-url: ${SUPABASE_URL:}
+      service-key: ${SUPABASE_SERVICE_ROLE_KEY:}
+      # Must be a private bucket; the backend refuses a public one.
+      bucket: ${SUPABASE_STORAGE_BUCKET:specular-images}
   security:
     jwt:
       # Base64-encoded HMAC key, at least 256 bits. Generate with: openssl rand -base64 48

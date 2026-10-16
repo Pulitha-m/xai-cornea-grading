@@ -20,3 +20,7 @@ export const textInput =
 /** Boxed error message, matching the sign-in page. */
 export const alertError =
     "rounded-2xl border border-destructive/25 bg-destructive-soft px-3.5 py-3 text-sm text-destructive"
+
+/** Boxed caution message, e.g. when a result needs specialist review. */
+export const alertWarning =
+    "rounded-2xl border border-warning/25 bg-warning-soft px-3.5 py-3 text-sm text-warning"

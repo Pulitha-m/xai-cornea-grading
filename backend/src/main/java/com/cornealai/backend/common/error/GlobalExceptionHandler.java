@@ -38,6 +38,7 @@ public class GlobalExceptionHandler {
                 Instant.now(),
                 status.value(),
                 status.getReasonPhrase(),
+                null,
                 "Request validation failed.",
                 request.getRequestURI(),
                 fieldErrors

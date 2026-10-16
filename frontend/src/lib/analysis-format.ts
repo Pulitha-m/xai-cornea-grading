@@ -1,12 +1,19 @@
+import type { EcdBand } from "@/api/analysis"
 import type { StatusTone } from "@/components/ui/status-badge"
 
-/** Display label and tone for a module's status string ("completed" / "failed" from the ML service). */
+/** Display label and tone for a module's status string from the ML service. */
 export function moduleStatus(status: string): { label: string; tone: StatusTone } {
     switch (status.toLowerCase()) {
         case "completed":
             return { label: "Completed", tone: "success" }
         case "failed":
             return { label: "Failed", tone: "danger" }
+        case "review_required":
+            return { label: "Manual grading required", tone: "warning" }
+        case "partial":
+            return { label: "Partially completed", tone: "info" }
+        case "not_implemented":
+            return { label: "Not available yet", tone: "neutral" }
         default:
             return { label: humanize(status), tone: "neutral" }
     }
@@ -14,6 +21,21 @@ export function moduleStatus(status: string): { label: string; tone: StatusTone 
 
 export function isFailed(status: string): boolean {
     return status.toLowerCase() === "failed"
+}
+
+export function isNotImplemented(status: string): boolean {
+    return status.toLowerCase() === "not_implemented"
+}
+
+/** ECD band of the grading tree, e.g. "2,232 < ECD ≤ 2,497". */
+export function formatEcdBand(band: EcdBand | null): string | null {
+    if (band === null) return null
+    const lower = band.lowerExclusive === null ? null : formatCount(band.lowerExclusive)
+    const upper = band.upperInclusive === null ? null : formatCount(band.upperInclusive)
+    if (lower === null && upper === null) return null
+    if (lower === null) return `ECD ≤ ${upper}`
+    if (upper === null) return `ECD > ${lower}`
+    return `${lower} < ECD ≤ ${upper}`
 }
 
 /** "none_detected" -> "None detected". */
