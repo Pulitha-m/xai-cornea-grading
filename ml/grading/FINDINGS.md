@@ -269,6 +269,21 @@ This section describes software behaviour and a non-clinical evaluation. It is *
   - text file → `IMAGE_DECODE_FAILED`.
 - **Not tested end to end:** real Supabase Storage, because no credentials were available. Storage is mocked in backend tests.
 
+### 16. Application grade from the hybrid model
+
+Project decision recorded as Amendment 2 in `ANALYSIS_PLAN.md`: the application grade now comes from the tuned hybrid model (24 features + ResNet-50 image features); the ECD tree from section 12 is shown beside it as a reference. **The research result does not change.** In section 12 the tuned hybrid was not better than the ECD tree (T1) or the tuned tabular model (T3), and nothing here claims it is.
+
+- **Inputs:** the uploaded image and all 24 features. "Not recorded" is sent as `null` and handled as in training (median imputation for measurements, a separate category for slit-lamp findings). It is never read as zero or "No".
+- **Validation:** every request is validated against `grading_feature_schema.json`. Malformed or impossible values are rejected per field. Values outside the training range, an ECD inconsistent with count and area, and an image not of the training size (1296 × 972) are returned as warnings and mark the case for review.
+- **Model:** PCA 32 components, `min_samples_leaf=1, max_depth=15, max_features=0.3`, no class weighting, chosen by notebook 13's inner tuning on all K3 tissues.
+- **Served backbone:** ResNet-50 exported to ONNX and checked by SHA-256 at load. 551 of 551 training tissues get the same prediction with the served ONNX embeddings as with the research embeddings (largest tree-vote difference 0.060; embeddings differ by at most 0.4% relative).
+- **Output:**
+  - the grade;
+  - the share of trees voting for each grade, labelled as not calibrated and not a confidence;
+  - the list of inputs not recorded;
+  - the ECD tree's grade and band distribution, when ECD was recorded.
+- **Tests:** the served pipeline reproduces the exported model on 61 golden cases (synthetic features and synthetic embeddings), and the model and backbone files are checked by SHA-256 at load. The frontend feature list is checked against the exported schema.
+
 ## Limitations
 
 - Donor pairs are inferred from consecutive serial numbers and donor details, not confirmed against a register.

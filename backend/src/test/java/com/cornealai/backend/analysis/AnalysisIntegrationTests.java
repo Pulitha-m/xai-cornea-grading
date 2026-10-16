@@ -133,22 +133,26 @@ class AnalysisIntegrationTests extends IntegrationTestSupport {
     @Test
     void analysisSendsStoredBytesAndRecordsTheRun() throws Exception {
         UUID imageId = uploadedImage(doctor, "CASE-1");
-        when(mlServiceClient.analyze(eq("CASE-1"), eq(2400.0), any(), anyString())).thenReturn(response("completed"));
+        when(mlServiceClient.analyze(eq("CASE-1"), anyString(), any(), anyString())).thenReturn(response("completed"));
 
         analyze(doctor, "CASE-1", imageId, 2400.0)
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.analysisId").isNotEmpty())
                 .andExpect(jsonPath("$.grading.grade").value("A"));
 
+        ArgumentCaptor<String> features = ArgumentCaptor.forClass(String.class);
         ArgumentCaptor<byte[]> bytes = ArgumentCaptor.forClass(byte[].class);
-        verify(mlServiceClient).analyze(eq("CASE-1"), eq(2400.0), bytes.capture(), anyString());
+        verify(mlServiceClient).analyze(eq("CASE-1"), features.capture(), bytes.capture(), anyString());
         assertThat(bytes.getValue()).isEqualTo(stored);
+        assertThat(features.getValue()).contains("\"ECD_CD_cells_per_mm2\":2400.0").contains("\"Stroma_Has_Scar\":null");
 
         List<AnalysisRun> recorded = runs.findByImageId(imageId);
         assertThat(recorded).singleElement().satisfies(run -> {
             assertThat(run.getStatus()).isEqualTo("completed");
             assertThat(run.getRequestedBy()).isEqualTo(doctor.getId());
             assertThat(run.getResultJson()).contains("\"grade\":\"A\"");
+            assertThat(run.getEcd()).isEqualTo(2400.0);
+            assertThat(run.getClinicalFeaturesJson()).contains("ECD_CD_cells_per_mm2");
         });
     }
 
@@ -223,12 +227,31 @@ class AnalysisIntegrationTests extends IntegrationTestSupport {
     }
 
     @Test
-    void outOfRangeEcdIsRejectedBeforeCallingMlService() throws Exception {
+    void requestWithoutClinicalFeaturesIsRejectedBeforeCallingMlService() throws Exception {
         UUID imageId = uploadedImage(doctor, "CASE-1");
-        analyze(doctor, "CASE-1", imageId, 7000.0)
+        mockMvc.perform(post("/api/analysis")
+                        .header(HttpHeaders.AUTHORIZATION, bearer(doctor))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"caseId\":\"CASE-1\",\"imageId\":\"%s\"}".formatted(imageId)))
                 .andExpect(status().isBadRequest())
-                .andExpect(jsonPath("$.fieldErrors.ecd").exists());
+                .andExpect(jsonPath("$.fieldErrors.clinicalFeatures").exists());
         verify(mlServiceClient, never()).analyze(any(), any(), any(), any());
+    }
+
+    @Test
+    void featureValidationErrorsFromMlServiceAreReportedPerField() throws Exception {
+        UUID imageId = uploadedImage(doctor, "CASE-1");
+        when(mlServiceClient.analyze(any(), any(), any(), any())).thenThrow(new AnalysisRejectedException(
+                HttpStatus.UNPROCESSABLE_CONTENT, "MISSING_CLINICAL_FEATURES", "HEX_percent",
+                "HEX_percent is required (use null if not recorded).",
+                java.util.Map.of("HEX_percent", "HEX_percent is required (use null if not recorded).",
+                        "CV", "CV must be a number (%).")));
+
+        analyze(doctor, "CASE-1", imageId, 2400.0)
+                .andExpect(status().isUnprocessableContent())
+                .andExpect(jsonPath("$.code").value("MISSING_CLINICAL_FEATURES"))
+                .andExpect(jsonPath("$.fieldErrors.HEX_percent").exists())
+                .andExpect(jsonPath("$.fieldErrors.CV").exists());
     }
 
     // ---------------------------------------------------------------- helpers
@@ -249,15 +272,17 @@ class AnalysisIntegrationTests extends IntegrationTestSupport {
 
     private ResultActions analyze(AppUser user, String caseId, UUID imageId, Double ecd) throws Exception {
         String ecdJson = ecd == null ? "null" : ecd.toString();
+        String features = "{\"ECD_CD_cells_per_mm2\":%s,\"Stroma_Has_Scar\":null}".formatted(ecdJson);
         return mockMvc.perform(post("/api/analysis")
                 .header(HttpHeaders.AUTHORIZATION, bearer(user))
                 .contentType(MediaType.APPLICATION_JSON)
-                .content("{\"caseId\":\"%s\",\"imageId\":\"%s\",\"ecd\":%s}".formatted(caseId, imageId, ecdJson)));
+                .content("{\"caseId\":\"%s\",\"imageId\":\"%s\",\"clinicalFeatures\":%s}".formatted(caseId, imageId, features)));
     }
 
     private static AnalyzeResponse response(String status) {
-        GradingResult grading = new GradingResult("completed", null, "A", "ecd_threshold_tree", 2400.0,
-                null, null, 94, false, "Grade based on ECD only.");
+        GradingResult grading = new GradingResult("completed", null, "A", "hybrid_random_forest_24_resnet50",
+                java.util.Map.of("A", 0.6, "A+", 0.3, "B", 0.1), java.util.List.of(), java.util.List.of(), null,
+                false, "Grade from the 24-feature model.");
         return new AnalyzeResponse(null, "CASE-1", status, null, null, grading, null, null);
     }
 

@@ -5,14 +5,15 @@ import { analyzeCornea, uploadImage, type AnalyzeResponse } from "@/api/analysis
 export interface ImageAnalysisInput {
     caseId: string
     file: File
-    ecd: number | null
+    /** All 24 grading features; null = not recorded. */
+    clinicalFeatures: Record<string, number | string | null>
 }
 
 export type AnalysisStage = "idle" | "uploading" | "analysing"
 
 /**
  * Uploads the image, then requests the analysis by image id. If the same file and case
- * were already uploaded (e.g. retrying after correcting the ECD), the stored image is reused.
+ * were already uploaded (e.g. retrying after correcting a clinical feature), the stored image is reused.
  */
 export function useImageAnalysis() {
     const [stage, setStage] = useState<AnalysisStage>("idle")
@@ -20,7 +21,7 @@ export function useImageAnalysis() {
     const uploaded = useRef<{ file: File; caseId: string; imageId: string } | null>(null)
 
     const mutation = useMutation<AnalyzeResponse, Error, ImageAnalysisInput>({
-        mutationFn: async ({ caseId, file, ecd }) => {
+        mutationFn: async ({ caseId, file, clinicalFeatures }) => {
             try {
                 let imageId = uploaded.current?.file === file && uploaded.current.caseId === caseId
                     ? uploaded.current.imageId
@@ -33,7 +34,7 @@ export function useImageAnalysis() {
                     uploaded.current = { file, caseId, imageId }
                 }
                 setStage("analysing")
-                return await analyzeCornea({ caseId, imageId, ecd })
+                return await analyzeCornea({ caseId, imageId, clinicalFeatures })
             } finally {
                 setStage("idle")
             }

@@ -39,7 +39,7 @@ public class ImageInspector {
             throw reject(HttpStatus.UNPROCESSABLE_CONTENT, "IMAGE_DECODE_FAILED", "The uploaded file is empty.");
         }
         if (data.length > limits.maxBytes()) {
-            throw reject(HttpStatus.PAYLOAD_TOO_LARGE, "IMAGE_TOO_LARGE",
+            throw reject(HttpStatus.CONTENT_TOO_LARGE, "IMAGE_TOO_LARGE",
                     "Images must be at most " + limits.maxBytes() / (1024 * 1024) + " MB.");
         }
 

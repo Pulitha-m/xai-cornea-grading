@@ -1,9 +1,5 @@
 import { apiRequest, apiUpload } from "@/lib/api-client"
 
-/** Valid ECD range accepted by the API (cells/mm²): ECD_MIN_EXCLUSIVE < ecd <= ECD_MAX_INCLUSIVE. */
-export const ECD_MIN_EXCLUSIVE = 0
-export const ECD_MAX_INCLUSIVE = 6000
-
 /** Upload limits; the server enforces the same limits (app.analysis.images / ml-service IMAGE_*). */
 export const IMAGE_MAX_BYTES = 15 * 1024 * 1024
 export const IMAGE_MIN_SIDE = 224
@@ -23,8 +19,8 @@ export interface AnalyzeRequest {
     caseId: string
     /** Id returned by uploadImage; images are never referenced by URL. */
     imageId: string
-    /** Endothelial cell density (cells/mm²) from the specular microscopy report. */
-    ecd?: number | null
+    /** All 24 grading features (see lib/grading-features); null = not recorded. */
+    clinicalFeatures: Record<string, number | string | null>
 }
 
 export interface ImageValidation {
@@ -51,10 +47,10 @@ export interface EcdBand {
     upperInclusive: number | null
 }
 
-export interface GradingResult {
-    /** "completed", "review_required" (no ECD supplied) or "failed". */
+/** Reference grade from the ECD threshold tree (single-feature baseline). */
+export interface EcdReference {
+    /** "completed", or "review_required" when ECD was not recorded or is out of range. */
     status: string
-    error: string | null
     grade: string | null
     method: string | null
     ecdUsed: number | null
@@ -62,6 +58,27 @@ export interface GradingResult {
     /** Recorded grades of training tissues in the same ECD band; not model confidence. */
     bandDistribution: Record<string, number> | null
     bandTrainingTissues: number | null
+    reviewRequired: boolean | null
+    message: string | null
+}
+
+export interface FeatureWarning {
+    code: string
+    field: string | null
+    message: string
+}
+
+export interface GradingResult {
+    /** "completed" or "failed". */
+    status: string
+    error: string | null
+    grade: string | null
+    method: string | null
+    /** Share of trees voting for each grade. Not calibrated; not a confidence. */
+    modelProbabilities: Record<string, number> | null
+    featuresNotRecorded: string[] | null
+    warnings: FeatureWarning[] | null
+    ecdReference: EcdReference | null
     reviewRequired: boolean | null
     message: string | null
 }

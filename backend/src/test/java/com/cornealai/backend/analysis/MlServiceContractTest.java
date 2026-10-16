@@ -56,20 +56,35 @@ class MlServiceContractTest {
         assertEquals("VALID_CORNEAL_IMAGE", response.imageValidation().domainStatus());
         assertFalse(response.imageValidation().qualityAssessed());
         assertEquals("completed", grading.status());
-        assertEquals("ecd_threshold_tree", grading.method());
-        assertEquals(1.0, grading.bandDistribution().values().stream().mapToDouble(Double::doubleValue).sum(), 0.01);
+        assertEquals("hybrid_random_forest_24_resnet50", grading.method());
+        assertEquals(1.0, grading.modelProbabilities().values().stream().mapToDouble(Double::doubleValue).sum(), 0.01);
         assertTrue(grading.message().contains("Specialist confirmation required"));
+        assertEquals("ecd_threshold_tree", grading.ecdReference().method());
+        assertEquals(2232.0, grading.ecdReference().ecdBand().lowerExclusive());
         assertEquals("not_implemented", response.cellular().status());
         assertEquals("not_implemented", response.disease().status());
         assertNull(response.disease().confidence());
     }
 
     @Test
-    void missingEcdResponseRequiresReview() throws Exception {
-        GradingResult grading = strictMapper.treeToValue(fixture().get("review_required"), AnalyzeResponse.class).grading();
-        assertEquals("review_required", grading.status());
-        assertNull(grading.grade());
+    void missingEcdStillGradesButHasNoEcdReference() throws Exception {
+        GradingResult grading = strictMapper.treeToValue(fixture().get("missing_ecd"), AnalyzeResponse.class).grading();
+        assertNotNull(grading.grade());
+        assertEquals("review_required", grading.ecdReference().status());
         assertTrue(grading.reviewRequired());
+        assertTrue(grading.featuresNotRecorded().contains("ECD_CD_cells_per_mm2"));
+    }
+
+    @Test
+    void clientMapsEveryFeatureErrorToItsField() throws Exception {
+        String body = strictMapper.writeValueAsString(fixture().get("rejected_features"));
+        MlServiceClient client = clientFor(422, body, new AtomicReference<>());
+
+        assertThatThrownBy(() -> client.analyze("case-1", "{}", new byte[]{1}, "image.jpg"))
+                .isInstanceOfSatisfying(AnalysisRejectedException.class, e -> {
+                    assertEquals("MISSING_CLINICAL_FEATURES", e.getCode());
+                    assertThat(e.getFieldErrors()).containsKeys("HEX_percent", "CV");
+                });
     }
 
     @Test
@@ -78,7 +93,7 @@ class MlServiceContractTest {
         String body = strictMapper.writeValueAsString(fixture().get("completed"));
         MlServiceClient client = clientFor(200, body, contentType);
 
-        AnalyzeResponse response = client.analyze("case-1", 2400.0, new byte[]{1, 2, 3}, "image.jpg");
+        AnalyzeResponse response = client.analyze("case-1", "{}", new byte[]{1, 2, 3}, "image.jpg");
 
         assertThat(contentType.get()).startsWith("multipart/form-data");
         assertEquals("A", response.grading().grade());
@@ -89,7 +104,7 @@ class MlServiceContractTest {
         String body = strictMapper.writeValueAsString(fixture().get("rejected_domain"));
         MlServiceClient client = clientFor(422, body, new AtomicReference<>());
 
-        assertThatThrownBy(() -> client.analyze("case-1", 2400.0, new byte[]{1}, "image.jpg"))
+        assertThatThrownBy(() -> client.analyze("case-1", "{}", new byte[]{1}, "image.jpg"))
                 .isInstanceOfSatisfying(AnalysisRejectedException.class, e -> {
                     assertEquals(HttpStatus.UNPROCESSABLE_CONTENT, e.getStatus());
                     assertEquals("INVALID_IMAGE_DOMAIN", e.getCode());
@@ -101,7 +116,7 @@ class MlServiceContractTest {
     void clientDoesNotExposeUnstructuredErrors() throws Exception {
         MlServiceClient client = clientFor(500, "<html>Traceback (most recent call last)...</html>", new AtomicReference<>());
 
-        assertThatThrownBy(() -> client.analyze("case-1", null, new byte[]{1}, "image.jpg"))
+        assertThatThrownBy(() -> client.analyze("case-1", "{}", new byte[]{1}, "image.jpg"))
                 .isInstanceOfSatisfying(AnalysisRejectedException.class, e -> {
                     assertEquals("MODEL_INFERENCE_FAILED", e.getCode());
                     assertThat(e.getMessage()).doesNotContain("Traceback");
@@ -111,7 +126,7 @@ class MlServiceContractTest {
     @Test
     void unreachableServiceIsModelNotReady() {
         MlServiceClient client = new MlServiceClient("http://127.0.0.1:1", strictMapper);
-        assertThatThrownBy(() -> client.analyze("case-1", null, new byte[]{1}, "image.jpg"))
+        assertThatThrownBy(() -> client.analyze("case-1", "{}", new byte[]{1}, "image.jpg"))
                 .isInstanceOfSatisfying(AnalysisRejectedException.class,
                         e -> assertEquals("MODEL_NOT_READY", e.getCode()));
     }

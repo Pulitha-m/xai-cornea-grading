@@ -17,6 +17,9 @@ import org.springframework.web.client.RestClientResponseException;
 import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.ObjectMapper;
 
+import java.util.LinkedHashMap;
+import java.util.Map;
+
 /**
  * Sends the actual image bytes and inputs to ml-service and returns its result.
  * ml-service rejections ({"status":"rejected","error":{code,field,message}}) are
@@ -35,12 +38,14 @@ public class MlServiceClient {
         this.objectMapper = objectMapper;
     }
 
-    public AnalyzeResponse analyze(String caseId, Double ecd, byte[] image, String filename) {
+    /**
+     * @param clinicalFeaturesJson the 24 features as a JSON object; ml-service validates them
+     *                             against the training schema before any model runs
+     */
+    public AnalyzeResponse analyze(String caseId, String clinicalFeaturesJson, byte[] image, String filename) {
         MultiValueMap<String, Object> form = new LinkedMultiValueMap<>();
         form.add("caseId", caseId);
-        if (ecd != null) {
-            form.add("ecd", ecd.toString());
-        }
+        form.add("clinicalFeatures", clinicalFeaturesJson);
         form.add("image", new NamedBytes(image, filename));
 
         try {
@@ -61,14 +66,23 @@ public class MlServiceClient {
 
     private AnalysisRejectedException translate(RestClientResponseException e) {
         try {
-            JsonNode error = objectMapper.readTree(e.getResponseBodyAsString()).path("error");
+            JsonNode body = objectMapper.readTree(e.getResponseBodyAsString());
+            JsonNode error = body.path("error");
             if (error.hasNonNull("code") && error.hasNonNull("message")) {
                 HttpStatus status = HttpStatus.resolve(e.getStatusCode().value());
-                return new AnalysisRejectedException(
-                        status == null ? HttpStatus.BAD_GATEWAY : status,
-                        error.get("code").asString(),
-                        error.hasNonNull("field") ? error.get("field").asString() : null,
-                        error.get("message").asString());
+                String field = error.hasNonNull("field") ? error.get("field").asString() : null;
+                String message = error.get("message").asString();
+                Map<String, String> fieldErrors = new LinkedHashMap<>();
+                for (JsonNode item : body.path("errors")) {
+                    if (item.hasNonNull("field") && item.hasNonNull("message")) {
+                        fieldErrors.putIfAbsent(item.get("field").asString(), item.get("message").asString());
+                    }
+                }
+                if (fieldErrors.isEmpty() && field != null) {
+                    fieldErrors.put(field, message);
+                }
+                return new AnalysisRejectedException(status == null ? HttpStatus.BAD_GATEWAY : status,
+                        error.get("code").asString(), field, message, fieldErrors);
             }
         } catch (RuntimeException ignored) {
             // Not a structured rejection; fall through.

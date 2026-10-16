@@ -1,7 +1,9 @@
 # ---------------------------------------------------------------------------
-# Stage 1: regenerate the domain validator's ONNX backbone from versioned sources
-# (torchvision ResNet-18 IMAGENET1K_V1) and verify it byte-for-byte against the
-# SHA-256 recorded in the trained classifier. A mismatch fails the build.
+# Stage 1: regenerate both ONNX backbones from versioned sources and verify each
+# byte-for-byte against the SHA-256 recorded when its model was trained. A
+# mismatch fails the build.
+#   - domain validator: torchvision ResNet-18 IMAGENET1K_V1
+#   - hybrid grading model: torchvision ResNet-50 IMAGENET1K_V2
 # ---------------------------------------------------------------------------
 FROM python:3.11-slim AS backbone
 
@@ -13,6 +15,10 @@ WORKDIR /build
 COPY scripts/export_domain_backbone.py ./
 COPY models/domain_validator/classifier.json ./
 RUN python export_domain_backbone.py /out/resnet18_backbone.onnx --verify classifier.json
+
+COPY scripts/export_grading_backbone.py ./
+COPY models/grading_hybrid_rf.json ./
+RUN python export_grading_backbone.py /out/resnet50_backbone.onnx --verify grading_hybrid_rf.json
 
 # ---------------------------------------------------------------------------
 # Stage 2: the service (no torch; inference uses onnxruntime)
@@ -36,6 +42,7 @@ COPY app ./app
 COPY pipelines ./pipelines
 COPY models ./models
 COPY --from=backbone /out/resnet18_backbone.onnx ./models/domain_validator/resnet18_backbone.onnx
+COPY --from=backbone /out/resnet50_backbone.onnx ./models/grading_backbone/resnet50_backbone.onnx
 
 EXPOSE 8000
 

@@ -4,5 +4,6 @@
 .pytest_cache
 .env
 .env.*
-# The ONNX backbone is regenerated and verified in the Docker build, never copied in.
+# The ONNX backbones are regenerated and verified in the Docker build, never copied in.
 models/domain_validator/*.onnx
+models/grading_backbone/

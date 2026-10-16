@@ -18,12 +18,21 @@ public class AnalysisExceptionHandler {
 
     @ExceptionHandler(AnalysisRejectedException.class)
     public ResponseEntity<ApiError> handleRejected(AnalysisRejectedException e, HttpServletRequest request) {
-        return build(e.getStatus(), e.getCode(), e.getField(), e.getMessage(), request);
+        ApiError body = new ApiError(
+                Instant.now(),
+                e.getStatus().value(),
+                e.getStatus().getReasonPhrase(),
+                e.getCode(),
+                e.getMessage(),
+                request.getRequestURI(),
+                e.getFieldErrors().isEmpty() ? null : e.getFieldErrors()
+        );
+        return ResponseEntity.status(e.getStatus()).body(body);
     }
 
     @ExceptionHandler(MaxUploadSizeExceededException.class)
     public ResponseEntity<ApiError> handleTooLarge(HttpServletRequest request) {
-        return build(HttpStatus.PAYLOAD_TOO_LARGE, "IMAGE_TOO_LARGE", "file",
+        return build(HttpStatus.CONTENT_TOO_LARGE, "IMAGE_TOO_LARGE", "file",
                 "The image is larger than the upload limit.", request);
     }
 

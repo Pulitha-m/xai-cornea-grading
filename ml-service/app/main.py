@@ -1,13 +1,11 @@
+import json
 import logging
-import math
 
 from fastapi import FastAPI, File, Form, Request, UploadFile
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 
 from app.schemas.analysis import (
-    ECD_MAX_INCLUSIVE,
-    ECD_MIN_EXCLUSIVE,
     AnalyzeResponse,
     CellularResult,
     DiseaseResult,
@@ -19,6 +17,7 @@ from app.schemas.analysis import (
 )
 from pipelines.cellular.service import run_cellular_analysis
 from pipelines.disease.service import run_disease_analysis
+from pipelines.grading.feature_schema import load_schema, validate_features
 from pipelines.grading.service import run_grading_analysis
 from pipelines.image.decode import ImageRejected, decode_image
 from pipelines.image.domain import NON_CORNEAL, UNCERTAIN, ModelNotReady, validate_domain
@@ -33,9 +32,10 @@ app = FastAPI(
 )
 
 
-def rejected(status_code: int, code: str, message: str, field: str | None = None) -> JSONResponse:
-    body = RejectedResponse(error=ErrorDetail(code=code, field=field, message=message))
-    return JSONResponse(status_code=status_code, content=body.model_dump())
+def rejected(status_code: int, code: str, message: str, field: str | None = None,
+             errors: list[ErrorDetail] | None = None) -> JSONResponse:
+    body = RejectedResponse(error=ErrorDetail(code=code, field=field, message=message), errors=errors)
+    return JSONResponse(status_code=status_code, content=body.model_dump(exclude_none=True))
 
 
 @app.exception_handler(RequestValidationError)
@@ -44,6 +44,8 @@ def request_validation_error(request: Request, exc: RequestValidationError):
     field = str(first.get("loc", ["", "request"])[-1])
     if field == "image":
         return rejected(422, "IMAGE_DECODE_FAILED", "Attach a specular microscopy image.", "image")
+    if field == "clinicalFeatures":
+        return rejected(422, "MISSING_CLINICAL_FEATURES", "The 24 clinical features are required.", field)
     return rejected(422, "INVALID_REQUEST", "The request is missing a required field.", field)
 
 
@@ -52,19 +54,19 @@ def health():
     return {"status": "healthy", "service": "ml-service"}
 
 
-def parse_ecd(raw: str | None) -> float | None:
-    """Optional ECD form field. Blank means not recorded; anything else must be a valid number."""
-    if raw is None or raw.strip() == "":
-        return None
+def parse_clinical_features(raw: str):
+    """The clinicalFeatures form field: a JSON object with all 24 features (null = not recorded)."""
     try:
-        value = float(raw)
-    except ValueError:
-        raise ValueError("INVALID_FEATURE_TYPE") from None
-    if not math.isfinite(value):
-        raise ValueError("INVALID_FEATURE_TYPE")
-    if not ECD_MIN_EXCLUSIVE < value <= ECD_MAX_INCLUSIVE:
-        raise ValueError("FEATURE_OUT_OF_RANGE")
-    return value
+        payload = json.loads(raw, parse_constant=lambda c: float(c))  # NaN/Infinity reach the validator
+    except json.JSONDecodeError:
+        return None, [ErrorDetail(code="FEATURE_SCHEMA_MISMATCH", field="clinicalFeatures",
+                                  message="Clinical features must be a JSON object.")]
+    result = validate_features(payload)
+    if not result.ok:
+        return None, [ErrorDetail(code=e.code, field=e.field, message=e.message) for e in result.errors]
+    values = dict(zip(load_schema()["order"], result.values))
+    warnings = [{"code": w.code, "field": w.field, "message": w.message} for w in result.warnings]
+    return (values, warnings), None
 
 
 def run_module(result_type, runner, *args):
@@ -86,19 +88,15 @@ def run_module(result_type, runner, *args):
 )
 async def analyze(
     caseId: str = Form(..., min_length=1, max_length=100),
-    ecd: str | None = Form(None),
+    clinicalFeatures: str = Form(..., description="JSON object with the 24 model features"),
     image: UploadFile = File(...),
 ):
-    # 1. Cheap input checks before touching the image.
-    try:
-        ecd_value = parse_ecd(ecd)
-    except ValueError as exc:
-        message = (
-            "ECD must be a number."
-            if str(exc) == "INVALID_FEATURE_TYPE"
-            else f"ECD must be greater than {ECD_MIN_EXCLUSIVE:g} and at most {ECD_MAX_INCLUSIVE:g} cells/mm²."
-        )
-        return rejected(422, str(exc), message, "ecd")
+    # 1. Validate the 24 features before touching the image.
+    parsed, errors = parse_clinical_features(clinicalFeatures)
+    if errors:
+        first = errors[0]
+        return rejected(422, first.code, first.message, first.field, errors)
+    feature_values, feature_warnings = parsed
 
     # 2. Decode the actual image bytes safely.
     try:
@@ -124,7 +122,7 @@ async def analyze(
     # 4. Independent analysis modules.
     modules = {
         "cellular": run_module(CellularResult, run_cellular_analysis, decoded.image),
-        "grading": run_module(GradingResult, run_grading_analysis, ecd_value),
+        "grading": run_module(GradingResult, run_grading_analysis, feature_values, feature_warnings, decoded.image),
         "disease": run_module(DiseaseResult, run_disease_analysis, decoded.image),
         "recommendation": run_module(RecommendationResult, run_recommendation_analysis, decoded.image),
     }

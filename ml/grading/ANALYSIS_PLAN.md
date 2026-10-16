@@ -115,6 +115,26 @@ One reporting document that brings together existing results; no new models. It 
 - Served by `ml-service` from an `ecd` request field, with `review_required` when ECD is missing and band grade distributions instead of a confidence value.
 - Documented in `ml-service/README.md`.
 
+## Amendment 2: application grade from the hybrid model
+
+**Decision (2026-10-16, project decision after section D):** the application grade comes from the tuned hybrid model (24 features + image) instead of the ECD tree that section D's rule selected. The ECD tree is still computed and shown beside it as a reference. (Earlier the same day the tuned tabular model was served briefly; it was replaced by the hybrid at the project owner's request.)
+
+**What the evidence says about this choice:**
+
+- In section D the tuned hybrid was the lowest of the three models: macro F1 0.793, against 0.796 for the ECD tree (T1: −0.003 [−0.034, +0.029]) and 0.805 for the tuned tabular model (T3: −0.012 [−0.045, +0.022]). No difference was significant (Holm p = 1.00).
+- The hybrid has **not** been shown to grade better than the ECD tree or the tabular model, and documents must not say it does.
+- The selection rule in section D is not re-run or reinterpreted. This is an override after the rule's result was known, recorded as such.
+
+**Model:**
+
+- `scripts/train_hybrid_grading_model.py` reruns notebook 13's hybrid grid (PCA 8/16/32 × 24 forest settings) with 3-fold donor-grouped CV on all 551 K3 tissues, using the research's cached ResNet-50 embeddings.
+- Selected: PCA 32 components, `min_samples_leaf=1, max_depth=15, max_features=0.3`, no class weighting. Inner-CV macro F1 0.774.
+- The final pipeline, with notebook 13's preprocessing, is fitted on all K3 tissues and exported to `ml-service/models/grading_hybrid_rf.joblib` with its SHA-256.
+- The image backbone (torchvision ResNet-50, IMAGENET1K_V2) is exported to ONNX by `ml-service/scripts/export_grading_backbone.py`. The export is byte-reproducible, and its SHA-256 is recorded with the model. Parity: 551 of 551 training tissues get the same prediction with the served ONNX embeddings as with the research embeddings (largest tree-vote difference 0.060; embeddings differ by at most 0.4% relative).
+- Every training image was 1296 × 972. Other image sizes are resized to that size and reported as a warning that requires review.
+- The performance estimate is notebook 13's nested result (macro F1 0.793 ± 0.047), not the inner score.
+- Model probabilities are the share of trees voting. They have not been calibrated and are shown with that label, never as a confidence.
+
 ### Remaining work
 
 No planned analyses remain. Possible future work:

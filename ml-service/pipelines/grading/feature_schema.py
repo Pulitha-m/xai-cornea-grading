@@ -1,8 +1,8 @@
 """Validation of the 24-feature tabular schema used to train the grading models.
 
 The schema (models/grading_feature_schema.json) is exported from the training
-code by ml/grading/scripts/export_feature_schema.py. The deployed grade uses
-only ECD; this validator is the contract any tabular inference must pass.
+code by ml/grading/scripts/export_feature_schema.py. Every request to the
+hybrid grading model (pipelines/grading/hybrid.py) must pass this validator.
 
 Policy:
 - All 24 keys must be present; unknown keys are rejected.

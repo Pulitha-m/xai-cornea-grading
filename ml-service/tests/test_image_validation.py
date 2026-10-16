@@ -82,7 +82,7 @@ def test_decompression_bomb_rejected_before_pixels_are_decoded():
 def test_non_corneal_image_cannot_produce_a_grade(analyze, domain_status):
     """Regression: a rejected image never reaches grading, even with a valid ECD."""
     domain_status["status"] = NON_CORNEAL
-    response = analyze(ecd=2800)
+    response = analyze()
     assert response.status_code == 422
     body = response.json()
     assert body["status"] == "rejected"
@@ -93,7 +93,7 @@ def test_non_corneal_image_cannot_produce_a_grade(analyze, domain_status):
 
 def test_uncertain_image_is_rejected_for_review(analyze, domain_status):
     domain_status["status"] = UNCERTAIN
-    response = analyze(ecd=2800)
+    response = analyze()
     assert response.status_code == 422
     assert response.json()["error"]["code"] == "CORNEAL_IMAGE_UNCERTAIN"
 
@@ -102,7 +102,7 @@ def test_missing_validator_fails_closed(analyze, monkeypatch):
     def unavailable(image):
         raise ModelNotReady("artifacts missing")
     monkeypatch.setattr("app.main.validate_domain", unavailable)
-    response = analyze(ecd=2800)
+    response = analyze()
     assert response.status_code == 503
     assert response.json()["error"]["code"] == "MODEL_NOT_READY"
     assert "artifacts" not in response.text  # internal detail not exposed
@@ -125,13 +125,15 @@ def test_validator_rejects_tampered_backbone(tmp_path):
 
 def test_dev_bypass_is_labelled_and_never_valid(analyze, monkeypatch):
     monkeypatch.setenv("DOMAIN_VALIDATOR_DEV_BYPASS", "true")
-    body = analyze(ecd=2800).json()
+    body = analyze().json()
     assert body["imageValidation"]["domainStatus"] == "UNVALIDATED_DEV_MODE"
     assert body["imageValidation"]["qualityAssessed"] is False
 
 
 def test_missing_image_field_returns_structured_error(client):
-    response = client.post("/analyze", data={"caseId": "case-1"})
+    import json
+    from tests.conftest import feature_payload
+    response = client.post("/analyze", data={"caseId": "case-1", "clinicalFeatures": json.dumps(feature_payload())})
     assert response.status_code == 422
     assert response.json()["error"]["field"] == "image"
 
@@ -152,6 +154,6 @@ def test_real_validator_rejects_synthetic_non_corneal_content(analyze):
     Image.new("L", (800, 600), 128).save(flat, format="PNG")
 
     for data in (buffer.getvalue(), flat.getvalue(), image_bytes(seed=3)):
-        response = analyze(ecd=2800, image=data)
+        response = analyze(image=data)
         assert response.status_code == 422, response.json()
         assert response.json()["error"]["code"] in ("INVALID_IMAGE_DOMAIN", "CORNEAL_IMAGE_UNCERTAIN")

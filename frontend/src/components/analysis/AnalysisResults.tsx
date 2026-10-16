@@ -1,5 +1,5 @@
 import type { ReactNode } from "react"
-import type { AnalyzeResponse, GradingResult, ImageValidation } from "@/api/analysis"
+import type { AnalyzeResponse, EcdReference, GradingResult, ImageValidation } from "@/api/analysis"
 import {
     formatCount,
     formatEcdBand,
@@ -9,6 +9,7 @@ import {
     isNotImplemented,
     moduleStatus,
 } from "@/lib/analysis-format"
+import { featureLabel } from "@/lib/grading-features"
 import { alertError, alertWarning } from "@/lib/styles"
 import { Card } from "@/components/dashboard/PageHeader"
 import { ConfidenceMeter } from "@/components/analysis/ConfidenceMeter"
@@ -53,7 +54,7 @@ export function AnalysisResults({ result }: { result: AnalyzeResponse }) {
 
                 <ModuleResult
                     title="Cornea grade"
-                    description="ECD-based grade for specialist review — not an eye-bank grading decision."
+                    description="Grade from the hybrid model (clinical features and image) for specialist review — not an eye-bank grading decision."
                     status={grading.status}
                 >
                     <GradingDetails grading={grading} />
@@ -110,52 +111,109 @@ function ImageValidationNote({ validation }: { validation: ImageValidation }) {
 
 const GRADE_ORDER = ["A+", "A", "B"]
 
+const sectionLabel = "text-2xs font-semibold tracking-wide text-muted-foreground uppercase"
+
+/** Grades in display order, followed by any the UI does not know. */
+function orderedGrades(shares: Record<string, number>): string[] {
+    return [...GRADE_ORDER.filter((g) => g in shares), ...Object.keys(shares).filter((g) => !GRADE_ORDER.includes(g))]
+}
+
+function GradeShares({ shares }: { shares: Record<string, number> }) {
+    return (
+        <ul className="mt-2 flex flex-wrap gap-4 text-sm">
+            {orderedGrades(shares).map((grade) => (
+                <li key={grade}>
+                    <span className="font-semibold">{grade}</span>{" "}
+                    <span className="tabular-nums">{formatPercent(shares[grade])}</span>
+                </li>
+            ))}
+        </ul>
+    )
+}
+
 /**
- * The grade comes from fixed ECD cut points. Instead of a model confidence, it shows the recorded
- * grades of training tissues in the same ECD band, since no calibration has been assessed.
+ * The grade comes from the hybrid random forest (24 features + image). Its tree votes are shown as such: they have
+ * not been calibrated, so they are not a confidence. The ECD rule's grade is shown alongside as
+ * the single-feature reference the model was compared with.
  */
 function GradingDetails({ grading }: { grading: GradingResult }) {
-    if (grading.status.toLowerCase() === "review_required") {
-        return <p className={alertWarning}>{grading.message}</p>
-    }
-
-    const distribution = grading.bandDistribution ?? {}
-    const grades = GRADE_ORDER.filter((grade) => grade in distribution)
+    const warnings = grading.warnings ?? []
+    const notRecorded = grading.featuresNotRecorded ?? []
 
     return (
         <div className="space-y-4">
-            <dl className="grid grid-cols-2 gap-4 sm:grid-cols-3">
+            <dl className="grid grid-cols-2 gap-4">
                 <Field label="Predicted grade" value={grading.grade} />
-                <Field label="ECD used" value={formatCount(grading.ecdUsed)} unit="cells/mm²" />
-                <Field label="ECD band" value={formatEcdBand(grading.ecdBand)} />
+                <Field label="Inputs recorded" value={`${24 - notRecorded.length} of 24`} />
             </dl>
 
-            {grades.length > 0 && (
+            {grading.modelProbabilities && Object.keys(grading.modelProbabilities).length > 0 && (
                 <div>
-                    <p className="text-2xs font-semibold tracking-wide text-muted-foreground uppercase">
-                        Recorded grades in this ECD band
-                    </p>
-                    <p className="mt-0.5 text-xs text-muted-foreground">
-                        {grading.bandTrainingTissues} training tissues — not model confidence
-                    </p>
-                    <ul className="mt-2 flex flex-wrap gap-4 text-sm">
-                        {grades.map((grade) => (
-                            <li key={grade}>
-                                <span className="font-semibold">{grade}</span>{" "}
-                                <span className="tabular-nums">{formatPercent(distribution[grade])}</span>
-                            </li>
+                    <p className={sectionLabel}>Share of trees voting for each grade</p>
+                    <p className="mt-0.5 text-xs text-muted-foreground">Not calibrated — not a confidence</p>
+                    <GradeShares shares={grading.modelProbabilities} />
+                </div>
+            )}
+
+            {warnings.length > 0 && (
+                <div role="alert" className={alertWarning}>
+                    <p className="font-medium">Check these inputs before relying on the grade:</p>
+                    <ul className="mt-1 list-disc pl-5">
+                        {warnings.map((warning, index) => (
+                            <li key={`${warning.code}-${warning.field ?? index}`}>{warning.message}</li>
                         ))}
                     </ul>
                 </div>
             )}
 
-            {grading.reviewRequired && (
-                <p role="alert" className={alertWarning}>
-                    This ECD is outside the range seen in the training data. Review the grade carefully.
-                </p>
+            {notRecorded.length > 0 && (
+                <details className="text-xs text-muted-foreground">
+                    <summary className="cursor-pointer">
+                        {notRecorded.length} input{notRecorded.length === 1 ? "" : "s"} not recorded
+                    </summary>
+                    <p className="mt-1">{notRecorded.map(featureLabel).join(", ")}</p>
+                </details>
             )}
 
+            {grading.ecdReference && <EcdReferenceDetails reference={grading.ecdReference} />}
+
             {grading.message && <p className="text-xs text-muted-foreground">{grading.message}</p>}
+        </div>
+    )
+}
+
+function EcdReferenceDetails({ reference }: { reference: EcdReference }) {
+    const title = <p className={sectionLabel}>Reference: ECD rule</p>
+
+    if (reference.status.toLowerCase() !== "completed") {
+        return (
+            <div className="border-t border-border pt-4">
+                {title}
+                <p className="mt-1 text-xs text-muted-foreground">{reference.message}</p>
+            </div>
+        )
+    }
+
+    const distribution = reference.bandDistribution ?? {}
+    return (
+        <div className="space-y-2 border-t border-border pt-4">
+            {title}
+            <dl className="grid grid-cols-2 gap-4 sm:grid-cols-3">
+                <Field label="ECD rule grade" value={reference.grade} />
+                <Field label="ECD used" value={formatCount(reference.ecdUsed)} unit="cells/mm²" />
+                <Field label="ECD band" value={formatEcdBand(reference.ecdBand)} />
+            </dl>
+            {Object.keys(distribution).length > 0 && (
+                <div>
+                    <p className="text-xs text-muted-foreground">
+                        Recorded grades of the {reference.bandTrainingTissues} training tissues in this band
+                    </p>
+                    <GradeShares shares={distribution} />
+                </div>
+            )}
+            {reference.reviewRequired && (
+                <p className="text-xs text-warning">This ECD is outside the range seen in training.</p>
+            )}
         </div>
     )
 }

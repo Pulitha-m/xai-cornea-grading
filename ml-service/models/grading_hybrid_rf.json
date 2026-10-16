@@ -1,0 +1,93 @@
+{
+  "model": "hybrid_random_forest_24_resnet50",
+  "version": 1,
+  "features": [
+    "ECD_CD_cells_per_mm2",
+    "CV",
+    "HEX_percent",
+    "SD",
+    "Total_Cell_Count",
+    "Total_Area_um2",
+    "Stroma_Is_Clear",
+    "Stroma_Is_Compact",
+    "Stroma_Has_Arcus",
+    "Stroma_Has_Edema",
+    "Stroma_Has_Scar",
+    "Epi_Has_Arcus",
+    "Epi_Has_Defect",
+    "Epi_Has_Exposure",
+    "Epi_Has_Haze",
+    "Endo_Has_Stress_Lines",
+    "Endo_Has_RBC",
+    "Endo_Has_Cell_Dropout",
+    "Descemet_Has_Folds",
+    "Descemet_Fold_Severity",
+    "Descemet_Fold_Relative_Number",
+    "Endo_Stress_Line_Location",
+    "Stroma_Arcus_Severity",
+    "Epi_Exposure_Severity"
+  ],
+  "embedding_columns": 2048,
+  "classes": [
+    "A",
+    "A+",
+    "B"
+  ],
+  "setting": {
+    "pca_components": 32,
+    "min_samples_leaf": 1,
+    "max_depth": 15,
+    "max_features": 0.3,
+    "class_weight": null,
+    "n_estimators": 300,
+    "random_state": 42
+  },
+  "inner_cv_macro_f1": 0.7741,
+  "backbone": {
+    "file": "grading_backbone/resnet50_backbone.onnx",
+    "sha256": "af09c71b9dadd5afde579e80e7d9763bcd97e5b5bc8dbbe2a98971a549dd3ab0",
+    "source": "torchvision ResNet-50, IMAGENET1K_V2, fc removed (scripts/export_grading_backbone.py)",
+    "preprocessing": "8-bit greyscale at full resolution, /255, repeated to 3 channels, ImageNet mean/std normalisation (notebook 07)",
+    "training_image_size": [
+      1296,
+      972
+    ],
+    "parity_with_training_embeddings": {
+      "tissues": 551,
+      "max_relative_l2_difference": 0.00373,
+      "same_prediction": 551,
+      "max_probability_difference": 0.06,
+      "note": "Training embeddings were computed with PyTorch (notebook 07); the service uses the ONNX export on CPU. Counts compare the fitted model's predictions on the 551 training tissues with each set of embeddings."
+    }
+  },
+  "training": {
+    "cohort": "Primary cohort K3: non-2023, image-matched tissues (RESULTS.md)",
+    "tissues": 551,
+    "donors": 312,
+    "grades": {
+      "A+": 277,
+      "A": 196,
+      "B": 78
+    },
+    "data_sha256": "0ce9b384a51a4c47c8a8a6616b8cd36a829f142493d73287534305ae5c15ffce",
+    "embeddings_sha256": "883d4a1723a17be7889ff4f4f810308fdac3f44dbe85ddc93379b0089ab6cbef",
+    "versions": {
+      "scikit_learn": "1.9.1",
+      "pandas": "3.0.6",
+      "numpy": "2.4.6"
+    },
+    "trained_on": "2026-10-16"
+  },
+  "model_sha256": "fcc02c90ca3c8292addc46b7f79c114bd644747788b891cd2a5e8590b9f5422b",
+  "evaluation": {
+    "source": "13_nested_tuning_model_selection.ipynb (25 donor-grouped outer folds, 3-fold inner tuning)",
+    "macro_f1": "0.793 ± 0.047",
+    "balanced_accuracy": "0.775 ± 0.050",
+    "accuracy": "0.797 ± 0.040",
+    "grade_b_recall": "0.789 ± 0.130",
+    "vs_ecd_tree_macro_f1": "−0.003 [−0.034, +0.029], Holm p = 1.00 (not significant)",
+    "vs_tuned_tabular_macro_f1": "−0.012 [−0.045, +0.022], Holm p = 1.00 (not significant)"
+  },
+  "probability_note": "predict_proba is the share of trees voting for each grade. It has not been calibrated and must not be presented as a confidence.",
+  "deployment_note": "Served as the application grade by project decision; notebook 13's rule had selected the ECD tree, and the hybrid was not better than it or than the tuned tabular model. See ANALYSIS_PLAN.md, Amendment 2."
+}

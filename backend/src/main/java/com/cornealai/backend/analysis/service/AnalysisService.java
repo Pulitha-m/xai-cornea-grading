@@ -64,7 +64,11 @@ public class AnalysisService {
         run.setImageId(image.getId());
         run.setCaseId(caseId);
         run.setRequestedBy(userId);
-        run.setEcd(request.ecd());
+        String featuresJson = objectMapper.writeValueAsString(request.clinicalFeatures());
+        run.setClinicalFeaturesJson(featuresJson);
+        if (request.clinicalFeatures().get("ECD_CD_cells_per_mm2") instanceof Number ecd) {
+            run.setEcd(ecd.doubleValue());
+        }
 
         try {
             byte[] data = storage.read(image.getObjectPath());
@@ -73,7 +77,7 @@ public class AnalysisService {
                         "The stored image could not be verified. Upload it again.");
             }
             String filename = image.getId() + (image.getContentType().equals("image/png") ? ".png" : ".jpg");
-            AnalyzeResponse result = mlServiceClient.analyze(caseId, request.ecd(), data, filename);
+            AnalyzeResponse result = mlServiceClient.analyze(caseId, featuresJson, data, filename);
             if (result == null || result.status() == null || result.grading() == null) {
                 throw new AnalysisRejectedException(HttpStatus.BAD_GATEWAY, "MODEL_INFERENCE_FAILED", null,
                         "The analysis could not be completed. Try again later.");

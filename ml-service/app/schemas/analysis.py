@@ -1,9 +1,5 @@
 from pydantic import BaseModel, Field
 
-# Valid ECD range (cells/mm²): ECD_MIN_EXCLUSIVE < ecd <= ECD_MAX_INCLUSIVE.
-ECD_MIN_EXCLUSIVE = 0.0
-ECD_MAX_INCLUSIVE = 6000.0
-
 
 class ErrorDetail(BaseModel):
     code: str
@@ -16,6 +12,7 @@ class RejectedResponse(BaseModel):
 
     status: str = "rejected"
     error: ErrorDetail
+    errors: list[ErrorDetail] | None = Field(None, description="All field errors, when there are several")
 
 
 class ImageValidation(BaseModel):
@@ -43,9 +40,10 @@ class EcdBand(BaseModel):
     upperInclusive: float | None = None
 
 
-class GradingResult(BaseModel):
+class EcdReference(BaseModel):
+    """Grade from the ECD threshold tree alone, shown next to the 24-feature grade."""
+
     status: str
-    error: str | None = None
     grade: str | None = None
     method: str | None = None
     ecdUsed: float | None = None
@@ -55,6 +53,28 @@ class GradingResult(BaseModel):
         description="Recorded grades of training tissues in the same ECD band (not model confidence)",
     )
     bandTrainingTissues: int | None = None
+    reviewRequired: bool | None = None
+    message: str | None = None
+
+
+class FeatureWarning(BaseModel):
+    code: str
+    field: str
+    message: str
+
+
+class GradingResult(BaseModel):
+    status: str
+    error: str | None = None
+    grade: str | None = None
+    method: str | None = None
+    modelProbabilities: dict[str, float] | None = Field(
+        None,
+        description="Share of trees voting for each grade; not calibrated, not a confidence",
+    )
+    featuresNotRecorded: list[str] | None = None
+    warnings: list[FeatureWarning] | None = None
+    ecdReference: EcdReference | None = None
     reviewRequired: bool | None = None
     message: str | None = None
 

@@ -7,9 +7,9 @@ FastAPI inference service for Corneal-AI. The backend sends it the actual image 
 ```
 Browser ──multipart──► Backend POST /api/analysis/images   (checks size, signature, dimensions;
                                                              stores in a private Supabase bucket)
-Browser ──JSON {caseId, imageId, ecd}──► Backend POST /api/analysis
+Browser ──JSON {caseId, imageId, clinicalFeatures}──► Backend POST /api/analysis
           Backend: owner check → reads the stored bytes → SHA-256 integrity check
-          Backend ──multipart {caseId, ecd, image}──► ml-service POST /analyze
+          Backend ──multipart {caseId, clinicalFeatures, image}──► ml-service POST /analyze
           ml-service: decode → domain validation → modules → response
 ```
 
@@ -23,7 +23,7 @@ Multipart form fields:
 |---|---|---|
 | `image` | yes | The image file (JPEG or PNG) |
 | `caseId` | yes | Case identifier |
-| `ecd` | no | Endothelial cell density (cells/mm²) from the specular microscopy report; `0 < ecd ≤ 6000` |
+| `clinicalFeatures` | yes | JSON object with all 24 grading features (see [24-feature schema](#24-feature-schema)); `null` = not recorded |
 
 Processing order: input checks → image decoding → domain validation → modules. A failure at any step returns a rejection and no module runs:
 
@@ -39,7 +39,8 @@ Processing order: input checks → image decoding → domain validation → modu
 | `IMAGE_DIMENSIONS_INVALID` | 422 | Sides outside `IMAGE_MIN_SIDE`–`IMAGE_MAX_SIDE`, or more than `IMAGE_MAX_PIXELS` (decompression bombs are rejected from the header) |
 | `INVALID_IMAGE_DOMAIN` | 422 | Not a specular microscopy image of the corneal endothelium |
 | `CORNEAL_IMAGE_UNCERTAIN` | 422 | Validator score in the uncertain band |
-| `INVALID_FEATURE_TYPE` / `FEATURE_OUT_OF_RANGE` | 422 | Malformed or out-of-range `ecd` |
+| `MISSING_CLINICAL_FEATURES` / `FEATURE_SCHEMA_MISMATCH` | 422 | `clinicalFeatures` missing, not a JSON object, or with missing/unknown keys |
+| `INVALID_FEATURE_TYPE` / `FEATURE_OUT_OF_RANGE` | 422 | Malformed or impossible feature value; every such error is listed in `errors` with its `field` |
 | `MODEL_NOT_READY` | 503 | Domain validator artifacts missing or mismatched (fails closed) |
 
 A successful response has `status` `completed` (every module completed) or `partial`, plus `imageValidation` and one result per module. Modules run independently: `not_implemented` and `failed` modules carry no values, and nothing is substituted.
@@ -81,7 +82,17 @@ Full results: `models/domain_validator/evaluation.json`.
 
 ## Grading
 
-ECD threshold tree selected in `ml/grading/notebooks/images/13_nested_tuning_model_selection.ipynb`: neither a tuned 24-feature tabular model nor a tuned tabular + image model convincingly outperformed it (`ml/grading/RESULTS.md`).
+The grade comes from the tuned hybrid Random Forest on the 24 features and the image (`pipelines/grading/hybrid.py`, `method: hybrid_random_forest_24_resnet50`). This is a project decision recorded as Amendment 2 in `ml/grading/ANALYSIS_PLAN.md`: notebook 13's rule had selected the ECD tree, and the hybrid was **not better** than it (macro F1 −0.003 [−0.034, +0.029]) or than the tuned tabular model (−0.012), Holm p = 1.00.
+
+- **Model:** `models/grading_hybrid_rf.joblib` (PCA 32 components, `min_samples_leaf=1, max_depth=15, max_features=0.3`, no class weighting), with notebook 13's preprocessing. Its SHA-256 and the backbone's are recorded in `grading_hybrid_rf.json`; the service refuses files that do not match, and grading then reports `failed` with no grade. Regenerate with `ml/grading/scripts/train_hybrid_grading_model.py` (needs the git-ignored grading dataset and embeddings).
+- **Image features:** ResNet-50 (ImageNet IMAGENET1K_V2) on the full-resolution greyscale image, as in training. Every training image was 1296 × 972; other sizes are resized to that and reported as an `IMAGE_NOT_TRAINING_SIZE` warning. 551 of 551 training tissues get the same prediction with the served ONNX embeddings as with the research embeddings (largest tree-vote difference 0.060; embeddings differ by at most 0.4% relative).
+- **Estimated performance** (notebook 13, donor-grouped nested CV): macro F1 0.793 ± 0.047, grade B recall 0.79 ± 0.13.
+- **`modelProbabilities`:** the share of trees voting for each grade. **Not calibrated; not a confidence.**
+- **Missing inputs:** `null` features are handled as in training and listed in `featuresNotRecorded`.
+- **`warnings`:** schema warnings (outside the training range, ECD inconsistent with count/area) and the image-size warning. Any warning sets `reviewRequired`.
+- **Decision support only.** A specialist confirms every grade.
+
+**ECD reference (`ecdReference`).** The ECD threshold tree from notebook 13 is computed alongside as the single-feature baseline (`models/grading_ecd_tree.json`, from `ml/grading/scripts/train_grading_model.py`):
 
 | ECD (cells/mm²) | Grade |
 |---|---|
@@ -89,10 +100,7 @@ ECD threshold tree selected in `ml/grading/notebooks/images/13_nested_tuning_mod
 | > 2232 and ≤ 2497 | A |
 | > 2497 | A+ |
 
-- **Decision support only.** The grade uses ECD alone; slit-lamp findings and other morphology are not considered and may justify a lower grade. A specialist confirms every grade.
-- **No ECD** → `review_required` with no grade.
-- **Not a confidence score:** `bandDistribution` reports the recorded grades of training tissues in the same ECD band. No calibration was assessed.
-- **Spec:** `models/grading_ecd_tree.json`. Regenerate it with `ml/grading/scripts/train_grading_model.py` (needs the git-ignored grading dataset).
+It reports the band and the recorded grades of training tissues in that band. When ECD is not recorded, `ecdReference.status` is `review_required` with no grade and the overall `reviewRequired` is true.
 
 ### 24-feature schema
 
@@ -102,7 +110,7 @@ ECD threshold tree selected in `ml/grading/notebooks/images/13_nested_tuning_mod
 - malformed or impossible values are errors;
 - values outside the training range, and an ECD inconsistent with count/area, are warnings.
 
-The deployed grade uses only ECD. The schema is the contract for any future tabular inference, and `tests/test_feature_schema.py` checks it against the training code's feature lists.
+Every grading request passes this validator. `tests/test_feature_schema.py` checks the schema against the training code's feature lists, and the frontend's feature list is checked against it in `frontend/src/lib/grading-features.test.ts`.
 
 ## Other modules
 
@@ -118,13 +126,13 @@ Cellular analysis, disease screening and recommendation return `not_implemented`
 | `DOMAIN_VALIDATOR_DIR` | `models/domain_validator` | Validator artifacts |
 | `DOMAIN_VALIDATOR_DEV_BYPASS` | unset | **Development only.** `true` skips domain validation; responses are marked `UNVALIDATED_DEV_MODE` and never valid |
 
-## Docker and the ONNX backbone
+## Docker and the ONNX backbones
 
-The backbone (`resnet18_backbone.onnx`, about 45 MB) is not in git. The Dockerfile regenerates it in a build stage:
-- `scripts/export_domain_backbone.py` runs with pinned `torch==2.14.1` and `torchvision==0.29.1` (CPU).
-- torchvision downloads the ResNet-18 IMAGENET1K_V1 weights from their versioned, hash-named URL.
-- The script **verifies the exported file's SHA-256 against `classifier.json`**, so the build fails if the backbone ever differs from the one the classifier was trained with. The export is byte-for-byte reproducible: CUDA build on Windows and CPU build on Linux gave the same hash.
-- A local `.onnx` is excluded from the build context.
+Two backbones are not in git: `domain_validator/resnet18_backbone.onnx` (about 45 MB) and `grading_backbone/resnet50_backbone.onnx` (about 94 MB). The Dockerfile regenerates both in a build stage:
+- `scripts/export_domain_backbone.py` and `scripts/export_grading_backbone.py` run with pinned `torch==2.14.1` and `torchvision==0.29.1` (CPU).
+- torchvision downloads the ResNet-18 IMAGENET1K_V1 and ResNet-50 IMAGENET1K_V2 weights from their versioned, hash-named URLs.
+- Each script **verifies the exported file's SHA-256 against the trained model's metadata** (`classifier.json`, `grading_hybrid_rf.json`), so the build fails if a backbone ever differs from the one its model was trained with. The ResNet-18 export was byte-identical between a CUDA build on Windows and a CPU build on Linux; the ResNet-50 export was byte-identical across repeated runs on Windows.
+- Local `.onnx` files are excluded from the build context.
 
 Licences: torchvision is BSD-3-Clause; the pretrained weights were trained on ImageNet ([terms](https://pytorch.org/vision/stable/models.html)). COCO images were used for training and evaluation only and are not distributed.
 
@@ -133,7 +141,10 @@ For local development without Docker, generate the backbone once:
 ```
 cd ml
 .venv/Scripts/python.exe ../ml-service/scripts/export_domain_backbone.py ../ml-service/models/domain_validator/resnet18_backbone.onnx --verify ../ml-service/models/domain_validator/classifier.json
+.venv/Scripts/python.exe ../ml-service/scripts/export_grading_backbone.py ../ml-service/models/grading_backbone/resnet50_backbone.onnx --verify ../ml-service/models/grading_hybrid_rf.json
 ```
+
+Without the grading backbone the service still starts, but grading reports `failed`. Tests stub the backbone with synthetic embeddings, except one marked `real_backbone`, which is skipped when the file is absent.
 
 ## Tests
 

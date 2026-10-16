@@ -6,7 +6,7 @@ Corneal Cellular Intelligence Platform: React frontend, Spring Boot backend, Fas
 |---|---|
 | `frontend/` | React + Vite app (served by nginx in Docker) |
 | `backend/` | Spring Boot API: authentication, roles, image upload and analysis requests |
-| `ml-service/` | FastAPI inference: image validation, corneal-image domain check, ECD grading (see `ml-service/README.md`) |
+| `ml-service/` | FastAPI inference: image validation, corneal-image domain check, hybrid grading (see `ml-service/README.md`) |
 | `ml/grading/` | Research notebooks and scripts; findings in `FINDINGS.md`, `RESULTS.md`, `CLAIMS_AUDIT.md` |
 
 ## Running with Docker
@@ -25,5 +25,5 @@ Database migrations (Flyway) run when the backend starts. `V3__analysis_images.s
 ## What the analysis does and does not do
 
 - **Images are checked before analysis:** JPEG or PNG only, plus size and dimension limits. A trained validator rejects images that are not specular microscopy images of the corneal endothelium. It is evaluated on held-out photos, documents and synthetic images, but **not clinically validated**, and it does not assess image quality (see `ml-service/README.md`).
-- **The grade comes from ECD alone** (cut points 2232 / 2497 cells/mm²) and is decision support for a specialist. It is not an eye-bank grading decision.
+- **The grade comes from a hybrid model**: the image plus 24 Konan measurements and slit-lamp findings entered with it. In the research it was **not better than ECD alone** (or than the same model without the image); the ECD grade is shown beside it as a reference. Its tree-vote shares are not calibrated and are not a confidence. The grade is decision support for a specialist, not an eye-bank grading decision.
 - **Not implemented yet:** cellular analysis, disease screening and recommendation. They report `not_implemented` instead of values.

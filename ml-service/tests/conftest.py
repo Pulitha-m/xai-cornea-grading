@@ -37,12 +37,43 @@ def domain_status(monkeypatch):
     return state
 
 
+def synthetic_embedding(seed: int) -> np.ndarray:
+    """Same generator as ml/grading/scripts/train_hybrid_grading_model.py (golden cases)."""
+    return np.random.default_rng(seed).exponential(0.45, 2048).astype(np.float32)
+
+
+@pytest.fixture(autouse=True)
+def image_embedding(request, monkeypatch):
+    """Stub the ResNet-50 backbone (a 94 MB file not in git) with a synthetic embedding.
+
+    Tests marked `real_backbone` use the exported ONNX backbone instead. Tests may set
+    the seed and whether the image counts as resized.
+    """
+    state = {"seed": 1000, "resized": False}
+    if "real_backbone" not in request.keywords:
+        from pipelines.grading import hybrid
+        monkeypatch.setattr(hybrid, "embed", lambda image: (synthetic_embedding(state["seed"]), state["resized"]))
+    return state
+
+
+def feature_payload(**overrides):
+    """A complete, valid 24-feature payload (Konan values consistent: 104 / 40000 µm² ≈ 2600 cells/mm²)."""
+    from pipelines.grading.feature_schema import load_schema
+    payload = {}
+    for spec in load_schema()["features"]:
+        payload[spec["name"]] = {"number": None, "binary": 0, "category": None}[spec["type"]]
+    payload.update({"ECD_CD_cells_per_mm2": 2600.0, "CV": 35.0, "HEX_percent": 55.0, "SD": 130.0,
+                    "Total_Cell_Count": 104, "Total_Area_um2": 40000.0})
+    payload.update(overrides)
+    return payload
+
+
 @pytest.fixture
 def analyze(client):
-    def call(ecd=None, image=None, filename="image.png", content_type="image/png", case_id="case-1"):
-        data = {"caseId": case_id}
-        if ecd is not None:
-            data["ecd"] = str(ecd)
+    def call(features=None, image=None, filename="image.png", content_type="image/png", case_id="case-1", raw_features=None):
+        import json
+        data = {"caseId": case_id,
+                "clinicalFeatures": raw_features if raw_features is not None else json.dumps(features if features is not None else feature_payload())}
         files = {"image": (filename, image if image is not None else image_bytes(), content_type)}
         return client.post("/analyze", data=data, files=files)
 

@@ -40,6 +40,9 @@ public class AnalysisRun {
     @Column(name = "result_json", columnDefinition = "TEXT")
     private String resultJson;
 
+    @Column(name = "clinical_features_json", columnDefinition = "TEXT")
+    private String clinicalFeaturesJson;
+
     @Column(name = "created_at", nullable = false, updatable = false)
     private Instant createdAt;
 

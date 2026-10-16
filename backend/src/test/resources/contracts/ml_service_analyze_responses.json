@@ -21,20 +21,51 @@
       "status": "completed",
       "error": null,
       "grade": "A",
-      "method": "ecd_threshold_tree",
-      "ecdUsed": 2400.0,
-      "ecdBand": {
-        "lowerExclusive": 2232.0,
-        "upperInclusive": 2497.0
+      "method": "hybrid_random_forest_24_resnet50",
+      "modelProbabilities": {
+        "A": 0.484,
+        "A+": 0.089,
+        "B": 0.427
       },
-      "bandDistribution": {
-        "A+": 0.021,
-        "A": 0.894,
-        "B": 0.085
+      "featuresNotRecorded": [
+        "Stroma_Is_Compact",
+        "Stroma_Has_Arcus",
+        "Stroma_Has_Edema",
+        "Epi_Has_Arcus",
+        "Epi_Has_Defect",
+        "Epi_Has_Exposure",
+        "Epi_Has_Haze",
+        "Endo_Has_Stress_Lines",
+        "Endo_Has_RBC",
+        "Endo_Has_Cell_Dropout",
+        "Descemet_Has_Folds",
+        "Descemet_Fold_Severity",
+        "Descemet_Fold_Relative_Number",
+        "Endo_Stress_Line_Location",
+        "Stroma_Arcus_Severity",
+        "Epi_Exposure_Severity"
+      ],
+      "warnings": [],
+      "ecdReference": {
+        "status": "completed",
+        "grade": "A",
+        "method": "ecd_threshold_tree",
+        "ecdUsed": 2400.0,
+        "ecdBand": {
+          "lowerExclusive": 2232.0,
+          "upperInclusive": 2497.0
+        },
+        "bandDistribution": {
+          "A+": 0.021,
+          "A": 0.894,
+          "B": 0.085
+        },
+        "bandTrainingTissues": 94,
+        "reviewRequired": false,
+        "message": "Grade based on ECD only (cut points 2232, 2497 cells/mm²). Slit-lamp findings and other morphology are not considered and may justify a lower grade. Specialist confirmation required."
       },
-      "bandTrainingTissues": 94,
       "reviewRequired": false,
-      "message": "Grade based on ECD only (cut points 2232, 2497 cells/mm²). Slit-lamp findings and other morphology are not considered and may justify a lower grade. Specialist confirmation required."
+      "message": "Grade from the hybrid model (24 Konan and slit-lamp inputs plus image features). In nested cross-validation it was not better than the ECD rule shown below. Specialist confirmation required. 16 of 24 inputs were not recorded and were handled as in training."
     },
     "disease": {
       "status": "not_implemented",
@@ -50,7 +81,7 @@
       "confidence": null
     }
   },
-  "review_required": {
+  "missing_ecd": {
     "caseId": "case-1",
     "status": "partial",
     "imageValidation": {
@@ -69,16 +100,50 @@
       "hexagonality": null
     },
     "grading": {
-      "status": "review_required",
+      "status": "completed",
       "error": null,
-      "grade": null,
-      "method": "ecd_threshold_tree",
-      "ecdUsed": null,
-      "ecdBand": null,
-      "bandDistribution": null,
-      "bandTrainingTissues": null,
+      "grade": "A",
+      "method": "hybrid_random_forest_24_resnet50",
+      "modelProbabilities": {
+        "A": 0.417,
+        "A+": 0.353,
+        "B": 0.23
+      },
+      "featuresNotRecorded": [
+        "ECD_CD_cells_per_mm2",
+        "Total_Cell_Count",
+        "Total_Area_um2",
+        "Stroma_Is_Compact",
+        "Stroma_Has_Arcus",
+        "Stroma_Has_Edema",
+        "Epi_Has_Arcus",
+        "Epi_Has_Defect",
+        "Epi_Has_Exposure",
+        "Epi_Has_Haze",
+        "Endo_Has_Stress_Lines",
+        "Endo_Has_RBC",
+        "Endo_Has_Cell_Dropout",
+        "Descemet_Has_Folds",
+        "Descemet_Fold_Severity",
+        "Descemet_Fold_Relative_Number",
+        "Endo_Stress_Line_Location",
+        "Stroma_Arcus_Severity",
+        "Epi_Exposure_Severity"
+      ],
+      "warnings": [],
+      "ecdReference": {
+        "status": "review_required",
+        "grade": null,
+        "method": "ecd_threshold_tree",
+        "ecdUsed": null,
+        "ecdBand": null,
+        "bandDistribution": null,
+        "bandTrainingTissues": null,
+        "reviewRequired": true,
+        "message": "ECD is required for automated grading. Grade this tissue manually."
+      },
       "reviewRequired": true,
-      "message": "ECD is required for automated grading. Grade this tissue manually."
+      "message": "Grade from the hybrid model (24 Konan and slit-lamp inputs plus image features). In nested cross-validation it was not better than the ECD rule shown below. Specialist confirmation required. 19 of 24 inputs were not recorded and were handled as in training."
     },
     "disease": {
       "status": "not_implemented",
@@ -101,5 +166,25 @@
       "field": "image",
       "message": "Upload a specular microscopy image showing corneal endothelial cells."
     }
+  },
+  "rejected_features": {
+    "status": "rejected",
+    "error": {
+      "code": "MISSING_CLINICAL_FEATURES",
+      "field": "HEX_percent",
+      "message": "HEX_percent is required (use null if not recorded)."
+    },
+    "errors": [
+      {
+        "code": "MISSING_CLINICAL_FEATURES",
+        "field": "HEX_percent",
+        "message": "HEX_percent is required (use null if not recorded)."
+      },
+      {
+        "code": "INVALID_FEATURE_TYPE",
+        "field": "CV",
+        "message": "CV must be a number (%)."
+      }
+    ]
   }
 }

@@ -37,7 +37,7 @@ class RoleBasedAccessIntegrationTests extends IntegrationTestSupport {
 
     /** For requests refused before the image is looked up; the id does not exist. */
     private static final String ANALYZE_BODY = """
-            {"caseId":"CASE-1","imageId":"%s"}
+            {"caseId":"CASE-1","imageId":"%s","clinicalFeatures":{}}
             """.formatted(UUID.randomUUID());
 
     @MockitoBean
@@ -53,8 +53,8 @@ class RoleBasedAccessIntegrationTests extends IntegrationTestSupport {
     void stubMlService() {
         when(mlServiceClient.analyze(any(), any(), any(), any()))
                 .thenReturn(new AnalyzeResponse(null, "CASE-1", "partial", null, null,
-                        new GradingResult("review_required", null, null, "ecd_threshold_tree", null, null, null,
-                                null, true, "ECD is required for automated grading."),
+                        new GradingResult("completed", null, "A", "hybrid_random_forest_24_resnet50", null, null, null,
+                                null, false, "Grade from the 24-feature model."),
                         null, null));
         when(imageStorage.read(any())).thenReturn(IMAGE_BYTES);
     }
@@ -74,7 +74,7 @@ class RoleBasedAccessIntegrationTests extends IntegrationTestSupport {
         image.setUploadedBy(owner.getId());
         imageRepository.saveAndFlush(image);
         return """
-                {"caseId":"CASE-1","imageId":"%s"}
+                {"caseId":"CASE-1","imageId":"%s","clinicalFeatures":{}}
                 """.formatted(image.getId());
     }
 
