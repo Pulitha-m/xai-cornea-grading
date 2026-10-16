@@ -15,6 +15,7 @@ RUN uv sync --frozen --no-dev --no-install-project
 
 COPY app ./app
 COPY pipelines ./pipelines
+COPY models ./models
 
 EXPOSE 8000
 

@@ -1,0 +1,83 @@
+{
+  "completed": {
+    "caseId": "case-1",
+    "status": "completed",
+    "cellular": {
+      "status": "not_implemented",
+      "error": "Cellular analysis is not implemented yet.",
+      "cellCount": null,
+      "ecd": null,
+      "coefficientOfVariation": null,
+      "hexagonality": null
+    },
+    "grading": {
+      "status": "completed",
+      "error": null,
+      "grade": "A",
+      "method": "ecd_threshold_tree",
+      "ecdUsed": 2400.0,
+      "ecdBand": {
+        "lowerExclusive": 2232.0,
+        "upperInclusive": 2497.0
+      },
+      "bandDistribution": {
+        "A+": 0.021,
+        "A": 0.894,
+        "B": 0.085
+      },
+      "bandTrainingTissues": 94,
+      "reviewRequired": false,
+      "message": "Grade based on ECD only (cut points 2232, 2497 cells/mm²). Slit-lamp findings and other morphology are not considered and may justify a lower grade. Specialist confirmation required."
+    },
+    "disease": {
+      "status": "completed",
+      "error": null,
+      "disease": "none_detected",
+      "severity": "normal",
+      "confidence": 0.95
+    },
+    "recommendation": {
+      "status": "completed",
+      "error": null,
+      "recommendation": "Suitable for further evaluation",
+      "confidence": 0.88
+    }
+  },
+  "review_required": {
+    "caseId": "case-2",
+    "status": "completed",
+    "cellular": {
+      "status": "not_implemented",
+      "error": "Cellular analysis is not implemented yet.",
+      "cellCount": null,
+      "ecd": null,
+      "coefficientOfVariation": null,
+      "hexagonality": null
+    },
+    "grading": {
+      "status": "review_required",
+      "error": null,
+      "grade": null,
+      "method": "ecd_threshold_tree",
+      "ecdUsed": null,
+      "ecdBand": null,
+      "bandDistribution": null,
+      "bandTrainingTissues": null,
+      "reviewRequired": true,
+      "message": "ECD is required for automated grading. Grade this tissue manually."
+    },
+    "disease": {
+      "status": "completed",
+      "error": null,
+      "disease": "none_detected",
+      "severity": "normal",
+      "confidence": 0.95
+    },
+    "recommendation": {
+      "status": "completed",
+      "error": null,
+      "recommendation": "Suitable for further evaluation",
+      "confidence": 0.88
+    }
+  }
+}

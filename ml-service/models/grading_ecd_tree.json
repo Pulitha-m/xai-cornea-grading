@@ -1,0 +1,66 @@
+{
+  "model": "ecd_threshold_tree",
+  "spec_version": 1,
+  "feature": "ecd_cells_per_mm2",
+  "decision_rule": "A value v falls in the band with lower_exclusive < v <= upper_inclusive (null = unbounded).",
+  "cut_points": [
+    2232.0,
+    2497.0
+  ],
+  "bands": [
+    {
+      "lower_exclusive": null,
+      "upper_inclusive": 2232.0,
+      "grade": "B",
+      "training_counts": {
+        "A+": 0,
+        "A": 0,
+        "B": 53
+      }
+    },
+    {
+      "lower_exclusive": 2232.0,
+      "upper_inclusive": 2497.0,
+      "grade": "A",
+      "training_counts": {
+        "A+": 2,
+        "A": 84,
+        "B": 8
+      }
+    },
+    {
+      "lower_exclusive": 2497.0,
+      "upper_inclusive": null,
+      "grade": "A+",
+      "training_counts": {
+        "A+": 242,
+        "A": 75,
+        "B": 6
+      }
+    }
+  ],
+  "valid_range": {
+    "min_exclusive": 0.0,
+    "max_inclusive": 6000.0
+  },
+  "training_ecd_range": {
+    "min": 788.0,
+    "max": 4484.0
+  },
+  "intended_use": "Decision support for donor cornea grading. The grade is based on ECD only; slit-lamp findings and other morphology are not considered and may justify a lower grade. A specialist must confirm every grade.",
+  "training": {
+    "cohort": "Non-2023, image-matched tissues with ECD (K3 with ECD, RESULTS.md)",
+    "tissues": 470,
+    "params": {
+      "max_depth": 2,
+      "min_samples_leaf": 10,
+      "class_weight": "balanced",
+      "criterion": "gini",
+      "random_state": 42
+    },
+    "selected_by": "ml/grading/notebooks/images/13_nested_tuning_model_selection.ipynb",
+    "data_sha256": "0ce9b384a51a4c47c8a8a6616b8cd36a829f142493d73287534305ae5c15ffce",
+    "scikit_learn_version": "1.9.1",
+    "exported_on": "2026-10-16"
+  }
+}

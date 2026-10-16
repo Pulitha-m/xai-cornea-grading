@@ -12,13 +12,20 @@ import numpy as np
 import pandas as pd
 from sklearn.compose import ColumnTransformer
 from sklearn.impute import SimpleImputer
-from sklearn.model_selection import StratifiedKFold, train_test_split
+from sklearn.model_selection import (
+    StratifiedGroupKFold,
+    StratifiedKFold,
+    train_test_split,
+)
 from sklearn.pipeline import Pipeline
 from sklearn.preprocessing import OneHotEncoder, StandardScaler
 
 # ---------------------------------------------------------------- paths
-DATA_PATH = Path("../data/processed/cleaned_grading_dataset.xlsx")
-SPLIT_PATH = Path("../data/processed/holdout_split.csv")
+# Resolved from this file so notebooks in any subfolder can import it.
+PROCESSED_DIR = Path(__file__).resolve().parents[1] / "data" / "processed"
+DATA_PATH = PROCESSED_DIR / "cleaned_grading_dataset.xlsx"
+SPLIT_PATH = PROCESSED_DIR / "holdout_split.csv"
+DONOR_FOLDS_PATH = PROCESSED_DIR / "donor_grouped_folds.csv"
 
 # ---------------------------------------------------------------- config
 TARGET = "Tissue_Grade_Clean"
@@ -208,3 +215,102 @@ def make_cv():
     return StratifiedKFold(
         n_splits=N_SPLITS, shuffle=True, random_state=RANDOM_STATE
     )
+
+
+# ---------------------------------------------------------------- donor grouping
+N_REPEATS = 5
+
+
+def get_donor_groups(df):
+    """Infer a donor ID per tissue, aligned with df.index.
+
+    Fellow eyes from one donor receive consecutive Tissue_Serial numbers
+    with opposite eyes. Two consecutive tissues are treated as the same
+    donor when they also share Donor_Age and either the cause of death
+    or the death time, and their death times do not contradict each
+    other. The rule errs towards grouping: merging two donors only costs
+    fold balance, while missing a pair would leak a fellow eye.
+    """
+    d = df.sort_values("Tissue_Serial")
+    prev = d.shift()
+
+    cod = (
+        d["Primary_COD"].astype(str).str.lower()
+        .str.replace(r"[^a-z]", "", regex=True).str[:12]
+    )
+    death = d["Death_Date_Time"]
+    both_death = death.notna() & prev["Death_Date_Time"].notna()
+    same_death = both_death & (death == prev["Death_Date_Time"])
+
+    same_donor = (
+        (d["Tissue_Serial"].diff() == 1)
+        & (d["Eye"] != prev["Eye"])
+        & d["Donor_Age"].notna()
+        & (d["Donor_Age"] == prev["Donor_Age"])
+        & ((cod == cod.shift()) | same_death)
+        & (~both_death | same_death)
+    )
+
+    donor = (~same_donor).cumsum()
+    return ("D" + donor.astype(str)).reindex(df.index).rename("Donor_Group")
+
+
+def make_group_cv(random_state=RANDOM_STATE):
+    """Stratified 5-fold splitter that keeps each donor in one fold."""
+    return StratifiedGroupKFold(
+        n_splits=N_SPLITS, shuffle=True, random_state=random_state
+    )
+
+
+def get_donor_folds(labelled):
+    """Return repeated donor-grouped fold assignments for labelled tissues.
+
+    Columns: Tissue_ID, Donor_Group, Fold_r0 ... Fold_r{N_REPEATS-1}.
+    The first call creates the folds and saves them to DONOR_FOLDS_PATH;
+    later calls read that file so every model (tabular, image, hybrid)
+    is evaluated on identical folds. Filter to a sub-cohort (e.g. tissues
+    with images) by Tissue_ID; donors stay within one fold.
+    """
+    if DONOR_FOLDS_PATH.exists():
+        folds = pd.read_csv(DONOR_FOLDS_PATH)
+        missing = set(labelled["Tissue_ID"]) - set(folds["Tissue_ID"])
+        if missing:
+            raise ValueError(
+                f"{len(missing)} tissues have no fold assignment; delete "
+                f"{DONOR_FOLDS_PATH} to regenerate the folds."
+            )
+        return folds
+
+    folds = pd.DataFrame({
+        "Tissue_ID": labelled["Tissue_ID"].to_numpy(),
+        "Donor_Group": get_donor_groups(labelled).to_numpy(),
+    })
+    for repeat in range(N_REPEATS):
+        column = np.empty(len(labelled), dtype=int)
+        splitter = make_group_cv(random_state=RANDOM_STATE + repeat)
+        for fold, (_, test_idx) in enumerate(splitter.split(
+            labelled, labelled[TARGET], groups=folds["Donor_Group"]
+        )):
+            column[test_idx] = fold
+        folds[f"Fold_r{repeat}"] = column
+
+    folds.to_csv(DONOR_FOLDS_PATH, index=False)
+    print(f"Saved donor-grouped folds to {DONOR_FOLDS_PATH}")
+    return folds
+
+
+def iter_donor_folds(folds, tissue_ids, repeat=0):
+    """Yield (train_idx, test_idx) positions for tissue_ids in one repeat.
+
+    Positions refer to the order of tissue_ids, so they can index the
+    feature matrix built from the same rows.
+    """
+    assignment = (
+        folds.set_index("Tissue_ID").loc[list(tissue_ids), f"Fold_r{repeat}"]
+        .to_numpy()
+    )
+    for fold in range(N_SPLITS):
+        yield (
+            np.flatnonzero(assignment != fold),
+            np.flatnonzero(assignment == fold),
+        )

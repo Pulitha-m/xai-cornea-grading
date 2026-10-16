@@ -1,7 +1,15 @@
 import type { ReactNode } from "react"
-import type { AnalyzeResponse } from "@/api/analysis"
-import { formatCount, formatPercent, humanize, isFailed, moduleStatus } from "@/lib/analysis-format"
-import { alertError } from "@/lib/styles"
+import type { AnalyzeResponse, GradingResult } from "@/api/analysis"
+import {
+    formatCount,
+    formatEcdBand,
+    formatPercent,
+    humanize,
+    isFailed,
+    isNotImplemented,
+    moduleStatus,
+} from "@/lib/analysis-format"
+import { alertError, alertWarning } from "@/lib/styles"
 import { Card } from "@/components/dashboard/PageHeader"
 import { ConfidenceMeter } from "@/components/analysis/ConfidenceMeter"
 import { Field } from "@/components/ui/field"
@@ -43,17 +51,10 @@ export function AnalysisResults({ result }: { result: AnalyzeResponse }) {
 
                 <ModuleResult
                     title="Cornea grade"
-                    description="Predicted grade for specialist review — not an eye-bank grading decision."
+                    description="ECD-based grade for specialist review — not an eye-bank grading decision."
                     status={grading.status}
                 >
-                    <div className="flex flex-wrap items-end gap-6">
-                        <dl>
-                            <Field label="Predicted grade" value={grading.grade} />
-                        </dl>
-                        <div className="min-w-48 flex-1">
-                            <ConfidenceMeter value={grading.confidence} />
-                        </div>
-                    </div>
+                    <GradingDetails grading={grading} />
                 </ModuleResult>
 
                 <ModuleResult
@@ -87,6 +88,58 @@ export function AnalysisResults({ result }: { result: AnalyzeResponse }) {
     )
 }
 
+const GRADE_ORDER = ["A+", "A", "B"]
+
+/**
+ * The grade comes from fixed ECD cut points. Instead of a model confidence, it shows the recorded
+ * grades of training tissues in the same ECD band, since no calibration has been assessed.
+ */
+function GradingDetails({ grading }: { grading: GradingResult }) {
+    if (grading.status.toLowerCase() === "review_required") {
+        return <p className={alertWarning}>{grading.message}</p>
+    }
+
+    const distribution = grading.bandDistribution ?? {}
+    const grades = GRADE_ORDER.filter((grade) => grade in distribution)
+
+    return (
+        <div className="space-y-4">
+            <dl className="grid grid-cols-2 gap-4 sm:grid-cols-3">
+                <Field label="Predicted grade" value={grading.grade} />
+                <Field label="ECD used" value={formatCount(grading.ecdUsed)} unit="cells/mm²" />
+                <Field label="ECD band" value={formatEcdBand(grading.ecdBand)} />
+            </dl>
+
+            {grades.length > 0 && (
+                <div>
+                    <p className="text-2xs font-semibold tracking-wide text-muted-foreground uppercase">
+                        Recorded grades in this ECD band
+                    </p>
+                    <p className="mt-0.5 text-xs text-muted-foreground">
+                        {grading.bandTrainingTissues} training tissues — not model confidence
+                    </p>
+                    <ul className="mt-2 flex flex-wrap gap-4 text-sm">
+                        {grades.map((grade) => (
+                            <li key={grade}>
+                                <span className="font-semibold">{grade}</span>{" "}
+                                <span className="tabular-nums">{formatPercent(distribution[grade])}</span>
+                            </li>
+                        ))}
+                    </ul>
+                </div>
+            )}
+
+            {grading.reviewRequired && (
+                <p role="alert" className={alertWarning}>
+                    This ECD is outside the range seen in the training data. Review the grade carefully.
+                </p>
+            )}
+
+            {grading.message && <p className="text-xs text-muted-foreground">{grading.message}</p>}
+        </div>
+    )
+}
+
 function ModuleResult({
     title,
     description,
@@ -107,6 +160,8 @@ function ModuleResult({
                 <p className={alertError}>
                     This module could not complete the analysis. The other modules are unaffected.
                 </p>
+            ) : isNotImplemented(status) ? (
+                <p className="text-sm text-muted-foreground">This module is not available yet.</p>
             ) : (
                 children
             )}

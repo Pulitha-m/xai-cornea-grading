@@ -40,20 +40,20 @@ def analyze(request: AnalyzeRequest):
             status="completed",
             **cellular_data,
         )
+    except NotImplementedError as e:
+        cellular = CellularResult(
+            status="not_implemented",
+            error=str(e),
+        )
     except Exception as e:
         cellular = CellularResult(
             status="failed",
             error=str(e),
         )
 
-    # Grading
+    # Grading (ECD comes from the request, never from the cellular placeholder)
     try:
-        grading_data = run_grading_analysis(request.imageUrl)
-
-        grading = GradingResult(
-            status="completed",
-            **grading_data,
-        )
+        grading = GradingResult(**run_grading_analysis(request.ecd))
     except Exception as e:
         grading = GradingResult(
             status="failed",
