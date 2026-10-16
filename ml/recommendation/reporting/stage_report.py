@@ -11,6 +11,7 @@ HTML page (charts embedded), for supervisors, panels and the thesis:
   6. ML ranker               model selection and three evaluations
   7. SHAP explanations       what drives the ranking, "Why #1?" examples
   8. Model analysis          ablation, learning curve, subgroups, errors
+  9. Counterfactuals         what would make a cornea #1
 
 Only summaries are shown (counts, means, metrics, study codes). The report is
 written to outputs/report/ which is git-ignored.
@@ -240,6 +241,29 @@ def build_report(cfg: dict) -> tuple[Path, list[str]]:
     worst = abl["mrr_change"].drop("all features").idxmin().replace("without ", "")
     log.append(f"Stage 8 analysis: most important factor '{worst}', "
                f"{e['missed']} of {e['requests']} requests missed")
+
+    # Stage 9: counterfactual explanations
+    cf = pipeline.run_counterfactual(cfg)
+    summ = cf["summary"]
+    body = ""
+    for ex in cf["examples"]:
+        body += (f"<h3>{html.escape(ex['request'])} (actually allocated: {html.escape(ex['allocated'])})</h3><ul>"
+                 + "".join(f"<li>{html.escape(x)}</li>" for x in ex["lines"]) + "</ul>")
+    oc = pd.DataFrame({"requests": pd.Series(summ["outcome"])})
+    oc.index.name = "allocated cornea vs model #1"
+    kd = pd.DataFrame({"requests": pd.Series(summ["actionable_kinds"])})
+    kd.index.name = "actionable change that was enough"
+    body += f"<h3>All {summ['requests']} requests</h3>" + _table(oc, fmt="{:.0f}") + _table(kd, fmt="{:.0f}")
+    if summ["median_days_fewer"] is not None:
+        body += f"<p>Median days fewer in storage needed: <b>{summ['median_days_fewer']:.0f}</b></p>"
+    body += ('<p class="note">Actionable = the eye bank can act on it (complete serology, '
+             "allocate sooner). Descriptive = a property of the tissue, shown only to explain. "
+             "Other features are held fixed and the whole pool is re-scored.</p>")
+    parts.append(_section(9, "Counterfactual explanations",
+                          "The smallest realistic change that would make a cornea rank #1.", body))
+    act = summ["outcome"]["actionable change"]
+    log.append(f"Stage 9 counterfactuals: {act} of {summ['requests']} allocated corneas "
+               "reach #1 with an actionable change")
 
     page = (f"<!doctype html><html lang='en'><head><meta charset='utf-8'>"
             f"<meta name='viewport' content='width=device-width,initial-scale=1'>"

@@ -5,6 +5,7 @@ Implemented:
     run_ranker     train the ML ranker on the same split and compare it with MCDA
     run_explain    SHAP explanations for the trained ranker (global + "Why #1?")
     run_analysis   ablation, learning curve, subgroup and error analysis of the ranker
+    run_counterfactual  "what would make this cornea #1?" for examples and all missed requests
 
 Planned (need recipient follow-up data from NEBSL):
     run_trajectory, run_risk, run_followup
@@ -321,6 +322,56 @@ def _write_analysis_md(path: Path, abl, curve, sub, err) -> None:
     lines += [f"| {i} | {r.iloc[0]:.2f} | {r.iloc[1]:.2f} |" for i, r in err["comparison"].iterrows()]
     lines += ["", "![ablation](ablation.png)", "", "![learning curve](learning_curve.png)"]
     path.write_text("\n".join(lines) + "\n", encoding="utf-8")
+
+
+def run_counterfactual(cfg: dict, n_examples: int = 3) -> dict:
+    """Counterfactual explanations from the saved ranker; summary in outputs/explain/."""
+    import joblib
+
+    from recommendation.explain.counterfactual import counterfactuals, describe, summarise_misses
+    from recommendation.matching.ranker import Ranker
+
+    paths, split = cfg["paths"], cfg["split"]
+    model_file = Path(paths["models"]) / "matching_ranker.joblib"
+    if not model_file.exists():
+        raise FileNotFoundError(f"{model_file} not found. Run 'ranker' first.")
+    saved = joblib.load(model_file)
+    ranker = Ranker(saved["settings"], saved["estimator"])
+    pairs = pd.read_excel(paths["matching_dataset"], sheet_name="Ranking_Pairs")
+
+    # Worked examples: the same held-out test requests as the SHAP examples
+    _, test = grouped_split(pairs, group_col=split["group_col"],
+                            test_size=split["test_size"], seed=split["seed"])
+    examples = []
+    for rid in sorted(test["Request_ID"].unique())[:n_examples]:
+        pool = pairs[pairs["Request_ID"] == rid]
+        ranked = ranker.rank(pool).sort_values("ML_Rank")
+        ids = list(ranked.head(3)["Candidate_Record_ID"])
+        allocated = ranked.loc[ranked["Label_Allocated"] == 1, "Candidate_Record_ID"].iloc[0]
+        lines = [describe(counterfactuals(ranker, pool, c)) for c in dict.fromkeys(ids + [allocated])]
+        examples.append({"request": rid, "allocated": allocated, "lines": lines})
+
+    summary = summarise_misses(ranker, pairs)
+    out = Path(paths["outputs"]) / "explain"
+    out.mkdir(parents=True, exist_ok=True)
+    results = {"examples": examples, "summary": summary}
+    (out / "counterfactuals.json").write_text(json.dumps(results, indent=2))
+
+    o, k = summary["outcome"], summary["actionable_kinds"]
+    md = ["# Counterfactual explanations", "",
+          "What is the smallest realistic change that would make a cornea rank #1?",
+          "Actionable: serology confirmed, fewer days in storage. Descriptive: higher ECD,",
+          "a grade closer to the request (properties of the tissue, shown to explain only).", "",
+          "## Worked examples (held-out test requests)", ""]
+    for ex in examples:
+        md += [f"### {ex['request']} (allocated: {ex['allocated']})", ""] + [f"- {x}" for x in ex["lines"]] + [""]
+    md += ["## Requests where the allocated cornea was not ranked #1", "",
+           f"Requests: {summary['requests']}", ""] + [f"- {a}: {b}" for a, b in o.items()]
+    md += ["", "Actionable changes that would have been enough:", ""] + [f"- {a}: {b}" for a, b in k.items()]
+    if summary["median_days_fewer"] is not None:
+        md += ["", f"Median days fewer in storage needed: {summary['median_days_fewer']:.0f}"]
+    (out / "counterfactuals.md").write_text("\n".join(md) + "\n", encoding="utf-8")
+    return results
 
 
 def run_trajectory(cfg: dict):

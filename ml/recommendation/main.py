@@ -6,6 +6,7 @@ From ml/:
     uv run python -m recommendation.main ranker
     uv run python -m recommendation.main explain
     uv run python -m recommendation.main analysis   # ablation, learning curve, subgroups, errors
+    uv run python -m recommendation.main counterfactual  # "what would make this cornea #1?"
     uv run python -m recommendation.main report     # every stage -> one HTML page
 """
 import argparse
@@ -20,6 +21,7 @@ TASKS = {
     "ranker": pipeline.run_ranker,
     "explain": pipeline.run_explain,
     "analysis": pipeline.run_analysis,
+    "counterfactual": pipeline.run_counterfactual,
     "report": None,
     "trajectory": pipeline.run_trajectory,
     "risk": pipeline.run_risk,
@@ -45,6 +47,8 @@ def main() -> None:
     elif a.task == "ranker":
         res = pipeline.run_ranker(cfg)
         _print_ranker(res, cfg)
+    elif a.task == "counterfactual":
+        _print_counterfactual(pipeline.run_counterfactual(cfg), cfg)
     elif a.task == "analysis":
         _print_analysis(pipeline.run_analysis(cfg), cfg)
     elif a.task == "report":
@@ -60,6 +64,25 @@ def main() -> None:
         _print_explain(res, cfg)
     else:
         TASKS[a.task](cfg)
+
+
+def _print_counterfactual(res: dict, cfg: dict) -> None:
+    print("\n1. What would make each cornea #1? (held-out test requests)")
+    for ex in res["examples"]:
+        print(f"\n   {ex['request']} (actually allocated: {ex['allocated']})")
+        for line in ex["lines"]:
+            print(f"     {line}")
+    s = res["summary"]
+    print(f"\n2. Allocated cornea vs model #1, all {s['requests']} requests:")
+    for k, v in s["outcome"].items():
+        print(f"   {k:<26} {v:>4}")
+    print("\n   Actionable changes that would have been enough:")
+    for k, v in s["actionable_kinds"].items():
+        print(f"   {k:<26} {v:>4}")
+    if s["median_days_fewer"] is not None:
+        print(f"   median days fewer in storage needed: {s['median_days_fewer']:.0f}")
+    out = f"{cfg['paths']['outputs']}/explain"
+    print(f"\nSaved: {out}/counterfactuals.md, {out}/counterfactuals.json")
 
 
 def _print_analysis(res: dict, cfg: dict) -> None:
