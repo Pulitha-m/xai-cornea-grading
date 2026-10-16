@@ -111,6 +111,11 @@ roi:
   n_images_val: 10
   n_repeat: 3                         # images shown again (rotated 180 deg) for intra-rater repeatability
   seed: 11                            # separate from split.seed and annotation.seed
+  round2:                             # Phase 6: more TRAIN tissues, labelled before any ROI model result.
+    n_images_train: 20                # new tissues (none from round 1); val reference maps stay round 1 only
+    tercile_share: {low: 0.5, mid: 0.3, high: 0.2}   # extra weight on lower quality -> more artefacts
+    n_repeat: 2                       # round-1 TRAIN images shown again (rot180): drift check vs round 1
+    seed: 12
 
 # -----------------------------------------------------------------------------
 # Segmentation model comparison (Phase 2). Every model uses the SAME folds
