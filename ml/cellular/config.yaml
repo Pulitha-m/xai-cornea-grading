@@ -163,6 +163,21 @@ seg_models:
     # (paired Wilcoxon on cell F1, p < alpha); tie or flat better -> keep "flat" (validated pipeline).
 
 # -----------------------------------------------------------------------------
+# Individual cell extraction (Phase 3, Sub-component 3.3). Decisions fixed before
+# any extraction result was seen. All sizes in pixels (um after Phase 4).
+# -----------------------------------------------------------------------------
+extraction:
+  run: stardist_finetune_flat         # segmentation used (Phase 2 winner)
+  grow_px: 3                          # cells grow up to the wall centre line (Phase 2 decision); larger gaps stay empty
+  edge_margin_px: 2                   # cells within this distance of the image border / unanalysable area are incomplete
+  ring_px: 2                          # width of the ring around a cell used to find its neighbours
+  min_contact_fraction: 0.04          # a neighbour is a SIDE if it covers >= 4 % of the ring (corner touches are not sides)
+  max_open_fraction: 0.10             # sides counted only if <= 10 % of the ring is not another cell (fully surrounded)
+  poly_epsilon_fraction: 0.04         # polygon-fit side count (secondary): approxPolyDP tolerance x perimeter
+  min_area_factor: 0.25               # FLAG (not remove) cells < 0.25 x the image's median cell area
+  max_area_factor: 3.0                # ... and > 3 x the median
+
+# -----------------------------------------------------------------------------
 # Validation targets from the research scope (Phase 7).
 # -----------------------------------------------------------------------------
 targets:
