@@ -271,6 +271,32 @@ pipeline:
   max_flagged_share: 0.05             # > 5 % implausibly small / large cells -> check the segmentation
 
 # -----------------------------------------------------------------------------
+# Explainability (XAI). Explanations never change a number. Rules fixed before any result.
+# Step 1 - ROI model (Phase 6 EfficientNet-B0): Grad-CAM++ of the "poor" score (-logit) = why a
+# region is left out of the ROI; Grad-CAM reported for comparison only. Evaluated on the
+# validation reference images (fully tile-labelled, never used for training); unit = image
+# (windows overlap and are not independent), one-sided Wilcoxon over images.
+#   faithfulness (primary): in windows the model calls poor, replacing the top `top_share` of the
+#     heatmap with neutral lit tissue lowers P(poor) MORE than replacing the same mask shifted to
+#     another place in the window (`n_random` circular shifts)
+#   plausibility (secondary): in windows partly labelled poor (each part >= min_mixed_share), the
+#     heatmap's share inside the poor-labelled part exceeds that part's area share
+# -----------------------------------------------------------------------------
+xai:
+  roi:
+    method: gradcam++
+    compare: [gradcam]
+    layer: features.8                   # last EfficientNet-B0 block (7 x 7 at 224 px input)
+    min_p_poor: 0.5                     # windows explained in the deletion test
+    min_lit_share: 0.05                 # windows with (almost) no lit tissue are skipped
+    top_share: 0.2
+    n_random: 5
+    min_mixed_share: 0.25
+    alpha: 0.05
+    seed: 7
+    n_examples: 8                       # example windows in the figure
+
+# -----------------------------------------------------------------------------
 # Validation targets from the research scope (Phase 7).
 # -----------------------------------------------------------------------------
 targets:
