@@ -38,6 +38,13 @@ export function formatEcdBand(band: EcdBand | null): string | null {
     return `${lower} < ECD ≤ ${upper}`
 }
 
+const GRADE_ORDER = ["A+", "A", "B"]
+
+/** Grades in display order, followed by any the UI does not know. */
+export function orderedGrades(shares: Record<string, number>): string[] {
+    return [...GRADE_ORDER.filter((g) => g in shares), ...Object.keys(shares).filter((g) => !GRADE_ORDER.includes(g))]
+}
+
 /** "none_detected" -> "None detected". */
 export function humanize(value: string): string {
     const text = value.replace(/[_-]+/g, " ").trim().toLowerCase()

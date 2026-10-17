@@ -9,9 +9,12 @@ training tissues in each ECD band. Both are decision support only; a specialist
 confirms every grade.
 """
 import json
+import logging
 import os
 from functools import lru_cache
 from pathlib import Path
+
+logger = logging.getLogger("ml-service")
 
 DEFAULT_SPEC_PATH = Path(__file__).resolve().parents[2] / "models" / "grading_ecd_tree.json"
 METHOD = "ecd_threshold_tree"
@@ -97,17 +100,18 @@ def ecd_reference(ecd: float | None) -> dict:
 HYBRID_METHOD = "hybrid_random_forest_24_resnet50"
 
 
-def run_grading_analysis(values: dict, warnings: list[dict], image) -> dict:
+def run_grading_analysis(values: dict, warnings: list[dict], image, explain: bool = False) -> dict:
     """Grade from the hybrid model (24 features + image), with the ECD tree's grade as a reference.
 
     `values` are the validated features by name (None = not recorded); the model's
     training pipeline handles missing values. `warnings` come from the feature schema.
-    `image` is the decoded, domain-validated image.
+    `image` is the decoded, domain-validated image. With `explain`, the result has an
+    `explanation` (pipelines/grading/explain.py); if that fails, the grade is still given.
     """
     from pipelines.grading import hybrid
     from pipelines.grading.feature_schema import load_schema
 
-    embedding, resized = hybrid.embed(image)
+    embedding, maps, resized = hybrid.embed(image)
     warnings = list(warnings)
     if resized:
         width, height = hybrid.load_classifier()[1]["backbone"]["training_image_size"]
@@ -119,7 +123,8 @@ def run_grading_analysis(values: dict, warnings: list[dict], image) -> dict:
                        "contribution to the grade may be unreliable.",
         })
 
-    grade, probabilities = hybrid.predict(values, embedding, load_schema())
+    schema = load_schema()
+    grade, probabilities = hybrid.predict(values, embedding, schema)
     missing = [name for name, value in values.items() if value is None]
     reference = ecd_reference(values.get("ECD_CD_cells_per_mm2"))
 
@@ -130,7 +135,7 @@ def run_grading_analysis(values: dict, warnings: list[dict], image) -> dict:
     if missing:
         message += f" {len(missing)} of 24 inputs were not recorded and were handled as in training."
 
-    return {
+    result = {
         "status": "completed",
         "grade": grade,
         "method": HYBRID_METHOD,
@@ -141,3 +146,16 @@ def run_grading_analysis(values: dict, warnings: list[dict], image) -> dict:
         "reviewRequired": bool(warnings) or reference["status"] != "completed",
         "message": message,
     }
+    if explain:
+        result["explanation"] = explain_grade(values, embedding, maps, schema, grade, image)
+    return result
+
+
+def explain_grade(values, embedding, maps, schema, grade, image) -> dict | None:
+    from pipelines.grading import explain
+
+    try:
+        return explain.explain(values, embedding, maps, schema, grade, image)
+    except Exception:
+        logger.exception("Grading explanation failed")
+        return None

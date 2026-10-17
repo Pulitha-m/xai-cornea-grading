@@ -90,8 +90,10 @@ def test_other_sizes_are_resized_to_training_size():
 @pytest.mark.real_backbone
 @pytest.mark.skipif(not BACKBONE.exists(), reason="ONNX backbone not exported (see README)")
 def test_real_backbone_produces_a_2048_d_embedding():
-    embedding, resized = hybrid.embed(Image.new("L", (1296, 972), 100))
+    embedding, maps, resized = hybrid.embed(Image.new("L", (1296, 972), 100))
     assert embedding.shape == (2048,) and np.isfinite(embedding).all() and not resized
+    assert maps.shape == (2048, 31, 41)
+    assert np.abs(maps.mean(axis=(1, 2)) - embedding).max() < 1e-4
 
 
 def test_api_includes_ecd_reference(analyze):

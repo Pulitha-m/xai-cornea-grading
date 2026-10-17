@@ -60,6 +60,15 @@ export function featureLabel(name: string): string {
     return `${area.charAt(0).toUpperCase()}${area.slice(1)}: ${feature.label}`
 }
 
+/** A feature value as given to the model, for display; null = not recorded. */
+export function formatFeatureValue(name: string, value: number | string | null): string | null {
+    if (value === null) return null
+    const feature = FEATURES.find((f) => f.name === name)
+    if (feature?.type === "binary") return value === 1 ? "Yes" : "No"
+    if (typeof value === "number") return `${value.toLocaleString("en-GB")}${feature?.unit ? ` ${feature.unit}` : ""}`
+    return value
+}
+
 export type FeatureInputs = Record<string, string>
 
 export function emptyFeatureInputs(): FeatureInputs {

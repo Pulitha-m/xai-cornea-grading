@@ -102,6 +102,14 @@ The grade comes from the tuned hybrid Random Forest on the 24 features and the i
 
 It reports the band and the recorded grades of training tissues in that band. When ECD is not recorded, `ecdReference.status` is `review_required` with no grade and the overall `reviewRequired` is true.
 
+**Grading on its own page.** `POST /grading/analyze` (`app/routers/grading.py`) runs only grading and is shown on the "Cornea grading" page (backend `POST /api/analysis/grading`, runs recorded in `grading_analysis_runs`). Same form fields and request handling as `/analyze` (features validated first, then decoding and the domain validator). The grading fields are returned at the top level, plus `featuresUsed` (the validated 24 features). A grading failure is a rejection rather than a `failed` module: `503 MODEL_NOT_READY` when the model or backbone is unavailable, `500 MODEL_INFERENCE_FAILED` otherwise. `/analyze` still grades as before.
+
+**Explanation (`explanation`, `/grading/analyze` only).** `pipelines/grading/explain.py`; `null` if it fails (the grade is still returned).
+- **SHAP:** path-dependent TreeSHAP (`shap.TreeExplainer`) on the forest, explaining the predicted grade's share of tree votes. `baseline` (training average) + the 24 inputs' contributions + `imageContribution` = `prediction`, exactly. One-hot columns are summed into their input; the 32 PCA image components into `imageContribution`.
+- **Image map (`imageMap`):** *not* Grad-CAM: the forest has no gradients. The path from ResNet-50's layer4 maps to the forest is linear (spatial mean → standardisation → PCA, not whitened), so the image's SHAP value is split exactly over locations: component *j*'s value in proportion to each location's PCA score. Components with |score| < 0.1 training SD are left out (`localisedShare` = share mapped). Two overlays: regions that raised (`supportingPng`) and lowered (`opposingPng`) the share, each scaled to its own maximum, with their sums (`supportingTotal`, `opposingTotal`). The feature maps are the backbone's second ONNX output (`feature_maps`, added in `scripts/export_grading_backbone.py`; output 0 is still the verified pooled features). With a backbone exported without it, `imageMap` is `null`.
+- **Limits:** explains the model, not the cornea; not causal; faithfulness not evaluated. On a training image the maps peaked at the out-of-focus bottom border — check across images before reading the maps clinically.
+- Adds the `shap` dependency (with numba); imported and built at startup (~4 s), ~0.01 s per request.
+
 ### 24-feature schema
 
 `models/grading_feature_schema.json` is exported from the training code by `ml/grading/scripts/export_feature_schema.py`. It records order, types, units, categories, missing-value handling and training ranges for the 24 tabular features. `pipelines/grading/feature_schema.py` validates payloads against it:
@@ -169,4 +177,4 @@ uv run pytest
 ```
 
 - **Without the backbone file:** tests that need the real validator are skipped; all other tests stub it.
-- **Backend `MlServiceContractTest`:** checks captured responses against the backend DTOs. When the schema changes, regenerate `backend/src/test/resources/contracts/ml_service_analyze_responses.json` from this service.
+- **Backend `MlServiceContractTest`:** checks captured responses against the backend DTOs. When the schema changes, regenerate `backend/src/test/resources/contracts/ml_service_analyze_responses.json` from this service. `MlServiceGradingContractTest` does the same for `ml_service_grading_responses.json` (`completed`, `missing_ecd` and `rejected_features`, captured with a training-set image and the real backbone).

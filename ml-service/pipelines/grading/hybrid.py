@@ -68,12 +68,14 @@ def load_backbone():
     return ort.InferenceSession(str(backbone), providers=["CPUExecutionProvider"])
 
 
-def embed(image: Image.Image) -> tuple[np.ndarray, bool]:
-    """2048-d embedding of the image and whether it had to be resized to the training size."""
+def embed(image: Image.Image) -> tuple[np.ndarray, np.ndarray | None, bool]:
+    """2048-d embedding of the image, its layer4 feature maps (2048 × h × w; None from a backbone exported
+    without them) and whether the image had to be resized to the training size."""
     _, meta = load_classifier()
     width, height = meta["backbone"]["training_image_size"]
     tensor, resized = to_embedding_input(image, (width, height))
-    return load_backbone().run(None, {"input": tensor})[0][0], resized
+    outputs = load_backbone().run(None, {"input": tensor})
+    return outputs[0][0], (outputs[1][0] if len(outputs) > 1 else None), resized
 
 
 def to_frame(values: dict, embedding: np.ndarray, meta: dict, schema: dict) -> pd.DataFrame:

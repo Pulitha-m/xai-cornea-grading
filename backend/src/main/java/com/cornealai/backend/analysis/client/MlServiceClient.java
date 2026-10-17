@@ -5,6 +5,7 @@ import com.cornealai.backend.analysis.dto.AnalyzeResponse;
 import com.cornealai.backend.analysis.dto.disease.DiseaseAnalyzeResponse;
 import com.cornealai.backend.analysis.dto.disease.ImageQuality;
 import com.cornealai.backend.analysis.dto.disease.InputCheck;
+import com.cornealai.backend.analysis.dto.grading.GradingAnalyzeResponse;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
@@ -58,6 +59,34 @@ public class MlServiceClient {
                     .body(form)
                     .retrieve()
                     .body(AnalyzeResponse.class);
+        } catch (RestClientResponseException e) {
+            throw translate(e);
+        } catch (RestClientException e) {
+            log.warn("ml-service unreachable: {}", e.getClass().getSimpleName());
+            throw new AnalysisRejectedException(HttpStatus.SERVICE_UNAVAILABLE, "MODEL_NOT_READY", null,
+                    "The analysis service is unavailable. Try again later.");
+        }
+    }
+
+    /**
+     * Donor cornea grading alone (ml-service POST /grading/analyze). Rejections are raised as for analyze().
+     *
+     * @param clinicalFeaturesJson the 24 features as a JSON object (null = not recorded)
+     */
+    public GradingAnalyzeResponse analyzeGrading(String caseId, String clinicalFeaturesJson, byte[] image,
+                                                 String filename) {
+        MultiValueMap<String, Object> form = new LinkedMultiValueMap<>();
+        form.add("caseId", caseId);
+        form.add("clinicalFeatures", clinicalFeaturesJson);
+        form.add("image", new NamedBytes(image, filename));
+
+        try {
+            return restClient.post()
+                    .uri("/grading/analyze")
+                    .contentType(MediaType.MULTIPART_FORM_DATA)
+                    .body(form)
+                    .retrieve()
+                    .body(GradingAnalyzeResponse.class);
         } catch (RestClientResponseException e) {
             throw translate(e);
         } catch (RestClientException e) {

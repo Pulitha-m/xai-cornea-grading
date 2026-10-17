@@ -34,6 +34,10 @@
   --color-highlight: #facc15;
   --color-highlight-soft: #fefce8;
 
+  /* Diverging pair for signed attributions (SHAP): not status colours. Validated on the card surface. */
+  --color-attr-raise: #2a78d6;
+  --color-attr-lower: #e34948;
+
   --text-2xs: 0.6875rem;
   --text-2xs--line-height: 1rem;
 

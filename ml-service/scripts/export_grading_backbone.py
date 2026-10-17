@@ -4,7 +4,10 @@ Source: torchvision ResNet-50, weights IMAGENET1K_V2, downloaded by torchvision
 from download.pytorch.org/models/resnet50-11ad3fa6.pth (torchvision verifies the
 hash prefix in the file name). The final classification layer is removed, leaving
 the 2048-d pooled features. This is the network that produced the training
-embeddings (ml/grading/notebooks/images/07_hybrid_evaluation.ipynb). Image height
+embeddings (ml/grading/notebooks/images/07_hybrid_evaluation.ipynb). A second
+output, `feature_maps`, is the last convolutional block (layer4) before pooling;
+the pooled features are its spatial mean. It is used only to localise the image's
+SHAP attribution (pipelines/grading/explain.py) and does not affect the grade. Image height
 and width are dynamic because the embeddings were computed at full resolution
 (1296 x 972). Exported with ONNX opset 17.
 
@@ -32,16 +35,31 @@ import torchvision
 from backbone_check import verify_and_record
 
 
+class PooledAndMaps(torch.nn.Module):
+    """ResNet-50 without fc: (pooled 2048-d features, layer4 feature maps). The pooled output comes first,
+    so it is the output backbone_check.py verifies."""
+
+    def __init__(self, resnet: torch.nn.Module):
+        super().__init__()
+        self.resnet = resnet
+
+    def forward(self, x):
+        r = self.resnet
+        maps = r.layer4(r.layer3(r.layer2(r.layer1(r.maxpool(r.relu(r.bn1(r.conv1(x))))))))
+        return torch.flatten(r.avgpool(maps), 1), maps
+
+
 def export(output: Path) -> str:
     torch.manual_seed(0)
-    model = torchvision.models.resnet50(weights=torchvision.models.ResNet50_Weights.IMAGENET1K_V2)
-    model.fc = torch.nn.Identity()
-    model.eval()
+    resnet = torchvision.models.resnet50(weights=torchvision.models.ResNet50_Weights.IMAGENET1K_V2)
+    resnet.fc = torch.nn.Identity()
+    model = PooledAndMaps(resnet).eval()
     output.parent.mkdir(parents=True, exist_ok=True)
     torch.onnx.export(
         model, torch.zeros(1, 3, 972, 1296), str(output),
-        input_names=["input"], output_names=["features"],
-        dynamic_axes={"input": {0: "batch", 2: "height", 3: "width"}, "features": {0: "batch"}},
+        input_names=["input"], output_names=["features", "feature_maps"],
+        dynamic_axes={"input": {0: "batch", 2: "height", 3: "width"}, "features": {0: "batch"},
+                      "feature_maps": {0: "batch", 2: "map_height", 3: "map_width"}},
         opset_version=17, dynamo=False,
     )
 
@@ -49,10 +67,12 @@ def export(output: Path) -> str:
     import onnxruntime as ort
     probe = np.random.default_rng(42).standard_normal((1, 3, 972, 1296)).astype(np.float32)
     with torch.no_grad():
-        expected = model(torch.from_numpy(probe)).numpy()
-    got = ort.InferenceSession(str(output), providers=["CPUExecutionProvider"]).run(None, {"input": probe})[0]
+        expected = resnet(torch.from_numpy(probe)).numpy()
+    got, maps = ort.InferenceSession(str(output), providers=["CPUExecutionProvider"]).run(None, {"input": probe})
     if np.abs(expected - got).max() >= 1e-3:
         raise SystemExit("ONNX export does not match torch")
+    if np.abs(maps.mean(axis=(2, 3)) - got).max() >= 1e-4:
+        raise SystemExit("Pooled features are not the spatial mean of the feature maps")
     return hashlib.sha256(output.read_bytes()).hexdigest()
 
 
