@@ -247,6 +247,18 @@ biomarkers:
   worst_n: 6                          # images with the largest |ECD error| get overlay figures
 
 # -----------------------------------------------------------------------------
+# Error analysis (diagnostic, after Phase 6; biomarkers/error_analysis.py). Konan measures ~110 cells in
+# an operator-chosen patch (~40,000 um2 = ~252 x 252 px at 0.796 um/px, Phase 5 s1.2b). Our measured
+# cells (ROI pipeline) are cut into all patches of that size to see whether patch choice explains the
+# disagreement. Patch rules are compared on the CALIBRATION images first; validation only confirms.
+# Nothing here changes the reported pipeline.
+# -----------------------------------------------------------------------------
+error_analysis:
+  patch_px: 252
+  stride_px: 63                       # quarter patch
+  min_patch_cells: 60                 # Konan's smallest count in validation is 67
+
+# -----------------------------------------------------------------------------
 # End-to-end pipeline (pipeline.py): one image -> ROI -> segmentation -> cells -> biomarkers.
 # Same models, rules and scale as the reported results (ROI pipeline, scale.um_per_px).
 # Quality flags are warnings for the reviewer, fixed before any pipeline result; they never change a number.
