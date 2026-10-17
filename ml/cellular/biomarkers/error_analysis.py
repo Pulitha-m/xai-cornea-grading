@@ -167,10 +167,34 @@ def report(cfg: dict, df: pd.DataFrame, split: str) -> None:
                          "rho with signed ECD error": spearmanr(df[col], err).correlation})
     print("\nWhat goes with the whole-field ECD error (Spearman, exploratory):")
     print(pd.DataFrame(rows).set_index("factor").round(3).to_string())
-    print("\nWhole-field ECD error by band: " + "; ".join(
+    print("\nWhole-field ECD error by band (bands defined by KONAN's ECD): " + "; ".join(
         f"{b}: bias {err[g.index].mean():+.1f} %, MAPE {err[g.index].abs().mean():.1f} % (n={len(g)})"
         for b, g in df.groupby("ecd_band")))
+    proportional_check(cfg, df)
     figure(cfg, df, split, err)
+
+
+def proportional_check(cfg: dict, df: pd.DataFrame) -> None:
+    """Is the 'proportional bias' real or regression to the mean? A noisy reference (Konan: ~110 cells,
+    operator-chosen patch) makes (ours - Konan) correlate negatively with Konan even if ours is unbiased.
+    Bland-Altman therefore relates the difference to the MEAN of both methods."""
+    from scipy.stats import linregress
+
+    ours, k = df["ecd whole field"], df["konan_ecd"]
+    diff, mean = ours - k, (ours + k) / 2
+    err = 100 * diff / k
+    fit = linregress(mean, diff)
+    ci = 1.96 * fit.stderr
+    print("\nProportional bias check (Spearman of the signed ECD error with ...):")
+    print(f"  Konan ECD {spearmanr(k, err).correlation:+.3f}  |  our ECD {spearmanr(ours, err).correlation:+.3f}  |  "
+          f"mean of both {spearmanr(mean, err).correlation:+.3f}")
+    print(f"  Bland-Altman regression of (ours - Konan) on the mean: slope {fit.slope:+.3f} "
+          f"(95% CI {fit.slope - ci:+.3f} to {fit.slope + ci:+.3f}; 0 = no proportional bias), p = {fit.pvalue:.3g}")
+    bands = pd.cut(mean, [0, *cfg["split"]["stratify_ecd_bins"], np.inf],
+                   labels=["<2000", "2000-2800", ">2800"])
+    print("  Bias by band of the MEAN of both: " + "; ".join(
+        f"{b}: {err[bands == b].mean():+.1f} % (n={int((bands == b).sum())})"
+        for b in ["<2000", "2000-2800", ">2800"] if (bands == b).any()))
 
 
 def figure(cfg: dict, df: pd.DataFrame, split: str, err: pd.Series) -> None:
