@@ -247,6 +247,18 @@ biomarkers:
   worst_n: 6                          # images with the largest |ECD error| get overlay figures
 
 # -----------------------------------------------------------------------------
+# End-to-end pipeline (pipeline.py): one image -> ROI -> segmentation -> cells -> biomarkers.
+# Same models, rules and scale as the reported results (ROI pipeline, scale.um_per_px).
+# Quality flags are warnings for the reviewer, fixed before any pipeline result; they never change a number.
+# -----------------------------------------------------------------------------
+pipeline:
+  run: stardist_finetune_flat
+  min_cells: 30                       # fewer complete cells -> result NOT reliable (same limit as Phases 4-5)
+  min_cells_with_sides: 100           # fewer cells with a side count -> HEX less reliable (Konan counts ~110 cells)
+  min_roi_share_of_lit: 0.5           # ROI keeps less than half of the lit area -> mostly poor image
+  max_flagged_share: 0.05             # > 5 % implausibly small / large cells -> check the segmentation
+
+# -----------------------------------------------------------------------------
 # Validation targets from the research scope (Phase 7).
 # -----------------------------------------------------------------------------
 targets:
