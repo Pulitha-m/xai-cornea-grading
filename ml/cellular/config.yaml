@@ -282,7 +282,8 @@ pipeline:
 #   plausibility (secondary): in windows partly labelled poor (each part >= min_mixed_share), the
 #     heatmap's share inside the poor-labelled part exceeds that part's area share
 # DEVIATION (2026-10-18, after the evaluation): the pre-registered method was Grad-CAM++. It passed
-# faithfulness only narrowly (7/10 images, p = 0.042) and FAILED plausibility in the wrong direction
+# faithfulness only narrowly (7/10 images, p = 0.042; 0.053 = fail on the re-run with other random shifts) and
+# FAILED plausibility in the wrong direction
 # (heatmap share in the poor part 0.28 vs 0.50 area; pointing game 0.31 vs 0.49 chance) - it mostly
 # highlights the analysable tissue. Grad-CAM passed both (10/10 images, p = 0.001 each), so Grad-CAM
 # is used and Grad-CAM++ stays as the comparison; both are reported (docs: xai.md).
