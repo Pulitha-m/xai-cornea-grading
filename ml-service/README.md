@@ -102,6 +102,8 @@ The grade comes from the tuned hybrid Random Forest on the 24 features and the i
 
 It reports the band and the recorded grades of training tissues in that band. When ECD is not recorded, `ecdReference.status` is `review_required` with no grade and the overall `reviewRequired` is true.
 
+**Grading on its own page.** `POST /grading/analyze` (`app/routers/grading.py`) runs only grading and is shown on the "Cornea grading" page (backend `POST /api/analysis/grading`, runs recorded in `grading_analysis_runs`). Same form fields and request handling as `/analyze` (features validated first, then decoding and the domain validator). The grading fields are returned at the top level, plus `featuresUsed` (the validated 24 features). A grading failure is a rejection rather than a `failed` module: `503 MODEL_NOT_READY` when the model or backbone is unavailable, `500 MODEL_INFERENCE_FAILED` otherwise. `/analyze` still grades as before.
+
 ### 24-feature schema
 
 `models/grading_feature_schema.json` is exported from the training code by `ml/grading/scripts/export_feature_schema.py`. It records order, types, units, categories, missing-value handling and training ranges for the 24 tabular features. `pipelines/grading/feature_schema.py` validates payloads against it:
@@ -169,4 +171,4 @@ uv run pytest
 ```
 
 - **Without the backbone file:** tests that need the real validator are skipped; all other tests stub it.
-- **Backend `MlServiceContractTest`:** checks captured responses against the backend DTOs. When the schema changes, regenerate `backend/src/test/resources/contracts/ml_service_analyze_responses.json` from this service.
+- **Backend `MlServiceContractTest`:** checks captured responses against the backend DTOs. When the schema changes, regenerate `backend/src/test/resources/contracts/ml_service_analyze_responses.json` from this service. `MlServiceGradingContractTest` does the same for `ml_service_grading_responses.json` (`completed`, `missing_ecd` and `rejected_features`, captured with a training-set image and the real backbone).

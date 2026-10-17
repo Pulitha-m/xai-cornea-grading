@@ -1,0 +1,162 @@
+{
+  "completed": {
+    "caseId": "case-1",
+    "status": "completed",
+    "imageValidation": {
+      "domainStatus": "VALID_CORNEAL_IMAGE",
+      "qualityAssessed": false,
+      "width": 1296,
+      "height": 972,
+      "format": "JPEG"
+    },
+    "grade": "A+",
+    "method": "hybrid_random_forest_24_resnet50",
+    "modelProbabilities": {
+      "A": 0.308,
+      "A+": 0.641,
+      "B": 0.05
+    },
+    "featuresUsed": {
+      "ECD_CD_cells_per_mm2": 2600.0,
+      "CV": 35.0,
+      "HEX_percent": 55.0,
+      "SD": 130.0,
+      "Total_Cell_Count": 104.0,
+      "Total_Area_um2": 40000.0,
+      "Stroma_Is_Clear": 0,
+      "Stroma_Is_Compact": 0,
+      "Stroma_Has_Arcus": 0,
+      "Stroma_Has_Edema": 0,
+      "Stroma_Has_Scar": 0,
+      "Epi_Has_Arcus": 0,
+      "Epi_Has_Defect": 0,
+      "Epi_Has_Exposure": 0,
+      "Epi_Has_Haze": 0,
+      "Endo_Has_Stress_Lines": 0,
+      "Endo_Has_RBC": 0,
+      "Endo_Has_Cell_Dropout": 0,
+      "Descemet_Has_Folds": 0,
+      "Descemet_Fold_Severity": null,
+      "Descemet_Fold_Relative_Number": null,
+      "Endo_Stress_Line_Location": null,
+      "Stroma_Arcus_Severity": null,
+      "Epi_Exposure_Severity": null
+    },
+    "featuresNotRecorded": [
+      "Descemet_Fold_Severity",
+      "Descemet_Fold_Relative_Number",
+      "Endo_Stress_Line_Location",
+      "Stroma_Arcus_Severity",
+      "Epi_Exposure_Severity"
+    ],
+    "warnings": [],
+    "ecdReference": {
+      "status": "completed",
+      "grade": "A+",
+      "method": "ecd_threshold_tree",
+      "ecdUsed": 2600.0,
+      "ecdBand": {
+        "lowerExclusive": 2497.0,
+        "upperInclusive": null
+      },
+      "bandDistribution": {
+        "A+": 0.749,
+        "A": 0.232,
+        "B": 0.019
+      },
+      "bandTrainingTissues": 323,
+      "reviewRequired": false,
+      "message": "Grade based on ECD only (cut points 2232, 2497 cells/mm\u00b2). Slit-lamp findings and other morphology are not considered and may justify a lower grade. Specialist confirmation required."
+    },
+    "reviewRequired": false,
+    "message": "Grade from the hybrid model (24 Konan and slit-lamp inputs plus image features). In nested cross-validation it was not better than the ECD rule shown below. Specialist confirmation required. 5 of 24 inputs were not recorded and were handled as in training."
+  },
+  "missing_ecd": {
+    "caseId": "case-1",
+    "status": "completed",
+    "imageValidation": {
+      "domainStatus": "VALID_CORNEAL_IMAGE",
+      "qualityAssessed": false,
+      "width": 1296,
+      "height": 972,
+      "format": "JPEG"
+    },
+    "grade": "A+",
+    "method": "hybrid_random_forest_24_resnet50",
+    "modelProbabilities": {
+      "A": 0.352,
+      "A+": 0.605,
+      "B": 0.044
+    },
+    "featuresUsed": {
+      "ECD_CD_cells_per_mm2": null,
+      "CV": 35.0,
+      "HEX_percent": 55.0,
+      "SD": 130.0,
+      "Total_Cell_Count": null,
+      "Total_Area_um2": null,
+      "Stroma_Is_Clear": 0,
+      "Stroma_Is_Compact": 0,
+      "Stroma_Has_Arcus": 0,
+      "Stroma_Has_Edema": 0,
+      "Stroma_Has_Scar": 0,
+      "Epi_Has_Arcus": 0,
+      "Epi_Has_Defect": 0,
+      "Epi_Has_Exposure": 0,
+      "Epi_Has_Haze": 0,
+      "Endo_Has_Stress_Lines": 0,
+      "Endo_Has_RBC": 0,
+      "Endo_Has_Cell_Dropout": 0,
+      "Descemet_Has_Folds": 0,
+      "Descemet_Fold_Severity": null,
+      "Descemet_Fold_Relative_Number": null,
+      "Endo_Stress_Line_Location": null,
+      "Stroma_Arcus_Severity": null,
+      "Epi_Exposure_Severity": null
+    },
+    "featuresNotRecorded": [
+      "ECD_CD_cells_per_mm2",
+      "Total_Cell_Count",
+      "Total_Area_um2",
+      "Descemet_Fold_Severity",
+      "Descemet_Fold_Relative_Number",
+      "Endo_Stress_Line_Location",
+      "Stroma_Arcus_Severity",
+      "Epi_Exposure_Severity"
+    ],
+    "warnings": [],
+    "ecdReference": {
+      "status": "review_required",
+      "grade": null,
+      "method": "ecd_threshold_tree",
+      "ecdUsed": null,
+      "ecdBand": null,
+      "bandDistribution": null,
+      "bandTrainingTissues": null,
+      "reviewRequired": true,
+      "message": "ECD is required for automated grading. Grade this tissue manually."
+    },
+    "reviewRequired": true,
+    "message": "Grade from the hybrid model (24 Konan and slit-lamp inputs plus image features). In nested cross-validation it was not better than the ECD rule shown below. Specialist confirmation required. 8 of 24 inputs were not recorded and were handled as in training."
+  },
+  "rejected_features": {
+    "status": "rejected",
+    "error": {
+      "code": "INVALID_FEATURE_TYPE",
+      "field": "CV",
+      "message": "CV must be a number (%)."
+    },
+    "errors": [
+      {
+        "code": "INVALID_FEATURE_TYPE",
+        "field": "CV",
+        "message": "CV must be a number (%)."
+      },
+      {
+        "code": "FEATURE_OUT_OF_RANGE",
+        "field": "Descemet_Fold_Severity",
+        "message": "Descemet_Fold_Severity must be one of Mild, Moderate, Unspecified, Very mild or null."
+      }
+    ]
+  }
+}

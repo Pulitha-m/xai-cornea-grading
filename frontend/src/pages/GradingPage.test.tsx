@@ -1,0 +1,130 @@
+import { screen, within } from "@testing-library/react"
+import userEvent from "@testing-library/user-event"
+import { beforeEach, describe, expect, it, vi } from "vitest"
+import { uploadImage } from "@/api/analysis"
+import { analyzeGrading, type GradingAnalyzeResponse } from "@/api/grading"
+import { ApiError } from "@/lib/api-client"
+import { FEATURES } from "@/lib/grading-features"
+import { makeAuth, makeUser, renderApp } from "@/test/auth-test-utils"
+
+vi.mock(import("@/api/analysis"), async (importOriginal) => ({
+    ...(await importOriginal()),
+    uploadImage: vi.fn(),
+}))
+vi.mock(import("@/api/grading"), async (importOriginal) => ({
+    ...(await importOriginal()),
+    analyzeGrading: vi.fn(),
+}))
+
+const FEATURES_USED = { ...Object.fromEntries(FEATURES.map((f) => [f.name, null])), ECD_CD_cells_per_mm2: 2400, Stroma_Has_Scar: 1 }
+
+const COMPLETED: GradingAnalyzeResponse = {
+    analysisId: "run-1",
+    caseId: "CASE-9",
+    status: "completed",
+    imageValidation: { domainStatus: "VALID_CORNEAL_IMAGE", qualityAssessed: false, width: 1296, height: 972, format: "JPEG" },
+    grade: "B",
+    method: "hybrid_random_forest_24_resnet50",
+    modelProbabilities: { "A+": 0.05, A: 0.32, B: 0.63 },
+    featuresUsed: FEATURES_USED,
+    featuresNotRecorded: FEATURES.map((f) => f.name).filter((n) => n !== "ECD_CD_cells_per_mm2" && n !== "Stroma_Has_Scar"),
+    warnings: [],
+    ecdReference: {
+        status: "completed", grade: "A", method: "ecd_threshold_tree", ecdUsed: 2400,
+        ecdBand: { lowerExclusive: 2232, upperInclusive: 2497 }, bandDistribution: { "A+": 0.021, A: 0.894, B: 0.085 },
+        bandTrainingTissues: 94, reviewRequired: false, message: "Grade based on ECD only.",
+    },
+    reviewRequired: false,
+    message: "Grade from the hybrid model. Specialist confirmation required.",
+}
+
+function jpeg() {
+    return new File([new Uint8Array([0xff, 0xd8, 0xff, 0xe0, 0, 16, 74, 70, 73, 70])], "endothelium.jpg", { type: "image/jpeg" })
+}
+
+async function fillAndGrade(ecd: string) {
+    const user = userEvent.setup()
+    await user.upload(await screen.findByLabelText("Specular microscopy image"), jpeg())
+    await user.type(screen.getByLabelText("Case ID"), "CASE-9")
+    if (ecd) await user.type(screen.getByLabelText("ECD (cells/mm²)"), ecd)
+    await user.click(screen.getByRole("button", { name: "Grade" }))
+    return user
+}
+
+beforeEach(() => {
+    vi.mocked(uploadImage).mockReset().mockResolvedValue({
+        imageId: "img-1", caseId: "CASE-9", contentType: "image/jpeg", sizeBytes: 10, width: 1296, height: 972,
+    })
+    vi.mocked(analyzeGrading).mockReset()
+})
+
+describe("GradingPage", () => {
+    it("is in the navigation for clinical roles", async () => {
+        renderApp("/grading", makeAuth({ user: makeUser("NURSE") }))
+        expect(await screen.findByRole("link", { name: /Cornea grading/ })).toHaveAttribute("href", "/grading")
+        expect(screen.getByRole("heading", { name: "Cornea grading", level: 1 })).toBeInTheDocument()
+    })
+
+    it("sends all 24 features with blanks as null and shows the grade, votes and ECD reference", async () => {
+        vi.mocked(analyzeGrading).mockResolvedValue(COMPLETED)
+        renderApp("/grading", makeAuth({ user: makeUser("DOCTOR") }))
+
+        await fillAndGrade("2400")
+
+        expect(await screen.findByRole("heading", { name: /Results for case CASE-9/ })).toBeInTheDocument()
+        const sent = vi.mocked(analyzeGrading).mock.calls[0][0]
+        expect(sent).toMatchObject({ caseId: "CASE-9", imageId: "img-1" })
+        expect(Object.keys(sent.clinicalFeatures)).toHaveLength(24)
+        expect(sent.clinicalFeatures.ECD_CD_cells_per_mm2).toBe(2400)
+        expect(sent.clinicalFeatures.HEX_percent).toBeNull()
+
+        const grade = within(screen.getByRole("region", { name: "Model grade" }))
+        expect(grade.getByText("Predicted grade").parentElement).toHaveTextContent("B")
+        expect(grade.getByRole("meter", { name: "Share of trees voting B" })).toHaveAttribute("aria-valuenow", "63")
+        expect(grade.getByText("Not calibrated — not a confidence")).toBeInTheDocument()
+
+        const reference = within(screen.getByRole("region", { name: "Reference: ECD rule" }))
+        expect(reference.getByText("Differs from model")).toBeInTheDocument()
+        expect(reference.getByText("2,232 < ECD ≤ 2,497")).toBeInTheDocument()
+
+        const inputs = within(screen.getByRole("region", { name: "Inputs used" }))
+        expect(inputs.getByText("2,400 cells/mm²")).toBeInTheDocument()
+        expect(inputs.getByText("Yes")).toBeInTheDocument()
+    })
+
+    it("flags review when the server returns warnings", async () => {
+        vi.mocked(analyzeGrading).mockResolvedValue({
+            ...COMPLETED,
+            reviewRequired: true,
+            warnings: [{ code: "IMAGE_NOT_TRAINING_SIZE", field: "image", message: "The image was resized." }],
+        })
+        renderApp("/grading", makeAuth({ user: makeUser("DOCTOR") }))
+        await fillAndGrade("2400")
+
+        expect(await screen.findByText("Review required")).toBeInTheDocument()
+        expect(screen.getByText("The image was resized.")).toBeInTheDocument()
+    })
+
+    it("shows a server feature error at its field and reuses the uploaded image on retry", async () => {
+        vi.mocked(analyzeGrading)
+            .mockRejectedValueOnce(new ApiError(422, "ECD_CD_cells_per_mm2 must be greater than 0.", { ECD_CD_cells_per_mm2: "ECD must be greater than 0." }, "FEATURE_OUT_OF_RANGE"))
+            .mockResolvedValueOnce(COMPLETED)
+        renderApp("/grading", makeAuth({ user: makeUser("DOCTOR") }))
+
+        const user = await fillAndGrade("2400")
+        expect(await screen.findByText("ECD must be greater than 0.")).toBeInTheDocument()
+        await user.click(screen.getByRole("button", { name: "Grade" }))
+
+        expect(await screen.findByRole("heading", { name: /Results for case CASE-9/ })).toBeInTheDocument()
+        expect(uploadImage).toHaveBeenCalledTimes(1)
+    })
+
+    it("shows a non-corneal image rejection at the image field", async () => {
+        vi.mocked(analyzeGrading).mockRejectedValue(new ApiError(422, "Upload a specular microscopy image showing corneal endothelial cells.", { image: "x" }, "INVALID_IMAGE_DOMAIN"))
+        renderApp("/grading", makeAuth({ user: makeUser("DOCTOR") }))
+
+        await fillAndGrade("")
+
+        expect(await screen.findByText(/Choose a different image and try again/)).toBeInTheDocument()
+    })
+})

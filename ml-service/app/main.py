@@ -1,4 +1,3 @@
-import json
 import logging
 from contextlib import asynccontextmanager
 
@@ -17,10 +16,11 @@ from app.schemas.analysis import (
     RejectedResponse,
 )
 from app.routers import disease as disease_router
+from app.routers import grading as grading_router
+from app.routers.grading import parse_clinical_features
 from pipelines.cellular.service import run_cellular_analysis
 from pipelines.disease.config import DiseaseModelNotReady
 from pipelines.disease.service import run_disease_analysis, warm_up as warm_up_disease
-from pipelines.grading.feature_schema import load_schema, validate_features
 from pipelines.grading.service import run_grading_analysis
 from pipelines.image.decode import ImageRejected, decode_image
 from pipelines.image.domain import NON_CORNEAL, UNCERTAIN, ModelNotReady, validate_domain
@@ -46,6 +46,7 @@ app = FastAPI(
     lifespan=lifespan,
 )
 app.include_router(disease_router.router)
+app.include_router(grading_router.router)
 
 
 def rejected(status_code: int, code: str, message: str, field: str | None = None,
@@ -68,21 +69,6 @@ def request_validation_error(request: Request, exc: RequestValidationError):
 @app.get("/health")
 def health():
     return {"status": "healthy", "service": "ml-service"}
-
-
-def parse_clinical_features(raw: str):
-    """The clinicalFeatures form field: a JSON object with all 24 features (null = not recorded)."""
-    try:
-        payload = json.loads(raw, parse_constant=lambda c: float(c))  # NaN/Infinity reach the validator
-    except json.JSONDecodeError:
-        return None, [ErrorDetail(code="FEATURE_SCHEMA_MISMATCH", field="clinicalFeatures",
-                                  message="Clinical features must be a JSON object.")]
-    result = validate_features(payload)
-    if not result.ok:
-        return None, [ErrorDetail(code=e.code, field=e.field, message=e.message) for e in result.errors]
-    values = dict(zip(load_schema()["order"], result.values))
-    warnings = [{"code": w.code, "field": w.field, "message": w.message} for w in result.warnings]
-    return (values, warnings), None
 
 
 def run_module(result_type, runner, *args):

@@ -1,18 +1,12 @@
 import type { ReactNode } from "react"
-import type { AnalyzeResponse, EcdReference, GradingResult, ImageValidation } from "@/api/analysis"
-import {
-    formatCount,
-    formatEcdBand,
-    formatPercent,
-    humanize,
-    isFailed,
-    isNotImplemented,
-    moduleStatus,
-} from "@/lib/analysis-format"
+import type { AnalyzeResponse, GradingResult } from "@/api/analysis"
+import { formatCount, formatPercent, humanize, isFailed, isNotImplemented, moduleStatus } from "@/lib/analysis-format"
 import { featureLabel } from "@/lib/grading-features"
 import { alertError, alertWarning } from "@/lib/styles"
 import { Card } from "@/components/dashboard/PageHeader"
 import { ConfidenceMeter } from "@/components/analysis/ConfidenceMeter"
+import { ImageValidationNote } from "@/components/analysis/ImageValidationNote"
+import { EcdReferenceDetails, GradeShares, sectionLabel } from "@/components/grading/grading-parts"
 import { Field } from "@/components/ui/field"
 import { StatusBadge } from "@/components/ui/status-badge"
 
@@ -91,46 +85,6 @@ export function AnalysisResults({ result }: { result: AnalyzeResponse }) {
     )
 }
 
-function ImageValidationNote({ validation }: { validation: ImageValidation }) {
-    if (validation.domainStatus === "UNVALIDATED_DEV_MODE") {
-        return (
-            <p role="alert" className={alertWarning}>
-                Development mode: this image was not checked by the corneal-image validator. Do not rely on these
-                results.
-            </p>
-        )
-    }
-    return (
-        <p className="text-xs text-muted-foreground">
-            Image accepted as a specular microscopy image of the corneal endothelium ({validation.width} ×{" "}
-            {validation.height} px).
-            {!validation.qualityAssessed && " Image quality and cell detail were not assessed automatically."}
-        </p>
-    )
-}
-
-const GRADE_ORDER = ["A+", "A", "B"]
-
-const sectionLabel = "text-2xs font-semibold tracking-wide text-muted-foreground uppercase"
-
-/** Grades in display order, followed by any the UI does not know. */
-function orderedGrades(shares: Record<string, number>): string[] {
-    return [...GRADE_ORDER.filter((g) => g in shares), ...Object.keys(shares).filter((g) => !GRADE_ORDER.includes(g))]
-}
-
-function GradeShares({ shares }: { shares: Record<string, number> }) {
-    return (
-        <ul className="mt-2 flex flex-wrap gap-4 text-sm">
-            {orderedGrades(shares).map((grade) => (
-                <li key={grade}>
-                    <span className="font-semibold">{grade}</span>{" "}
-                    <span className="tabular-nums">{formatPercent(shares[grade])}</span>
-                </li>
-            ))}
-        </ul>
-    )
-}
-
 /**
  * The grade comes from the hybrid random forest (24 features + image). Its tree votes are shown as such: they have
  * not been calibrated, so they are not a confidence. The ECD rule's grade is shown alongside as
@@ -175,45 +129,13 @@ function GradingDetails({ grading }: { grading: GradingResult }) {
                 </details>
             )}
 
-            {grading.ecdReference && <EcdReferenceDetails reference={grading.ecdReference} />}
-
-            {grading.message && <p className="text-xs text-muted-foreground">{grading.message}</p>}
-        </div>
-    )
-}
-
-function EcdReferenceDetails({ reference }: { reference: EcdReference }) {
-    const title = <p className={sectionLabel}>Reference: ECD rule</p>
-
-    if (reference.status.toLowerCase() !== "completed") {
-        return (
-            <div className="border-t border-border pt-4">
-                {title}
-                <p className="mt-1 text-xs text-muted-foreground">{reference.message}</p>
-            </div>
-        )
-    }
-
-    const distribution = reference.bandDistribution ?? {}
-    return (
-        <div className="space-y-2 border-t border-border pt-4">
-            {title}
-            <dl className="grid grid-cols-2 gap-4 sm:grid-cols-3">
-                <Field label="ECD rule grade" value={reference.grade} />
-                <Field label="ECD used" value={formatCount(reference.ecdUsed)} unit="cells/mm²" />
-                <Field label="ECD band" value={formatEcdBand(reference.ecdBand)} />
-            </dl>
-            {Object.keys(distribution).length > 0 && (
-                <div>
-                    <p className="text-xs text-muted-foreground">
-                        Recorded grades of the {reference.bandTrainingTissues} training tissues in this band
-                    </p>
-                    <GradeShares shares={distribution} />
+            {grading.ecdReference && (
+                <div className="border-t border-border pt-4">
+                    <EcdReferenceDetails reference={grading.ecdReference} />
                 </div>
             )}
-            {reference.reviewRequired && (
-                <p className="text-xs text-warning">This ECD is outside the range seen in training.</p>
-            )}
+
+            {grading.message && <p className="text-xs text-muted-foreground">{grading.message}</p>}
         </div>
     )
 }
