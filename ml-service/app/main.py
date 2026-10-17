@@ -21,6 +21,7 @@ from app.routers.grading import parse_clinical_features
 from pipelines.cellular.service import run_cellular_analysis
 from pipelines.disease.config import DiseaseModelNotReady
 from pipelines.disease.service import run_disease_analysis, warm_up as warm_up_disease
+from pipelines.grading.explain import load_explainer as load_grading_explainer
 from pipelines.grading.service import run_grading_analysis
 from pipelines.image.decode import ImageRejected, decode_image
 from pipelines.image.domain import NON_CORNEAL, UNCERTAIN, ModelNotReady, validate_domain
@@ -36,6 +37,11 @@ async def lifespan(app: FastAPI):
         warm_up_disease()
     except DiseaseModelNotReady:
         logger.exception("Disease models not loaded")
+    # Import shap and build the grading explainer now, not on the first request (~4 s).
+    try:
+        load_grading_explainer()
+    except Exception:
+        logger.exception("Grading explainer not loaded")
     yield
 
 

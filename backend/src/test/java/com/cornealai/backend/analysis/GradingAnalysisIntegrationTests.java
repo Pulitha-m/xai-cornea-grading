@@ -3,7 +3,10 @@ package com.cornealai.backend.analysis;
 import com.cornealai.backend.analysis.client.MlServiceClient;
 import com.cornealai.backend.analysis.dto.EcdBand;
 import com.cornealai.backend.analysis.dto.EcdReference;
+import com.cornealai.backend.analysis.dto.grading.FeatureContribution;
 import com.cornealai.backend.analysis.dto.grading.GradingAnalyzeResponse;
+import com.cornealai.backend.analysis.dto.grading.GradingExplanation;
+import com.cornealai.backend.analysis.dto.grading.ImageAttributionMap;
 import com.cornealai.backend.analysis.entity.GradingAnalysisRun;
 import com.cornealai.backend.analysis.repository.GradingAnalysisRunRepository;
 import com.cornealai.backend.analysis.storage.ImageStorage;
@@ -73,7 +76,8 @@ class GradingAnalysisIntegrationTests extends IntegrationTestSupport {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.analysisId").isNotEmpty())
                 .andExpect(jsonPath("$.grade").value("A"))
-                .andExpect(jsonPath("$.ecdReference.grade").value("A"));
+                .andExpect(jsonPath("$.ecdReference.grade").value("A"))
+                .andExpect(jsonPath("$.explanation.imageMap.supportingPng").value("iVBORw0KGgo="));
 
         verify(mlServiceClient).analyzeGrading(eq("CASE-1"), contains("\"Stroma_Has_Scar\":null"), eq(stored), anyString());
         GradingAnalysisRun run = runs.findByImageId(imageId).getFirst();
@@ -81,7 +85,8 @@ class GradingAnalysisIntegrationTests extends IntegrationTestSupport {
         assertThat(run.getGrade()).isEqualTo("A");
         assertThat(run.getEcd()).isEqualTo(2400.0);
         assertThat(run.getClinicalFeaturesJson()).contains("\"ECD_CD_cells_per_mm2\":2400");
-        assertThat(run.getResultJson()).contains("\"grade\":\"A\"");
+        assertThat(run.getResultJson()).contains("\"grade\":\"A\"", "\"contribution\":0.3")
+                .doesNotContain("iVBORw0KGgo");
     }
 
     @Test
@@ -105,7 +110,7 @@ class GradingAnalysisIntegrationTests extends IntegrationTestSupport {
     void responseWithoutAGradeIsRejected() throws Exception {
         UUID imageId = uploadedImage(doctor, "CASE-1");
         GradingAnalyzeResponse noGrade = new GradingAnalyzeResponse(null, "CASE-1", "completed", null, null, null,
-                null, null, null, null, null, null, null);
+                null, null, null, null, null, null, null, null);
         when(mlServiceClient.analyzeGrading(anyString(), anyString(), any(), anyString())).thenReturn(noGrade);
 
         analyze(doctor, "CASE-1", imageId)
@@ -136,7 +141,11 @@ class GradingAnalysisIntegrationTests extends IntegrationTestSupport {
                 new EcdBand(2232.0, 2497.0), Map.of("A", 0.9, "B", 0.1), 94, false, "Grade based on ECD only.");
         return new GradingAnalyzeResponse(null, "CASE-1", "completed", null, "A", "hybrid_random_forest_24_resnet50",
                 Map.of("A+", 0.1, "A", 0.7, "B", 0.2), Map.of("ECD_CD_cells_per_mm2", 2400.0),
-                List.of("Stroma_Has_Scar"), List.of(), reference, false, "Specialist confirmation required.");
+                List.of("Stroma_Has_Scar"), List.of(), reference, false, "Specialist confirmation required.",
+                new GradingExplanation("tree_shap_path_dependent", "A", 0.35, 0.7,
+                        List.of(new FeatureContribution("ECD_CD_cells_per_mm2", 2400.0, 0.3)), 0.05,
+                        new ImageAttributionMap("shap_weighted_layer4_map", "iVBORw0KGgo=", null, 0.08, -0.03, 0.95),
+                        "Explains the model, not the cornea."));
     }
 
     private UUID uploadedImage(AppUser user, String caseId) throws Exception {

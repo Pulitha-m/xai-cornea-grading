@@ -84,7 +84,7 @@ async def analyze_grading(
 
     # 4. The hybrid model; it fails closed, so no grade is ever given without it.
     try:
-        result = run_grading_analysis(values, feature_warnings, decoded.image)
+        result = run_grading_analysis(values, feature_warnings, decoded.image, explain=True)
     except HybridModelNotReady:
         logger.exception("Hybrid grading model unavailable")
         return rejected(503, "MODEL_NOT_READY", "The grading model is unavailable. Try again later.")

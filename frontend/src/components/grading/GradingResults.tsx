@@ -1,9 +1,10 @@
 import type { GradingAnalyzeResponse } from "@/api/grading"
 import { orderedGrades } from "@/lib/analysis-format"
-import { FEATURE_GROUPS, FEATURES, type FeatureDef } from "@/lib/grading-features"
+import { FEATURE_GROUPS, FEATURES, formatFeatureValue } from "@/lib/grading-features"
 import { alertWarning } from "@/lib/styles"
 import { ImageValidationNote } from "@/components/analysis/ImageValidationNote"
 import { EcdReferenceDetails, sectionLabel } from "@/components/grading/grading-parts"
+import { GradingExplanationView } from "@/components/grading/GradingExplanation"
 import { Card } from "@/components/dashboard/PageHeader"
 import { Field } from "@/components/ui/field"
 import { StatusBadge } from "@/components/ui/status-badge"
@@ -78,6 +79,10 @@ export function GradingResults({ result }: { result: GradingAnalyzeResponse }) {
                 </Card>
             </div>
 
+            {result.explanation
+                ? <GradingExplanationView explanation={result.explanation} />
+                : <p className="text-xs text-muted-foreground">An explanation of this grade could not be computed. The grade itself is unaffected.</p>}
+
             <Card title="Inputs used" description="The 24 features as given to the model. Not recorded inputs were handled as in training.">
                 <div className="space-y-5">
                     {FEATURE_GROUPS.map((group) => (
@@ -88,7 +93,8 @@ export function GradingResults({ result }: { result: GradingAnalyzeResponse }) {
                                     <div key={feature.name} className="min-w-0">
                                         <dt className="text-xs text-muted-foreground">{feature.label}</dt>
                                         <dd className="text-sm font-medium tabular-nums">
-                                            {formatFeature(feature, result.featuresUsed[feature.name] ?? null)}
+                                            {formatFeatureValue(feature.name, result.featuresUsed[feature.name] ?? null)
+                                                ?? <span className="font-normal text-muted-foreground">Not recorded</span>}
                                         </dd>
                                     </div>
                                 ))}
@@ -101,13 +107,6 @@ export function GradingResults({ result }: { result: GradingAnalyzeResponse }) {
             {result.message && <p className="text-xs text-muted-foreground">{result.message}</p>}
         </section>
     )
-}
-
-function formatFeature(feature: FeatureDef, value: number | string | null) {
-    if (value === null) return <span className="font-normal text-muted-foreground">Not recorded</span>
-    if (feature.type === "binary") return value === 1 ? "Yes" : "No"
-    if (typeof value === "number") return `${value.toLocaleString("en-GB")}${feature.unit ? ` ${feature.unit}` : ""}`
-    return value
 }
 
 function VoteRow({ grade, share, predicted }: { grade: string; share: number; predicted: boolean }) {

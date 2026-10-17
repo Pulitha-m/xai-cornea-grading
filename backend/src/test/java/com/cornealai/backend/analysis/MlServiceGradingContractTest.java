@@ -1,7 +1,10 @@
 package com.cornealai.backend.analysis;
 
 import com.cornealai.backend.analysis.client.MlServiceClient;
+import com.cornealai.backend.analysis.dto.grading.FeatureContribution;
 import com.cornealai.backend.analysis.dto.grading.GradingAnalyzeResponse;
+import com.cornealai.backend.analysis.dto.grading.GradingExplanation;
+import com.cornealai.backend.analysis.dto.grading.ImageAttributionMap;
 import com.sun.net.httpserver.HttpServer;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
@@ -58,6 +61,33 @@ class MlServiceGradingContractTest {
         assertThat(response.featuresUsed()).hasSize(24).containsKey("ECD_CD_cells_per_mm2");
         assertEquals("ecd_threshold_tree", response.ecdReference().method());
         assertTrue(response.message().contains("Specialist confirmation required"));
+    }
+
+    @Test
+    void explanationMapsToDtoAndAddsUp() throws Exception {
+        GradingExplanation explanation = strictMapper.treeToValue(fixture().get("completed"), GradingAnalyzeResponse.class)
+                .explanation();
+
+        assertEquals("tree_shap_path_dependent", explanation.method());
+        assertThat(explanation.features()).hasSize(24);
+        double total = explanation.baseline() + explanation.imageContribution()
+                + explanation.features().stream().mapToDouble(FeatureContribution::contribution).sum();
+        assertEquals(explanation.prediction(), total, 2e-3);
+        ImageAttributionMap map = explanation.imageMap();
+        assertEquals("shap_weighted_layer4_map", map.method());
+        assertNotNull(map.supportingPng());
+        assertThat(map.supportingTotal()).isGreaterThanOrEqualTo(0.0);
+        assertThat(map.opposingTotal()).isLessThanOrEqualTo(0.0);
+    }
+
+    @Test
+    void auditCopyHasNoImageMaps() throws Exception {
+        GradingAnalyzeResponse response = strictMapper.treeToValue(fixture().get("completed"), GradingAnalyzeResponse.class);
+        ImageAttributionMap stripped = response.withoutImageMaps().explanation().imageMap();
+        assertNull(stripped.supportingPng());
+        assertNull(stripped.opposingPng());
+        assertEquals(response.explanation().imageMap().localisedShare(), stripped.localisedShare());
+        assertThat(response.withoutImageMaps().explanation().features()).isEqualTo(response.explanation().features());
     }
 
     @Test

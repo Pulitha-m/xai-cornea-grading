@@ -42,17 +42,28 @@ def synthetic_embedding(seed: int) -> np.ndarray:
     return np.random.default_rng(seed).exponential(0.45, 2048).astype(np.float32)
 
 
+def synthetic_maps(embedding: np.ndarray, size=(6, 8), seed: int = 0) -> np.ndarray:
+    """Layer4-like maps (2048 × h × w) whose spatial mean is exactly `embedding`, as for the real backbone."""
+    noise = np.random.default_rng(seed).normal(0, 0.3, (embedding.size, *size))
+    return (embedding[:, None, None] + noise - noise.mean(axis=(1, 2), keepdims=True)).astype(np.float64)
+
+
 @pytest.fixture(autouse=True)
 def image_embedding(request, monkeypatch):
     """Stub the ResNet-50 backbone (a 94 MB file not in git) with a synthetic embedding.
 
     Tests marked `real_backbone` use the exported ONNX backbone instead. Tests may set
-    the seed and whether the image counts as resized.
+    the seed, whether the image counts as resized and whether feature maps are returned.
     """
-    state = {"seed": 1000, "resized": False}
+    state = {"seed": 1000, "resized": False, "maps": True}
+
+    def fake_embed(image):
+        embedding = synthetic_embedding(state["seed"])
+        return embedding, synthetic_maps(embedding) if state["maps"] else None, state["resized"]
+
     if "real_backbone" not in request.keywords:
         from pipelines.grading import hybrid
-        monkeypatch.setattr(hybrid, "embed", lambda image: (synthetic_embedding(state["seed"]), state["resized"]))
+        monkeypatch.setattr(hybrid, "embed", fake_embed)
     return state
 
 

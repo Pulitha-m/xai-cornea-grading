@@ -18,7 +18,8 @@ import java.util.UUID;
 /**
  * Runs the hybrid grading model on a stored image, with the same access policy as
  * {@link AnalysisService}: only the uploader may analyse an image, its bytes are read
- * server-side and checked against the stored SHA-256. Every attempt is recorded.
+ * server-side and checked against the stored SHA-256. Every attempt is recorded (without the
+ * explanation's image maps).
  */
 @Service
 public class GradingAnalysisService {
@@ -85,7 +86,7 @@ public class GradingAnalysisService {
 
             run.setStatus(response.status());
             run.setGrade(response.grade());
-            run.setResultJson(objectMapper.writeValueAsString(response));
+            run.setResultJson(objectMapper.writeValueAsString(response.withoutImageMaps()));
             runs.save(run);
             return response;
         } catch (AnalysisRejectedException e) {

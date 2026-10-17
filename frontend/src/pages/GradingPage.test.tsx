@@ -36,6 +36,24 @@ const COMPLETED: GradingAnalyzeResponse = {
     },
     reviewRequired: false,
     message: "Grade from the hybrid model. Specialist confirmation required.",
+    explanation: {
+        method: "tree_shap_path_dependent",
+        explainedGrade: "B",
+        baseline: 0.14,
+        prediction: 0.63,
+        features: [
+            { name: "ECD_CD_cells_per_mm2", value: 2400, contribution: 0.31 },
+            { name: "Stroma_Has_Scar", value: 1, contribution: 0.12 },
+            ...FEATURES.map((f) => f.name).filter((n) => n !== "ECD_CD_cells_per_mm2" && n !== "Stroma_Has_Scar")
+                .map((name, i) => ({ name, value: null, contribution: i === 0 ? -0.02 : 0.001 })),
+        ],
+        imageContribution: 0.05,
+        imageMap: {
+            method: "shap_weighted_layer4_map", supportingPng: "iVBORw0KGgo=", opposingPng: null,
+            supportingTotal: 0.06, opposingTotal: -0.01, localisedShare: 0.95,
+        },
+        message: "Contributions explain the model, not the cornea.",
+    },
 }
 
 function jpeg() {
@@ -87,9 +105,27 @@ describe("GradingPage", () => {
         expect(reference.getByText("Differs from model")).toBeInTheDocument()
         expect(reference.getByText("2,232 < ECD ≤ 2,497")).toBeInTheDocument()
 
+        const drivers = within(screen.getByRole("region", { name: "What drove this grade" }))
+        expect(drivers.getByLabelText("ECD (2,400 cells/mm²): +31.0 pts for B")).toBeInTheDocument()
+        expect(drivers.getByLabelText("Stroma: Scar (Yes): +12.0 pts for B")).toBeInTheDocument()
+        expect(drivers.getByLabelText("Image features (ResNet-50, 32 components): +5.0 pts for B")).toBeInTheDocument()
+        expect(drivers.getByText(/from the training average \(14%\) to this tissue \(63%\)/)).toBeInTheDocument()
+        const where = within(screen.getByRole("region", { name: "Where in the image" }))
+        expect(where.getByRole("img", { name: /raised the share for b/ })).toHaveAttribute("src", "data:image/png;base64,iVBORw0KGgo=")
+        expect(where.getByText("No region")).toBeInTheDocument()
+
         const inputs = within(screen.getByRole("region", { name: "Inputs used" }))
         expect(inputs.getByText("2,400 cells/mm²")).toBeInTheDocument()
         expect(inputs.getByText("Yes")).toBeInTheDocument()
+    })
+
+    it("still shows the grade when the explanation could not be computed", async () => {
+        vi.mocked(analyzeGrading).mockResolvedValue({ ...COMPLETED, explanation: null })
+        renderApp("/grading", makeAuth({ user: makeUser("DOCTOR") }))
+        await fillAndGrade("2400")
+
+        expect(await screen.findByText(/An explanation of this grade could not be computed/)).toBeInTheDocument()
+        expect(screen.getByText("Predicted grade").parentElement).toHaveTextContent("B")
     })
 
     it("flags review when the server returns warnings", async () => {
