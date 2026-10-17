@@ -305,6 +305,32 @@ xai:
     n_examples: 8                       # example windows in the figure
     example_p_poor: [0.5, 0.95]         # examples where P(poor) can visibly move (not saturated at 1)
     example_min_lit_share: 0.5          # examples of 'lit but poor' (dark windows are explained by the lit mask)
+  # Step 2 - biomarkers (xai/reliability.py, xai/biomarker_explain.py). Rules fixed 2026-10-18, before any result.
+  # Per measured cell: confidence = StarDist object probability of the instance the cell comes from;
+  #   RED    implausible size (existing flags: < 0.25 / > 3 x median area) or implausible shape
+  #          (side count known and outside sides_range, or compactness < min_compactness; hexagon = 0.907)
+  #   YELLOW otherwise, if confidence is unknown or below the midpoint between the model's detection
+  #          threshold and 1
+  #   GREEN  otherwise.
+  # Evaluation on the 40 annotated crops with the out-of-fold Phase 2 fold models: a predicted complete
+  # cell is WRONG if it has no reference match (IoU <= error_iou) or its area is off by > error_area_pct.
+  #   primary   AUC of (1 - confidence) for wrong cells; pass if the 95 % CI (bootstrap over crops)
+  #             lies above 0.5
+  #   secondary error rate rises green < yellow < red; side-count errors reported the same way
+  # 95 % CI of ECD / CV / HEX: bootstrap over spatial blocks of block_px (neighbouring cells are
+  # correlated); per-cell bootstrap reported for comparison. Coverage of the reference (manual) value on
+  # the crops is reported (expected < 95 %: the CI covers sampling, not segmentation error).
+  biomarkers:
+    min_compactness: 0.70
+    sides_range: [4, 8]
+    error_iou: 0.5
+    error_area_pct: 20
+    block_px: 64                        # ~2 cells; 16 blocks per 256 px crop, ~300 per image
+    n_boot: 2000
+    seed: 11
+    alpha: 0.05
+    top_variance_share: 0.05            # evidence overlay: the 5 % most extreme cells, their share of the area variance
+    n_images: 6                         # validation images with explanation figures
 
 # -----------------------------------------------------------------------------
 # Validation targets from the research scope (Phase 7).

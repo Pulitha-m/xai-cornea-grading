@@ -70,10 +70,27 @@ def normalise_lit(x: np.ndarray, lit: np.ndarray, pmin: float, pmax: float) -> n
     return out
 
 
-def make_predictor(cfg: dict, run: str, norm: str = "lit"):
+def instance_prob_image(labels: np.ndarray, prob: np.ndarray, points: np.ndarray) -> np.ndarray:
+    """StarDist details -> per-pixel object probability of the instance it belongs to (0 = background,
+    NaN = an instance whose centre point was overwritten by a neighbour). Mapped through each instance's
+    centre point, so it does not rely on StarDist's label numbering; on conflicts the higher prob wins."""
+    lut = np.full(int(labels.max()) + 1, np.nan, np.float32)
+    lut[0] = 0
+    if len(prob):
+        pts = np.clip(np.round(np.asarray(points)).astype(int), 0, np.array(labels.shape) - 1)
+        at = labels[pts[:, 0], pts[:, 1]]
+        for i in np.argsort(prob, kind="stable"):
+            if at[i] > 0:
+                lut[at[i]] = prob[i]
+    return lut[labels]
+
+
+def make_predictor(cfg: dict, run: str, norm: str = "lit", with_prob: bool = False):
     """Return f(uint8 image) -> mask (0 interior / 1 wall / 2 ignore) for this run.
     norm = 'lit'   : model input normalised over the lit tissue (consistent with training; default)
-           'image' : the models' own whole-image normalisation (first step 2.7 run, kept for comparison)"""
+           'image' : the models' own whole-image normalisation (first step 2.7 run, kept for comparison)
+    with_prob=True (StarDist only, XAI): f returns (mask, per-pixel object probability, see
+    instance_prob_image) and f.prob_thresh is the model's detection threshold. The mask is identical."""
     params = ClassicalParams.from_config(cfg)
     lit = lambda img: flatten_illumination(img, params)[1]
 
@@ -88,27 +105,36 @@ def make_predictor(cfg: dict, run: str, norm: str = "lit"):
     info = json.loads((final_dir(cfg, run) / "final.json").read_text())
     pre = Preprocessor(cfg, info["preprocess"])
     if run.startswith("cellpose"):
+        if with_prob:
+            raise ValueError("with_prob needs a StarDist run (Cellpose has no per-object probability)")
         from segmentation.run_cellpose import load_model
         model, diameter = load_model(info["model_path"]), cfg["seg_models"]["cellpose"]["diameter"]
         if norm == "lit":                                   # Cellpose's own default percentiles: 1 / 99
-            instances = lambda x, m: model.eval(normalise_lit(x, m, 1, 99), diameter=diameter, normalize=False)[0]
+            predict = lambda x, m: (model.eval(normalise_lit(x, m, 1, 99), diameter=diameter, normalize=False)[0], None)
         else:
-            instances = lambda x, m: model.eval(x, diameter=diameter)[0]
+            predict = lambda x, m: (model.eval(x, diameter=diameter)[0], None)
     else:
         from segmentation.run_stardist import to_input
         from stardist.models import StarDist2D
         model_dir = Path(info["model_dir"])
         model = StarDist2D(None, name=model_dir.name, basedir=str(model_dir.parent))
         if norm == "lit":                                   # same percentiles as training (to_input: 1 / 99.8)
-            instances = lambda x, m: model.predict_instances(normalise_lit(x, m, 1, 99.8))[0]
+            predict = lambda x, m: model.predict_instances(normalise_lit(x, m, 1, 99.8))
         else:
-            instances = lambda x, m: model.predict_instances(to_input(x))[0]
+            predict = lambda x, m: model.predict_instances(to_input(x))
 
     def f(img):
         m = lit(img)
-        mask = instances_to_mask(instances(pre(img), m))
+        labels, details = predict(pre(img), m)
+        mask = instances_to_mask(labels)
         mask[~m] = IGNORE
-        return mask
+        if not with_prob:
+            return mask
+        prob = instance_prob_image(labels, details["prob"], details["points"])
+        prob[~m] = 0
+        return mask, prob
+    if with_prob:
+        f.prob_thresh = float(model.thresholds.prob)
     return f
 
 
