@@ -1,0 +1,233 @@
+{
+  "config": "corneal_disease_severity_v2",
+  "version": 1,
+  "source": {
+    "notebook": "ml/disease-new/notebooks/10_Inference_Final_Models_v2.ipynb",
+    "features_csv": "Final_Features_MultiLabel_updated.csv",
+    "n_train": 1222
+  },
+  "image": {
+    "input_width": 384,
+    "input_height": 288,
+    "apply_clahe": false,
+    "clahe": {
+      "clip_limit": 2.0,
+      "tile_grid_size": [
+        8,
+        8
+      ],
+      "prep_width": 512,
+      "prep_height": 384
+    },
+    "imagenet_mean": [
+      0.485,
+      0.456,
+      0.406
+    ],
+    "imagenet_std": [
+      0.229,
+      0.224,
+      0.225
+    ],
+    "flip_average": true
+  },
+  "diseases": [
+    "FECD",
+    "Guttata",
+    "Folds",
+    "PolyPleo",
+    "LowCD"
+  ],
+  "features": [
+    "ECD_CD_cells_per_mm2",
+    "ECD_Deficit",
+    "SD",
+    "CV",
+    "HEX_percent",
+    "Donor_Age"
+  ],
+  "ecd_deficit_reference": 2500,
+  "imputer_median": [
+    2525.0,
+    0.0,
+    150.0,
+    38.0,
+    53.0,
+    63.0
+  ],
+  "scaler_mean": [
+    2452.4108019639934,
+    231.09165302782324,
+    167.67757774140753,
+    38.48936170212766,
+    53.308510638297875,
+    60.84288052373159
+  ],
+  "scaler_scale": [
+    539.0534361444702,
+    361.872534700535,
+    60.812346962346666,
+    5.724252944213353,
+    7.085212666862293,
+    10.62806066672766
+  ],
+  "disease_thresholds": {
+    "FECD": 0.23486328125,
+    "Guttata": 0.441650390625,
+    "Folds": 0.4873046875,
+    "PolyPleo": 0.4404296875,
+    "LowCD": 0.46630859375
+  },
+  "severity_heads": {
+    "FECDgroup": [
+      "FECD",
+      "PolyPleo",
+      "LowCD"
+    ],
+    "Folds": [
+      "Folds"
+    ],
+    "Guttata": [
+      "Guttata"
+    ]
+  },
+  "severity_head_names": {
+    "FECDgroup": "FECD group",
+    "Folds": "Folds",
+    "Guttata": "Guttata"
+  },
+  "severity_thresholds": {
+    "FECDgroup": 0.5703125,
+    "Folds": 0.49072265625,
+    "Guttata": 0.43359375
+  },
+  "fecd_sev_method": "model",
+  "fecd_cd_rule_ecd_below": 1600,
+  "quality": {
+    "resize": [
+      640,
+      480
+    ],
+    "unusable_std_below": 5,
+    "unusable_saturated_above": 0.5,
+    "low_focus_below": 25.249389234610664,
+    "low_dark_above": 0.45,
+    "dark_pixel_below": 20,
+    "saturated_pixel_above": 245,
+    "focus_sample": "Laplacian variance of 300 training images (pandas sample, random_state=0), 5th percentile"
+  },
+  "image_checks": {
+    "min_side": 300,
+    "aspect_min": 1.1,
+    "aspect_max": 1.6,
+    "colour_score_max": 3
+  },
+  "ood": {
+    "file": "ood_reference_v2.npz",
+    "sha256": "639d862269ab3f109ab795e4afdd3bf630161ee1535d658a511be9f95a5aa28d",
+    "k": 5,
+    "warn_above": 0.1695618271827698,
+    "reject_above": 0.18768025159835813,
+    "n_reference": 1222,
+    "n_test": 305
+  },
+  "number_checks": {
+    "limits": {
+      "ecd": [
+        300,
+        4500
+      ],
+      "sd": [
+        40,
+        1000
+      ],
+      "cv": [
+        10,
+        110
+      ],
+      "hex_pct": [
+        5,
+        100
+      ],
+      "age": [
+        1,
+        110
+      ]
+    },
+    "training_range": {
+      "ecd": [
+        676.0,
+        4484.0
+      ],
+      "cv": [
+        19.0,
+        100.0
+      ],
+      "hex_pct": [
+        15.0,
+        76.0
+      ],
+      "age": [
+        15.0,
+        79.0
+      ]
+    },
+    "sd_consistency_tolerance": 0.05,
+    "max_missing": 2
+  },
+  "models": {
+    "exported_with": {
+      "torch": "2.14.1+cpu",
+      "torchvision": "0.29.1+cpu",
+      "opset": 17
+    },
+    "disease": {
+      "file": "disease_fusion_densenet121.onnx",
+      "sha256": "ffed42a891e74f6cae328012c1d24b8be448b0d4c03efdfc477cba89360fa102",
+      "source_weights": "final_densenet121/Image_plus_numbers.pt",
+      "source_sha256": "8aed21b39f25fbf4f03bed50c55ba6efbfc2839f9db14584f620f889d8dc653f",
+      "inputs": {
+        "image": [
+          null,
+          3,
+          288,
+          384
+        ],
+        "tab": [
+          null,
+          6
+        ]
+      },
+      "outputs": [
+        "logits",
+        "cams",
+        "embedding"
+      ],
+      "max_abs_difference_vs_torch": 7.510185241699219e-06,
+      "gradcam_max_abs_difference_vs_autograd": 6.556510925292969e-07
+    },
+    "severity": {
+      "file": "severity_multitask_densenet121.onnx",
+      "sha256": "8b21e05c819c1e07096cc5f7eb3070417b0c89a0b7cc317e929510bab85fde81",
+      "source_weights": "severity_densenet121/final_multitask.pt",
+      "source_sha256": "2613eb3c5c64bcca06e848044ea3ddb6907a768087f91b19a08d2fc0751b93b8",
+      "inputs": {
+        "image": [
+          null,
+          3,
+          288,
+          384
+        ],
+        "tab": [
+          null,
+          6
+        ]
+      },
+      "outputs": [
+        "disease_logits",
+        "severity_logits"
+      ],
+      "max_abs_difference_vs_torch": 1.9073486328125e-06
+    }
+  }
+}

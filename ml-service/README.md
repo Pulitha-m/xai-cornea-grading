@@ -112,9 +112,21 @@ It reports the band and the recorded grades of training tissues in that band. Wh
 
 Every grading request passes this validator. `tests/test_feature_schema.py` checks the schema against the training code's feature lists, and the frontend's feature list is checked against it in `frontend/src/lib/grading-features.test.ts`.
 
+## Disease detection and severity (v2)
+
+`POST /disease/analyze` (`app/routers/disease.py`, `pipelines/disease/`), shown on its own "Disease screening" page (backend `POST /api/analysis/disease`). It is **not** run by `/analyze`, whose `disease` module stays `not_implemented`. Port of `ml/disease-new/notebooks/10_Inference_Final_Models_v2.ipynb`. **Research tool, not a medical diagnosis.**
+
+Multipart form fields: `image`, `caseId`, `measurements` (JSON object with exactly `ECD_CD_cells_per_mm2`, `SD`, `CV`, `HEX_percent`, `Donor_Age`; `null` = not recorded, never 0) and optional `force`.
+
+Processing order: measurement types → `decode_image` → domain validator (same rejections as `/analyze`) → the notebook's input checks → models.
+- **Input checks:** greyscale (colour score ≤ 3), shorter side ≥ 300 px, aspect 1.1–1.6 (warning), quality (contrast, saturation → unusable; focus below the 5th percentile of training images, or dark → low, warning), unusual image (k = 5 cosine kNN distance to the 1,222 training images: warning above the 95th, error above the 99th percentile of test distances), values within possible ranges, outside the training range (warning), SD ≈ CV/100 × 10⁶ / ECD within 5 %, at most 2 values missing (missing ones get the training median, with a warning). Errors give `422 INPUT_CHECK_FAILED` with every error and warning in `inputCheck`, unless `force` is true; a forced result has `inputCheck.forced: true` and `reliable: false`.
+- **Models:** DenseNet121 image + numbers fusion (5 diseases: FECD, Guttata, Folds, PolyPleo, LowCD) and the multi-task severity model (FECD group, Folds, Guttata: Mild or Mod/Sev). Image: greyscale → 384 × 288 → ImageNet normalisation; mean of the image and its horizontal flip. A disease is found at or above its cross-validated threshold; the overall severity is the worst detected group. Grad-CAM of the disease model's `features` layer per detected disease, as base64 PNG.
+- **Artifacts** (`models/disease_v2/`, committed): `corneal_config.json` (number scaling, thresholds, check limits, the models' SHA-256; exported by `ml/disease-new/scripts/export_corneal_config.py`), the two ONNX models (from the trained `.pt` files by `export_onnx_models.py`, which checks the ONNX outputs against torch and the in-graph Grad-CAM against autograd) and `ood_reference_v2.npz`. Loaded once at startup; files that do not match the config's SHA-256 give `503 MODEL_NOT_READY`.
+- **Parity:** `tests/test_disease_parity.py` runs the service pipeline on `ml/disease-new/data/test_images/` (git-ignored) and compares with the notebook's saved test predictions; the maximum difference must be < 0.01 (currently 0.0028). Skipped where the data is absent. Print the table with `uv run python -m tests.test_disease_parity`.
+
 ## Other modules
 
-Cellular analysis, disease screening and recommendation return `not_implemented` with no values. A disease model exists in `ml/disease - new/` but has not been integrated or evaluated here.
+Cellular analysis and recommendation return `not_implemented` with no values.
 
 ## Configuration
 
@@ -124,6 +136,7 @@ Cellular analysis, disease screening and recommendation return `not_implemented`
 | `IMAGE_MIN_SIDE` / `IMAGE_MAX_SIDE` | 224 / 8000 | Allowed side lengths in pixels |
 | `IMAGE_MAX_PIXELS` | 40000000 | Maximum total pixels |
 | `DOMAIN_VALIDATOR_DIR` | `models/domain_validator` | Validator artifacts |
+| `DISEASE_MODEL_DIR` | `models/disease_v2` | v2 disease model artifacts |
 | `DOMAIN_VALIDATOR_DEV_BYPASS` | unset | **Development only.** `true` skips domain validation; responses are marked `UNVALIDATED_DEV_MODE` and never valid |
 
 ## Docker and the ONNX backbones

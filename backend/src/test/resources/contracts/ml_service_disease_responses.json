@@ -1,0 +1,197 @@
+{
+  "completed": {
+    "caseId": "case-1",
+    "status": "completed",
+    "imageValidation": {
+      "domainStatus": "VALID_CORNEAL_IMAGE",
+      "qualityAssessed": true,
+      "width": 1296,
+      "height": 972,
+      "format": "JPEG"
+    },
+    "inputCheck": {
+      "passed": true,
+      "forced": false,
+      "errors": [],
+      "warnings": []
+    },
+    "imageQuality": {
+      "rating": "OK",
+      "focus": 43.64,
+      "focusLowLimit": 25.25,
+      "darkFraction": 0.0,
+      "saturatedFraction": 0.0011,
+      "contrast": 45.91,
+      "unusualDistance": 0.155,
+      "unusualWarnAbove": 0.1696,
+      "unusualRejectAbove": 0.1877
+    },
+    "method": "densenet121_image_numbers_fusion_v2",
+    "diseases": [
+      {
+        "code": "FECD",
+        "label": "Fuchs endothelial corneal dystrophy (FECD)",
+        "probability": 0.8231721936896932,
+        "threshold": 0.23486328125,
+        "detected": true,
+        "gradcamPng": "iVBORw0KGgoAAAANSUhEUgAAAYAAAAEgCAIAAAAy...(truncated)"
+      },
+      {
+        "code": "Guttata",
+        "label": "Guttata",
+        "probability": 0.12053293409669794,
+        "threshold": 0.441650390625,
+        "detected": false,
+        "gradcamPng": null
+      },
+      {
+        "code": "Folds",
+        "label": "Descemet folds",
+        "probability": 0.7083932716666494,
+        "threshold": 0.4873046875,
+        "detected": true,
+        "gradcamPng": "iVBORw0KGgoAAAANSUhEUgAAAYAAAAEgCAIAAAAy...(truncated)"
+      },
+      {
+        "code": "PolyPleo",
+        "label": "Polymegathism / pleomorphism",
+        "probability": 0.7979430384151897,
+        "threshold": 0.4404296875,
+        "detected": true,
+        "gradcamPng": "iVBORw0KGgoAAAANSUhEUgAAAYAAAAEgCAIAAAAy...(truncated)"
+      },
+      {
+        "code": "LowCD",
+        "label": "Low cell density",
+        "probability": 0.9775122749304253,
+        "threshold": 0.46630859375,
+        "detected": true,
+        "gradcamPng": "iVBORw0KGgoAAAANSUhEUgAAAYAAAAEgCAIAAAAy...(truncated)"
+      }
+    ],
+    "detected": [
+      "FECD",
+      "Folds",
+      "PolyPleo",
+      "LowCD"
+    ],
+    "normal": false,
+    "severity": [
+      {
+        "group": "FECDgroup",
+        "label": "FECD group",
+        "diseases": [
+          "FECD",
+          "PolyPleo",
+          "LowCD"
+        ],
+        "grade": "Mod/Sev",
+        "probability": 0.5743503458545584,
+        "threshold": 0.5703125,
+        "method": "model"
+      },
+      {
+        "group": "Folds",
+        "label": "Folds",
+        "diseases": [
+          "Folds"
+        ],
+        "grade": "Mod/Sev",
+        "probability": 0.7825992186825781,
+        "threshold": 0.49072265625,
+        "method": "model"
+      }
+    ],
+    "overallSeverity": "Mod/Sev",
+    "severityProbabilities": {
+      "FECDgroup": 0.5743503458545584,
+      "Folds": 0.7825992186825781,
+      "Guttata": 0.7203421415733914
+    },
+    "measurementsUsed": {
+      "ECD_CD_cells_per_mm2": 1667.0,
+      "ECD_Deficit": 833.0,
+      "SD": 180.0,
+      "CV": 30.0,
+      "HEX_percent": 72.0,
+      "Donor_Age": 73.0
+    },
+    "measurementsNotRecorded": [],
+    "reliable": true,
+    "message": "Research tool, not a medical diagnosis. Probabilities come from the DenseNet121 image + numbers model; a disease counts as found at or above its threshold, chosen on cross-validation."
+  },
+  "input_check_failed": {
+    "status": "rejected",
+    "error": {
+      "code": "INPUT_CHECK_FAILED",
+      "field": "ECD_CD_cells_per_mm2",
+      "message": "The inputs did not pass the checks, so no result was produced. Correct them, or run the analysis anyway (the result is then marked as not reliable)."
+    },
+    "errors": [
+      {
+        "code": "VALUE_NOT_POSSIBLE",
+        "field": "ECD_CD_cells_per_mm2",
+        "message": "ECD = 0: zero or negative is impossible. Leave it blank if unknown."
+      }
+    ],
+    "inputCheck": {
+      "passed": false,
+      "forced": false,
+      "errors": [
+        {
+          "code": "VALUE_NOT_POSSIBLE",
+          "field": "ECD_CD_cells_per_mm2",
+          "message": "ECD = 0: zero or negative is impossible. Leave it blank if unknown."
+        }
+      ],
+      "warnings": [
+        {
+          "code": "VALUE_MISSING",
+          "field": "Donor_Age",
+          "message": "Donor age not recorded; the training median is used."
+        }
+      ]
+    },
+    "imageQuality": {
+      "rating": "OK",
+      "focus": 43.64,
+      "focusLowLimit": 25.25,
+      "darkFraction": 0.0,
+      "saturatedFraction": 0.0011,
+      "contrast": 45.91,
+      "unusualDistance": 0.155,
+      "unusualWarnAbove": 0.1696,
+      "unusualRejectAbove": 0.1877
+    }
+  },
+  "rejected_measurements": {
+    "status": "rejected",
+    "error": {
+      "code": "FEATURE_SCHEMA_MISMATCH",
+      "field": "SD",
+      "message": "SD is missing."
+    },
+    "errors": [
+      {
+        "code": "FEATURE_SCHEMA_MISMATCH",
+        "field": "SD",
+        "message": "SD is missing."
+      },
+      {
+        "code": "FEATURE_SCHEMA_MISMATCH",
+        "field": "CV",
+        "message": "CV is missing."
+      },
+      {
+        "code": "FEATURE_SCHEMA_MISMATCH",
+        "field": "HEX_percent",
+        "message": "HEX_percent is missing."
+      },
+      {
+        "code": "FEATURE_SCHEMA_MISMATCH",
+        "field": "Donor_Age",
+        "message": "Donor_Age is missing."
+      }
+    ]
+  }
+}

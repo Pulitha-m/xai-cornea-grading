@@ -2,6 +2,9 @@ package com.cornealai.backend.analysis.client;
 
 import com.cornealai.backend.analysis.AnalysisRejectedException;
 import com.cornealai.backend.analysis.dto.AnalyzeResponse;
+import com.cornealai.backend.analysis.dto.disease.DiseaseAnalyzeResponse;
+import com.cornealai.backend.analysis.dto.disease.ImageQuality;
+import com.cornealai.backend.analysis.dto.disease.InputCheck;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
@@ -61,6 +64,58 @@ public class MlServiceClient {
             log.warn("ml-service unreachable: {}", e.getClass().getSimpleName());
             throw new AnalysisRejectedException(HttpStatus.SERVICE_UNAVAILABLE, "MODEL_NOT_READY", null,
                     "The analysis service is unavailable. Try again later.");
+        }
+    }
+
+    /**
+     * v2 disease detection + severity (ml-service POST /disease/analyze). Failed input checks are
+     * returned as a response with status "input_check_failed" carrying every error and warning, so
+     * the user can correct them or force the analysis; other rejections are raised as for analyze().
+     *
+     * @param measurementsJson the five CellChek values as a JSON object (null = not recorded)
+     */
+    public DiseaseAnalyzeResponse analyzeDisease(String caseId, String measurementsJson, boolean force,
+                                                 byte[] image, String filename) {
+        MultiValueMap<String, Object> form = new LinkedMultiValueMap<>();
+        form.add("caseId", caseId);
+        form.add("measurements", measurementsJson);
+        form.add("force", Boolean.toString(force));
+        form.add("image", new NamedBytes(image, filename));
+
+        try {
+            return restClient.post()
+                    .uri("/disease/analyze")
+                    .contentType(MediaType.MULTIPART_FORM_DATA)
+                    .body(form)
+                    .retrieve()
+                    .body(DiseaseAnalyzeResponse.class);
+        } catch (RestClientResponseException e) {
+            DiseaseAnalyzeResponse failedChecks = inputCheckFailure(caseId, e);
+            if (failedChecks != null) {
+                return failedChecks;
+            }
+            throw translate(e);
+        } catch (RestClientException e) {
+            log.warn("ml-service unreachable: {}", e.getClass().getSimpleName());
+            throw new AnalysisRejectedException(HttpStatus.SERVICE_UNAVAILABLE, "MODEL_NOT_READY", null,
+                    "The analysis service is unavailable. Try again later.");
+        }
+    }
+
+    private DiseaseAnalyzeResponse inputCheckFailure(String caseId, RestClientResponseException e) {
+        try {
+            JsonNode body = objectMapper.readTree(e.getResponseBodyAsString());
+            if (!"INPUT_CHECK_FAILED".equals(body.path("error").path("code").asString(null))
+                    || !body.hasNonNull("inputCheck")) {
+                return null;
+            }
+            return DiseaseAnalyzeResponse.inputCheckFailed(caseId,
+                    body.path("error").path("message").asString(null),
+                    objectMapper.treeToValue(body.get("inputCheck"), InputCheck.class),
+                    body.hasNonNull("imageQuality")
+                            ? objectMapper.treeToValue(body.get("imageQuality"), ImageQuality.class) : null);
+        } catch (RuntimeException ignored) {
+            return null; // Not a structured input-check rejection.
         }
     }
 
