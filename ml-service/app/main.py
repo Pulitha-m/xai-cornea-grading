@@ -1,5 +1,6 @@
 import json
 import logging
+from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, File, Form, Request, UploadFile
 from fastapi.exceptions import RequestValidationError
@@ -15,8 +16,10 @@ from app.schemas.analysis import (
     RecommendationResult,
     RejectedResponse,
 )
+from app.routers import disease as disease_router
 from pipelines.cellular.service import run_cellular_analysis
-from pipelines.disease.service import run_disease_analysis
+from pipelines.disease.config import DiseaseModelNotReady
+from pipelines.disease.service import run_disease_analysis, warm_up as warm_up_disease
 from pipelines.grading.feature_schema import load_schema, validate_features
 from pipelines.grading.service import run_grading_analysis
 from pipelines.image.decode import ImageRejected, decode_image
@@ -25,11 +28,24 @@ from pipelines.recommendation.service import run_recommendation_analysis
 
 logger = logging.getLogger("ml-service")
 
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    # Load the disease models once; if they are unavailable, /disease/analyze answers MODEL_NOT_READY.
+    try:
+        warm_up_disease()
+    except DiseaseModelNotReady:
+        logger.exception("Disease models not loaded")
+    yield
+
+
 app = FastAPI(
     title="Corneal-AI ML Service",
     description="Machine learning inference service for Corneal-AI",
     version="0.2.0",
+    lifespan=lifespan,
 )
+app.include_router(disease_router.router)
 
 
 def rejected(status_code: int, code: str, message: str, field: str | None = None,
