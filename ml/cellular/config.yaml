@@ -281,11 +281,18 @@ pipeline:
 #     another place in the window (`n_random` circular shifts)
 #   plausibility (secondary): in windows partly labelled poor (each part >= min_mixed_share), the
 #     heatmap's share inside the poor-labelled part exceeds that part's area share
+# DEVIATION (2026-10-18, after the evaluation): the pre-registered method was Grad-CAM++. It passed
+# faithfulness only narrowly (7/10 images, p = 0.042) and FAILED plausibility in the wrong direction
+# (heatmap share in the poor part 0.28 vs 0.50 area; pointing game 0.31 vs 0.49 chance) - it mostly
+# highlights the analysable tissue. Grad-CAM passed both (10/10 images, p = 0.001 each), so Grad-CAM
+# is used and Grad-CAM++ stays as the comparison; both are reported (docs: xai.md).
+# Figures: excluded UNLIT area is shown as "too dark" (lit mask, a rule - CAMs cannot localise the absence
+# of signal); the heatmap is shown on lit tissue only, from raw heatmaps scaled once over all images.
 # -----------------------------------------------------------------------------
 xai:
   roi:
-    method: gradcam++
-    compare: [gradcam]
+    method: gradcam
+    compare: [gradcam++]
     layer: features.8                   # last EfficientNet-B0 block (7 x 7 at 224 px input)
     min_p_poor: 0.5                     # windows explained in the deletion test
     min_lit_share: 0.05                 # windows with (almost) no lit tissue are skipped
@@ -295,6 +302,8 @@ xai:
     alpha: 0.05
     seed: 7
     n_examples: 8                       # example windows in the figure
+    example_p_poor: [0.5, 0.95]         # examples where P(poor) can visibly move (not saturated at 1)
+    example_min_lit_share: 0.5          # examples of 'lit but poor' (dark windows are explained by the lit mask)
 
 # -----------------------------------------------------------------------------
 # Validation targets from the research scope (Phase 7).

@@ -1,17 +1,19 @@
 """
-XAI step 1 — explaining the ROI model (Grad-CAM++ on the Phase 6 EfficientNet-B0).
+XAI step 1 — explaining the ROI model (Grad-CAM on the Phase 6 EfficientNet-B0).
 
 Question answered for the reviewer: "why was this region left out of the ROI?"
 Settings and the pre-registered rules: config.yaml -> xai.roi.
 
   --evaluate   validation reference images (fully tile-labelled, never used for training), for
-               Grad-CAM++ and (comparison) Grad-CAM:
+               the configured method and the comparison (config xai.roi: Grad-CAM, Grad-CAM++):
                  faithfulness  deletion test in the windows the model calls poor: top heatmap
                                pixels -> neutral lit tissue vs the same mask shifted elsewhere
                  plausibility  windows partly labelled poor: heatmap share inside the poor part
                                vs its area share; pointing game (heatmap maximum in the poor part)
                unit = image (overlapping windows are not independent); one-sided Wilcoxon
-  --figures    per image: ROI and labelled-poor tiles | "poor evidence" map; example windows
+  --figures    per image: ROI and labelled-poor tiles | why left out (purple = too dark from the lit
+               mask; heatmap = judged poor by the CNN, on lit tissue, one scale for all images);
+               example windows (lit, P(poor) not saturated): heatmap, top pixels replaced, shifted mask
 
 Outputs: <outputs_dir>/xai/roi/ (deletion.csv, plausibility.csv, per_image.csv, decision.json, figures/)
 Usage (from ml/cellular/; GPU recommended):
@@ -165,64 +167,93 @@ def heat_rgb(img: np.ndarray, heat: np.ndarray, alpha: float = 0.5) -> np.ndarra
     return (base * (1 - a) + col * a).astype(np.uint8)
 
 
+def two_part(img: np.ndarray, lit: np.ndarray, roi: np.ndarray, heat: np.ndarray) -> np.ndarray:
+    """Why left out: unlit area tinted purple ('too dark', from the lit mask - a rule), heatmap of the
+    CNN's 'poor' evidence on lit tissue only, ROI outlined in cyan."""
+    view = heat_rgb(img, np.where(lit, heat, 0)).astype(np.float32)
+    view[~lit] = 0.55 * view[~lit] + 0.45 * np.array([150, 0, 190])
+    view = view.astype(np.uint8)
+    cs, _ = cv2.findContours(roi.astype(np.uint8), cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_NONE)
+    cv2.drawContours(view, cs, -1, (0, 255, 255), 2)
+    return view
+
+
 def figures(cfg: dict) -> None:
     import matplotlib
     matplotlib.use("Agg")
     import matplotlib.pyplot as plt
 
     xc = cfg["xai"]["roi"]
-    rows_n, cols_n = cfg["roi"]["grid_rows"], cfg["roi"]["grid_cols"]
+    rows_n = cfg["roi"]["grid_rows"]
+    lo, hi = xc["example_p_poor"]
     scorer, va, planes = setup(cfg)
     d = out_root(cfg) / "figures"
     (d / "maps").mkdir(parents=True, exist_ok=True)
-    examples = []
+    maps, examples = {}, []
     for iid, g in va.groupby("image_id"):
         p = planes[iid]
         size = p.shape[1] // rows_n
         wins, tiles = windows(p, size, cfg["roi_model"]["stride_px"])
-        _, cams = tile_cams(scorer.model, tiles, scorer.hp, scorer.dev, xc["layer"], xc["method"])
+        _, raw = tile_cams(scorer.model, tiles, scorer.hp, scorer.dev, xc["layer"], xc["method"], normalise=False)
         # window probabilities exactly as the ROI scorer computes them (mixed precision on GPU;
         # the heatmap pass runs in float32 for the gradients)
         probs = cnn.predict(scorer.model, tiles, scorer.hp, scorer.dev)
         roi, prob = scorer(p)
         assert np.allclose(prob_map(probs, wins, p.shape[1:], size), prob, atol=1e-5)   # same windows as the ROI
-        evidence = image_map(probs, cams, wins, p.shape[1:])
+        lit = p[2] > 0
+        maps[iid] = (p[0], lit, roi, image_map(probs, raw, wins, p.shape[1:]), g, size)
+        # examples: lit windows called poor but not saturated, so the deletion effect is visible
+        pp, lit_share = 1 - probs, tiles[:, 2].mean(axis=(1, 2)) / 255
+        cand = np.flatnonzero((pp >= lo) & (pp <= hi) & (lit_share >= xc["example_min_lit_share"]))
+        for i in cand[np.argsort(-pp[cand])][:2]:
+            mx = float(raw[i].max())
+            examples.append((float(pp[i]), iid, tiles[i], raw[i] / mx if mx > 0 else raw[i]))
+    # one scale for all images: 99th percentile of the positive evidence on lit tissue
+    pos = np.concatenate([e[lit & (e > 0)] for _, lit, _, e, _, _ in maps.values()])
+    scale = float(np.percentile(pos, 99)) if len(pos) else 1.0
+    for iid, (img, lit, roi, ev, g, size) in maps.items():
         fig, axes = plt.subplots(1, 2, figsize=(15, 6.3))
-        view = np.dstack([p[0]] * 3)
+        view = np.dstack([img] * 3)
         cs, _ = cv2.findContours(roi.astype(np.uint8), cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_NONE)
         cv2.drawContours(view, cs, -1, (0, 255, 255), 3)
         axes[0].imshow(view)
         for r in g[g["y"] == 0].itertuples(index=False):
             axes[0].add_patch(plt.Rectangle((r.tile_col * size + 3, r.tile_row * size + 3), size - 6, size - 6,
                                             fill=False, ec="red", lw=1.3))
-        axes[0].set_title(f"{iid}: cyan = ROI, red boxes = tiles you labelled poor")
-        axes[1].imshow(heat_rgb(p[0], evidence / max(evidence.max(), 1e-6)))
-        axes[1].set_title(f"{xc['method']}: why left out (red = strong 'poor' evidence; max {evidence.max():.2f})")
+        axes[0].set_title(f"{iid}: cyan = ROI, red boxes = tiles you labelled poor", fontsize=10)
+        axes[1].imshow(two_part(img, lit, roi, ev / scale))
+        axes[1].set_title(f"why left out: purple = too dark (lit mask); heat = judged poor by the CNN ({xc['method']})",
+                          fontsize=10)
         for ax in axes:
             ax.axis("off")
         fig.tight_layout()
         fig.savefig(d / "maps" / f"{iid}.png", dpi=70)
         plt.close(fig)
-        for i in np.argsort(probs)[:2]:              # the two most clearly poor windows of the image
-            examples.append((1 - probs[i], iid, tiles[i], cams[i]))
-    # example windows: tile | heatmap | top share replaced
+    # example windows: tile | heatmap | top share replaced | same mask shifted (the test's baseline)
     examples = sorted(examples, key=lambda e: -e[0])[:xc["n_examples"]]
-    fig, axes = plt.subplots(len(examples), 3, figsize=(9, 3 * len(examples)))
-    for row, (pp, iid, tile, m) in zip(np.atleast_2d(axes), examples):
-        mask = top_mask(m[None], xc["top_share"])
-        deleted = delete(tile[None], mask)
-        p_del = 1 - cnn.predict(scorer.model, deleted, scorer.hp, scorer.dev)[0]
-        row[0].imshow(tile[0], cmap="gray")
-        row[0].set_title(f"{iid}  P(poor) {pp:.2f}", fontsize=8)
-        row[1].imshow(heat_rgb(tile[0], m))
-        row[1].set_title(xc["method"], fontsize=8)
-        row[2].imshow(deleted[0][0], cmap="gray")
-        row[2].set_title(f"top {100 * xc['top_share']:.0f} % replaced: P(poor) {p_del:.2f}", fontsize=8)
-        for ax in row:
-            ax.axis("off")
-    fig.tight_layout()
-    fig.savefig(d / "examples.png", dpi=80)
-    plt.close(fig)
+    if not examples:
+        print("No lit windows with P(poor) in the example range.")
+    else:
+        rng = np.random.default_rng(xc["seed"])
+        fig, axes = plt.subplots(len(examples), 4, figsize=(12, 3 * len(examples)))
+        for row, (pp, iid, tile, m) in zip(np.atleast_2d(axes), examples):
+            mask = top_mask(m[None], xc["top_share"])
+            shifted = rolled(mask, rng)
+            p_del, p_shift = (1 - cnn.predict(scorer.model, delete(tile[None], mk), scorer.hp, scorer.dev)[0]
+                              for mk in (mask, shifted))
+            row[0].imshow(tile[0], cmap="gray", vmin=0, vmax=255)
+            row[0].set_title(f"{iid}\nP(poor) {pp:.2f}", fontsize=8)
+            row[1].imshow(heat_rgb(tile[0], m))
+            row[1].set_title(xc["method"], fontsize=8)
+            row[2].imshow(delete(tile[None], mask)[0][0], cmap="gray", vmin=0, vmax=255)
+            row[2].set_title(f"top {100 * xc['top_share']:.0f} % of heatmap replaced\nP(poor) {p_del:.2f}", fontsize=8)
+            row[3].imshow(delete(tile[None], shifted)[0][0], cmap="gray", vmin=0, vmax=255)
+            row[3].set_title(f"same mask, shifted\nP(poor) {p_shift:.2f}", fontsize=8)
+            for ax in row:
+                ax.axis("off")
+        fig.tight_layout()
+        fig.savefig(d / "examples.png", dpi=80)
+        plt.close(fig)
     print(f"Figures: {d / 'maps'} (one per image), {d / 'examples.png'}")
 
 

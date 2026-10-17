@@ -106,3 +106,26 @@ def test_deleting_the_heatmap_lowers_p_poor_more_than_deleting_elsewhere():
     p_shift = predict(model, delete(tiles, rolled(masks, np.random.default_rng(1))), HP, DEV)
     assert np.allclose(p_cam, 1 / (1 + np.exp(-2.0)), atol=1e-4)    # blob gone: logit back to the bias
     assert (p_cam >= p_shift).all() and (p_cam - p0).mean() > (p_shift - p0).mean() + 0.05
+
+
+def test_raw_heatmaps_keep_scale_between_windows():
+    model = Toy()
+    tiles, blob = blob_tiles(n=2)
+    tiles[1, 0][blob] = 180                                          # dimmer blob -> weaker evidence
+    _, raw = tile_cams(model, tiles, HP, DEV, "features", "gradcam", normalise=False)
+    _, norm = tile_cams(model, tiles, HP, DEV, "features", "gradcam")
+    assert raw[0].max() > raw[1].max() > 0                           # comparable, not stretched to 1
+    assert np.allclose(norm.max(axis=(1, 2)), 1)
+    assert np.allclose(raw[0] / raw[0].max(), norm[0], atol=1e-5)
+
+
+def test_two_part_map_marks_unlit_purple_and_no_heat_there():
+    from xai.roi_explain import two_part
+    img = np.full((40, 40), 100, np.uint8)
+    lit = np.zeros((40, 40), bool)
+    lit[:, 20:] = True
+    heat = np.ones((40, 40), np.float32)                             # evidence everywhere
+    v = two_part(img, lit, np.zeros_like(lit), heat).astype(int)
+    tint = (0.55 * 100 + 0.45 * np.array([150, 0, 190])).astype(int)
+    assert (np.abs(v[:, :20] - tint) <= 1).all()                     # unlit: grey + purple tint only, no heat
+    assert (v[:, 20:, 0] > v[:, 20:, 1] + 40).all() and (v[:, 20:, 0] > v[:, 20:, 2] + 40).all()   # red heat on lit

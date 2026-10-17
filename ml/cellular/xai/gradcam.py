@@ -6,7 +6,7 @@ The CNN outputs one logit, the log-odds of ANALYSABLE. By default the explained 
 left out of the ROI.
 
   cam(model, x, layer, method)     class activation maps for a batch of network inputs
-  tile_cams(...)                   uint8 tiles -> P(analysable), heatmaps at tile size in [0, 1]
+  tile_cams(...)                   uint8 tiles -> P(analysable), heatmaps at tile size (max 1 per tile, or raw)
   image_map(...)                   whole image: window heatmaps weighted by P(poor), averaged per pixel
   top_mask / rolled / delete       deletion test: top heatmap pixels, the same mask shifted,
                                    pixels replaced by neutral lit tissue
@@ -64,8 +64,10 @@ def cam(model: torch.nn.Module, x: torch.Tensor, layer: torch.nn.Module, method:
 
 
 def tile_cams(model: torch.nn.Module, tiles: np.ndarray, hp: dict, device: torch.device, layer_path: str,
-              method: str = "gradcam++", target: str = "poor", batch: int = 64) -> tuple[np.ndarray, np.ndarray]:
-    """uint8 tiles (N, 3, s, s) -> (P(analysable) (N,), heatmaps (N, s, s) scaled to max 1 per tile)."""
+              method: str = "gradcam++", target: str = "poor", batch: int = 64,
+              normalise: bool = True) -> tuple[np.ndarray, np.ndarray]:
+    """uint8 tiles (N, 3, s, s) -> (P(analysable) (N,), heatmaps (N, s, s)): scaled to max 1 per tile,
+    or raw (normalise=False; comparable between windows, for whole-image maps)."""
     layer = get_layer(model, layer_path)
     s = tiles.shape[-1]
     probs, maps = [], []
@@ -73,7 +75,9 @@ def tile_cams(model: torch.nn.Module, tiles: np.ndarray, hp: dict, device: torch
         x = to_input(torch.from_numpy(np.ascontiguousarray(tiles[i:i + batch])).to(device), hp["input_px"])
         m, p = cam(model, x, layer, method, target)
         m = F.interpolate(m[:, None], size=(s, s), mode="bilinear", align_corners=False)[:, 0]
-        m = m / m.amax(dim=(1, 2), keepdim=True).clamp_min(1e-12)
+        if normalise:
+            mx = m.amax(dim=(1, 2), keepdim=True)
+            m = torch.where(mx > 0, m / torch.where(mx > 0, mx, torch.ones_like(mx)), torch.zeros_like(m))
         maps.append(m.cpu().numpy())
         probs.append(p.cpu().numpy())
     if not maps:
@@ -90,8 +94,9 @@ def windows(planes: np.ndarray, size: int, stride: int) -> tuple[list[tuple[int,
 
 def image_map(probs: np.ndarray, cams: np.ndarray, wins: list[tuple[int, int]],
               shape: tuple[int, int]) -> np.ndarray:
-    """Per-pixel 'poor evidence': mean over covering windows of P(poor) x heatmap, in [0, 1].
-    Windows the model calls analysable contribute ~0, so a clean region stays dark."""
+    """Per-pixel 'poor evidence': mean over covering windows of P(poor) x heatmap. Windows the model
+    calls analysable contribute ~0, so a clean region stays dark. Use raw heatmaps (tile_cams
+    normalise=False) so overlapping windows blend without seams; scale the result afterwards."""
     size = cams.shape[-1]
     acc = np.zeros(shape, np.float32)
     cnt = np.zeros(shape, np.float32)
