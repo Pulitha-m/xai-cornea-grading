@@ -180,10 +180,13 @@ def figures(cfg: dict) -> None:
         p = planes[iid]
         size = p.shape[1] // rows_n
         wins, tiles = windows(p, size, cfg["roi_model"]["stride_px"])
-        probs, cams = tile_cams(scorer.model, tiles, scorer.hp, scorer.dev, xc["layer"], xc["method"])
+        _, cams = tile_cams(scorer.model, tiles, scorer.hp, scorer.dev, xc["layer"], xc["method"])
+        # window probabilities exactly as the ROI scorer computes them (mixed precision on GPU;
+        # the heatmap pass runs in float32 for the gradients)
+        probs = cnn.predict(scorer.model, tiles, scorer.hp, scorer.dev)
         roi, prob = scorer(p)
+        assert np.allclose(prob_map(probs, wins, p.shape[1:], size), prob, atol=1e-5)   # same windows as the ROI
         evidence = image_map(probs, cams, wins, p.shape[1:])
-        assert np.allclose(prob_map(probs, wins, p.shape[1:], size), prob, atol=0.02)   # same windows as the ROI
         fig, axes = plt.subplots(1, 2, figsize=(15, 6.3))
         view = np.dstack([p[0]] * 3)
         cs, _ = cv2.findContours(roi.astype(np.uint8), cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_NONE)
