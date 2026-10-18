@@ -331,6 +331,30 @@ xai:
     alpha: 0.05
     top_variance_share: 0.05            # evidence overlay: the 5 % most extreme cells, their share of the area variance
     n_images: 6                         # validation images with explanation figures
+  # Step 3 - segmentation (xai/seg_gradcam.py, xai/seg_explain.py). Fixed 2026-10-18, before any result.
+  # Seg-Grad-CAM (Vinogradova et al. 2020) of ONE cell: explained score = sum of StarDist's object probability
+  # over the cell's instance; Grad-CAM weighting (as step 1) at StarDist's last layer before the output heads
+  # ('features', the conv after the U-Net, at the resolution of the probability map).
+  # Sample: n_green GREEN + n_flagged YELLOW / RED predicted complete cells from the 40 crops (out-of-fold
+  # fold models, the same cells and levels as step 2), drawn at random with seed.
+  # Window: the instance's bounding box + context_px on each side (inside the crop).
+  #   primary   deletion: the top_share hottest pixels of the window -> the window's mean; relative drop of the
+  #             score vs the same mask rolled to another place in the window (mean of n_random rolls);
+  #             one-sided Wilcoxon signed-rank, pass if p < alpha
+  #   secondary heat share on the cell + a ring_px ring vs that region's area share (one-sided Wilcoxon);
+  #             heat share on the wall band (ring_px either side of the outline) vs its area share;
+  #             heat on the cell for wrong vs correct and green vs flagged cells (descriptive)
+  segmentation:
+    layer: features
+    n_green: 30
+    n_flagged: 30
+    context_px: 24                      # ~1 cell diameter
+    ring_px: 3                          # walls are 2-3 px
+    top_share: 0.2
+    n_random: 5
+    alpha: 0.05
+    seed: 13
+    n_examples: 8                       # example cells in the figure (half green, half flagged)
 
 # -----------------------------------------------------------------------------
 # Validation targets from the research scope (Phase 7).
