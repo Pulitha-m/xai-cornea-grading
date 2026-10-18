@@ -18,6 +18,9 @@ and the XAI step 2 explanations (config xai.biomarkers; they never change a numb
 <image_id>_reliability.png (cells green / yellow / red), <image_id>_cv_evidence.png (cells coloured
 by area vs the median, most extreme cells outlined); report keys "uncertainty" (95 % CIs),
 "reliability" (level counts, confidence) and "evidence"; cells CSV columns confidence, level.
+For expert oversight (XAI step 4, oversight.py; never changes this result): <image_id>_mask.png (segmentation,
+0 interior / 1 wall / 2 unlit), <image_id>_roi.png (1 = lit, 2 = ROI, 3 = both), <image_id>_review_queue.png / .csv
+(RED then YELLOW cells first, every cell numbered).
 
 Usage (from ml/cellular/; GPU recommended, the models are on Drive):
     python -m pipeline <image> [<image> ...] [--out DIR]
@@ -43,6 +46,7 @@ from biomarkers.compute import report
 from config import load_config
 from data_prep.check_annotations import IGNORE
 from extraction.cells import ExtractionParams, extract_cells, instances_from_mask, overlay_sides
+from oversight import review_queue, review_queue_image
 from roi.tiles import image_planes
 from xai.reliability import (area_overlay, bootstrap_ci, cell_confidence, reliability, reliability_overlay,
                              variance_share)
@@ -135,10 +139,13 @@ class CellularPipeline:
             "quality_flags": flags,
             "reliable": not any(f["level"] == "error" for f in flags)})
         cells, explain = self.explain(img, cells, complete, cell_prob, rep)
+        levels = self.cfg["xai"]["oversight"]["queue_levels"]
+        explain["review_queue"] = review_queue_image(img, complete, cells, levels)
         rep["seconds"] = round(time.time() - t0, 2)
         return {"report": rep, "cells": cells,
                 "overlay": overlay(img, roi, complete, cells, rep["biomarkers"], flags),
-                "explain": explain, "roi": roi, "mask": mask}
+                "explain": explain, "roi": roi, "mask": mask, "lit": lit,
+                "queue": review_queue(cells, levels)}
 
     def explain(self, img: np.ndarray, cells: pd.DataFrame, complete: np.ndarray, prob: np.ndarray | None,
                 rep: dict) -> tuple[pd.DataFrame, dict]:
@@ -177,6 +184,12 @@ class CellularPipeline:
         cv2.imwrite(str(out / f"{iid}_overlay.png"), result["overlay"])
         for name, view in result.get("explain", {}).items():               # RGB -> BGR for OpenCV
             cv2.imwrite(str(out / f"{iid}_{name}.png"), np.ascontiguousarray(view[..., ::-1]))
+        if "mask" in result and "roi" in result:                           # for expert oversight (lossless)
+            cv2.imwrite(str(out / f"{iid}_mask.png"), result["mask"].astype(np.uint8))
+            lit = result.get("lit", np.ones_like(result["roi"], bool))
+            cv2.imwrite(str(out / f"{iid}_roi.png"), (lit.astype(np.uint8) + 2 * result["roi"].astype(np.uint8)))
+        if "queue" in result:
+            result["queue"].to_csv(out / f"{iid}_review_queue.csv", index=False)
         return out / f"{iid}.json"
 
 
@@ -242,6 +255,7 @@ def main() -> None:
               + ("" if not rep["reliability"] else
                  f"\n  cells: {rep['reliability']['green']} green, {rep['reliability']['yellow']} yellow (low "
                  f"confidence), {rep['reliability']['red']} red (implausible)")
+              + f"\n  review queue: {len(res['queue'])} cells (red / yellow) -> {rep['image_id']}_review_queue.png"
               + f"\n  -> {path}")
 
 

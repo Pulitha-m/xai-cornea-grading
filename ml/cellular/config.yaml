@@ -361,6 +361,22 @@ xai:
     alpha: 0.05
     seed: 13
     n_examples: 8                       # example cells in the figure (half green, half flagged)
+  # Step 4 - expert oversight (oversight.py). Fixed 2026-10-18, before any result.
+  # The expert excludes cells and removes / adds ROI area; numbers are recomputed from the saved segmentation
+  # (no model re-run), every review is logged (append-only), the pipeline result is never changed.
+  # Review queue: RED cells first, then YELLOW, least confident first; every cell numbered.
+  # Evaluation (CPU, from the step 2 crop results: 40 crops, out-of-fold): simulated reviewers
+  #   none     keeps every cell (= the pipeline)
+  #   red      excludes the RED cells
+  #   flagged  excludes RED + YELLOW cells                  (primary policy)
+  #   oracle   excludes exactly the wrong cells             (upper bound: a perfect reviewer)
+  # Primary: per biomarker (ECD % error, CV / HEX points), paired two-sided Wilcoxon of |error vs manual|,
+  #   flagged vs none, Holm over the 3 biomarkers, alpha -> helps / hurts / no difference.
+  # Workload: cells in the queue (median per crop, share of all cells).
+  oversight:
+    queue_levels: [red, yellow]
+    primary_policy: flagged
+    alpha: 0.05
 
 # -----------------------------------------------------------------------------
 # Validation targets from the research scope (Phase 7).
