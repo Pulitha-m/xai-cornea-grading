@@ -58,7 +58,7 @@ export function DiseaseResults({ result, originalUrl = null }: { result: Disease
             {check && <InputIssues tone="warning" title="Warnings:" issues={check.warnings} />}
 
             <div className="grid gap-6 lg:grid-cols-2">
-                <Card title="Disease findings" description="Probability from the image + numbers model. A disease counts as found at or above its threshold.">
+                <Card title="Disease findings">
                     <ul className="space-y-3">
                         {diseases.map((finding) => (
                             <FindingRow key={finding.code} finding={finding} />
@@ -66,7 +66,7 @@ export function DiseaseResults({ result, originalUrl = null }: { result: Disease
                     </ul>
                 </Card>
 
-                <Card title="Severity" description="Severity of each detected disease group; the overall severity is the worst.">
+                <Card title="Severity">
                     <div className="space-y-4">
                         <dl className="grid grid-cols-2 gap-4">
                             <Field label="Overall severity" value={result.overallSeverity === "None" ? "None (normal)" : result.overallSeverity} />
@@ -84,7 +84,6 @@ export function DiseaseResults({ result, originalUrl = null }: { result: Disease
                                             {s.probability !== null && (
                                                 <span className="text-xs text-muted-foreground tabular-nums">
                                                     P(Mod/Sev) {percent(s.probability)}
-                                                    {s.threshold !== null && ` · cut-off ${percent(s.threshold)}`}
                                                 </span>
                                             )}
                                             <StatusBadge tone={SEVERITY_TONE[s.grade] ?? "neutral"}>{s.grade}</StatusBadge>
@@ -228,7 +227,7 @@ function FindingRow({ finding }: { finding: DiseaseFinding }) {
                 <div className="absolute -top-1 h-3.5 w-0.5 bg-foreground/60" style={{ left: `${finding.threshold * 100}%` }} aria-hidden="true" />
             </div>
             <p className="mt-1 text-2xs text-muted-foreground tabular-nums">
-                Probability {percent(finding.probability)} · threshold {percent(finding.threshold)}
+                Probability {percent(finding.probability)}
             </p>
         </li>
     )
