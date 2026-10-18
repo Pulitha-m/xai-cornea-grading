@@ -15,12 +15,13 @@ split:
 
 matching:
   storage_days: 14          # Eusol-C window used to decide which tissues were in stock
-  weights_version: placeholder-2026-10-08
-  # PLACEHOLDER weights. Replace with weights agreed with NEBSL clinicians
-  # (e.g. AHP pairwise comparison). Only their ratios matter.
+  weights_version: clinician-2026-10-18
+  # Clinical priority weights proposed by NEBSL clinicians (direct weighting, 2026-10-18).
+  # Previous researcher-set placeholders (placeholder-2026-10-08): grade_fit 0.35,
+  # endothelium 0.30, freshness 0.15, donor_age 0.10, preservation_time 0.10.
   weights:
-    grade_fit: 0.35          # closeness of tissue grade to requested grade
-    endothelium: 0.30        # ECD / CV / HEX quality (PK, DSEK, DMEK only)
-    freshness: 0.15          # fewer days in storage is better
-    donor_age: 0.10          # younger donor is better
-    preservation_time: 0.10  # shorter death-to-preservation time is better
+    grade_fit: 0.35              # tissue grade match (A+ / A / B)
+    endothelium: 0.30            # ECD / CV / HEX quality (PK, DSEK, DMEK only)
+    serology: 0.20               # confirmed clear = 1, not confirmed = 0.5 (positive excluded)
+    freshness: 0.10              # fewer days in storage is better
+    surgery_compatibility: 0.05  # endothelial surgery needs measured endothelium

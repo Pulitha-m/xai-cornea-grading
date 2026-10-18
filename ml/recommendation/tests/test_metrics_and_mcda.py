@@ -63,6 +63,18 @@ def test_endothelium_ignored_for_dalk():
     assert out.loc[0, "MCDA_Score"] == pytest.approx(out.loc[1, "MCDA_Score"])
 
 
+def test_serology_not_confirmed_scores_lower():
+    df = pd.DataFrame([_candidates(Cand_Serology_Clear="Unknown"), _candidates()])
+    out = score(df, Weights())
+    assert out.loc[1, "MCDA_Rank"] == 1
+
+
+def test_endothelial_surgery_needs_measured_endothelium():
+    df = pd.DataFrame([_candidates(Cand_ECD=np.nan, Cand_CV=np.nan, Cand_HEX=np.nan), _candidates()])
+    out = score(df, Weights())
+    assert out.loc[0, "s_surgery_compatibility"] == 0 and out.loc[1, "s_surgery_compatibility"] == 1
+
+
 def test_weights_load_from_default_config():
     from recommendation.config import load_config
     w = Weights(**load_config()["matching"]["weights"])
