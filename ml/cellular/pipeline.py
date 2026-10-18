@@ -13,7 +13,11 @@ so a pipeline run reproduces them (``--check``). Nothing is fitted here; quality
 flags (config ``pipeline:``) are warnings for the reviewer and never change a number.
 
 Outputs per image (``out_dir``): <image_id>.json (report), <image_id>_cells.csv,
-<image_id>_overlay.png (ROI outlined, outside dimmed, measured cells coloured by side count).
+<image_id>_overlay.png (ROI outlined, outside dimmed, measured cells coloured by side count),
+and the XAI step 2 explanations (config xai.biomarkers; they never change a number):
+<image_id>_reliability.png (cells green / yellow / red), <image_id>_cv_evidence.png (cells coloured
+by area vs the median, most extreme cells outlined); report keys "uncertainty" (95 % CIs),
+"reliability" (level counts, confidence) and "evidence"; cells CSV columns confidence, level.
 
 Usage (from ml/cellular/; GPU recommended, the models are on Drive):
     python -m pipeline <image> [<image> ...] [--out DIR]
@@ -40,6 +44,8 @@ from config import load_config
 from data_prep.check_annotations import IGNORE
 from extraction.cells import ExtractionParams, extract_cells, instances_from_mask, overlay_sides
 from roi.tiles import image_planes
+from xai.reliability import (area_overlay, bootstrap_ci, cell_confidence, reliability, reliability_overlay,
+                             variance_share)
 
 
 def quality_flags(bm: dict, roi_share_of_lit: float, rules: dict) -> list[dict]:
@@ -96,7 +102,9 @@ class CellularPipeline:
         self.run = self.rules["run"]
         self.um_per_px = self.cfg["scale"]["um_per_px"]
         self.params = ExtractionParams.from_config(self.cfg)
-        self.segment = make_predictor(self.cfg, self.run, "lit")     # mask: 0 interior / 1 wall / 2 unlit
+        # mask: 0 interior / 1 wall / 2 unlit (+ per-pixel StarDist object probability for the XAI)
+        self.segment = make_predictor(self.cfg, self.run, "lit", with_prob=self.run.startswith("stardist"))
+        self.prob_thresh = getattr(self.segment, "prob_thresh", None)
         self.roi = RoiScorer(self.cfg)
 
     def analyse(self, image: str | Path | np.ndarray, image_id: str | None = None) -> dict[str, Any]:
@@ -113,7 +121,8 @@ class CellularPipeline:
         planes = image_planes(self.cfg, img)                         # 3.1 ROI
         roi, prob = self.roi(planes)
         lit = planes[2] > 0
-        mask = self.segment(img)                                     # 3.2 segmentation
+        out = self.segment(img)                                      # 3.2 segmentation
+        mask, cell_prob = out if isinstance(out, tuple) else (out, None)
         cells, _, complete = extract_cells(instances_from_mask(mask),  # 3.3 complete cells
                                            (mask != IGNORE) & roi, self.params)
         rep = report(image_id, cells, self.um_per_px, self.run)       # 3.4 biomarkers
@@ -124,11 +133,40 @@ class CellularPipeline:
                     "share_of_lit_area": round(roi_share_of_lit, 4),
                     "quality_score": round(float(prob[lit].mean()), 4) if lit.any() else 0.0},
             "quality_flags": flags,
-            "reliable": not any(f["level"] == "error" for f in flags),
-            "seconds": round(time.time() - t0, 2)})
+            "reliable": not any(f["level"] == "error" for f in flags)})
+        cells, explain = self.explain(img, cells, complete, cell_prob, rep)
+        rep["seconds"] = round(time.time() - t0, 2)
         return {"report": rep, "cells": cells,
                 "overlay": overlay(img, roi, complete, cells, rep["biomarkers"], flags),
-                "roi": roi, "mask": mask}
+                "explain": explain, "roi": roi, "mask": mask}
+
+    def explain(self, img: np.ndarray, cells: pd.DataFrame, complete: np.ndarray, prob: np.ndarray | None,
+                rep: dict) -> tuple[pd.DataFrame, dict]:
+        """XAI step 2 (adds to the report, never changes a number): 95 % CIs, the cells driving CV,
+        per-cell reliability. Returns (cells with confidence / level, {name: RGB image})."""
+        xb = self.cfg["xai"]["biomarkers"]
+        num = lambda x, d=3: round(float(x), d) if x is not None and np.isfinite(x) else None
+        ci = bootstrap_ci(cells, self.um_per_px, xb["block_px"], xb["n_boot"], xb["seed"])
+        rep["uncertainty"] = {
+            "method": f"95 % CI, bootstrap over {xb['block_px']} px blocks of cells ({xb['n_boot']} resamples); "
+                      "covers sampling, not segmentation error",
+            **{f"{k}_ci95": [ci[k]["lo"], ci[k]["hi"]] for k in ("ecd", "cv", "hex")}}
+        top, share = variance_share(cells, xb["top_variance_share"])
+        rep["evidence"] = {"most_extreme_cells_pct": 100 * xb["top_variance_share"],
+                           "their_share_of_area_variance_pct": num(100 * share, 1)}
+        explain = {"cv_evidence": area_overlay(img, complete, cells, top)}
+        if prob is None or self.prob_thresh is None or cells.empty:
+            rep["reliability"] = None
+            return cells, explain
+        rel = reliability(cells, cell_confidence(complete, prob, cells["cell_id"]), self.prob_thresh, xb)
+        n = rel["level"].value_counts()
+        rep["reliability"] = {
+            "rule": "red = implausible size / shape; yellow = low StarDist confidence; green = otherwise",
+            **{lev: int(n.get(lev, 0)) for lev in ("green", "yellow", "red")},
+            "median_confidence": num(rel["confidence"].median())}
+        explain["reliability"] = reliability_overlay(img, complete, rel)
+        cells = cells.merge(rel[["confidence", "level"]], left_on="cell_id", right_index=True, how="left")
+        return cells, explain
 
     def save(self, result: dict, out_dir: str | Path) -> Path:
         out = Path(out_dir)
@@ -137,6 +175,8 @@ class CellularPipeline:
         (out / f"{iid}.json").write_text(json.dumps(result["report"], indent=2, allow_nan=False))
         result["cells"].to_csv(out / f"{iid}_cells.csv", index=False)
         cv2.imwrite(str(out / f"{iid}_overlay.png"), result["overlay"])
+        for name, view in result.get("explain", {}).items():               # RGB -> BGR for OpenCV
+            cv2.imwrite(str(out / f"{iid}_{name}.png"), np.ascontiguousarray(view[..., ::-1]))
         return out / f"{iid}.json"
 
 
@@ -196,7 +236,13 @@ def main() -> None:
         print(f"{rep['image_id']}: ECD {bm['ecd_cells_per_mm2']}, CV {bm['cv_pct']}, HEX {bm['hex_pct']}, "
               f"{bm['n_cells']} cells, ROI {100 * rep['roi']['share_of_lit_area']:.0f} % of lit area, "
               f"{'reliable' if rep['reliable'] else 'NOT reliable'}"
-              + "".join(f"\n  {f['level']}: {f['message']}" for f in rep["quality_flags"]) + f"\n  -> {path}")
+              + "".join(f"\n  {f['level']}: {f['message']}" for f in rep["quality_flags"])
+              + "\n  95 % CI: " + ", ".join(f"{k.split('_')[0].upper()} {v}" for k, v in rep["uncertainty"].items()
+                                          if k.endswith("ci95"))
+              + ("" if not rep["reliability"] else
+                 f"\n  cells: {rep['reliability']['green']} green, {rep['reliability']['yellow']} yellow (low "
+                 f"confidence), {rep['reliability']['red']} red (implausible)")
+              + f"\n  -> {path}")
 
 
 if __name__ == "__main__":

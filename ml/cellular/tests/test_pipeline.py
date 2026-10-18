@@ -81,3 +81,27 @@ def test_quality_flags():
     codes = {f["code"]: f["level"] for f in quality_flags(bad, 0.3, RULES)}
     assert codes == {"too_few_cells": "error", "few_side_counts": "warning",
                      "small_roi": "warning", "many_flagged_cells": "warning"}
+
+
+def test_explanations_are_added_and_change_no_number(tmp_path):
+    img, mask = synthetic()
+    full = np.ones(mask.shape, bool)
+    plain = stub_pipeline(full, mask).analyse(img, "x")
+    prob = np.where(mask == 0, 0.95, 0).astype(np.float32)          # confident cells everywhere ...
+    prob[:, :100][mask[:, :100] == 0] = 0.6                         # ... except on the left: low confidence
+    p = stub_pipeline(full, mask)
+    p.segment, p.prob_thresh = (lambda im: (mask, prob)), 0.5
+    res = p.analyse(img, "x")
+    assert res["report"]["biomarkers"] == plain["report"]["biomarkers"]
+    assert plain["report"]["reliability"] is None                     # no probabilities -> no levels
+    rel, unc = res["report"]["reliability"], res["report"]["uncertainty"]
+    assert rel["green"] + rel["yellow"] + rel["red"] == res["report"]["biomarkers"]["n_cells"]
+    assert rel["yellow"] > 0 and rel["green"] > rel["yellow"]
+    lo, hi = unc["ecd_ci95"]
+    assert lo <= res["report"]["biomarkers"]["ecd_cells_per_mm2"] <= hi
+    yellow = res["cells"][res["cells"]["level"] == "yellow"]
+    assert yellow["cx"].max() < 130                                   # the low-confidence cells are on the left
+    p.save(res, tmp_path)
+    for f in ("x.json", "x_reliability.png", "x_cv_evidence.png"):
+        assert (tmp_path / f).exists()
+    assert json.loads((tmp_path / "x.json").read_text())["evidence"]["their_share_of_area_variance_pct"] is not None

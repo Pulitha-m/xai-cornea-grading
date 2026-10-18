@@ -9,7 +9,7 @@ how uncertain is each number? Rules: config.yaml -> xai.biomarkers (fixed before
                per-cell tables (CPU); width vs Konan's ~110-cell sampling uncertainty
   --figures    validation images (GPU): reliability | area evidence (CV) | side-count evidence (HEX)
 
-Outputs: <outputs_dir>/xai/biomarkers/ (crop_cells.csv, crop_ci.csv, decision.json, intervals.csv,
+Outputs: <outputs_dir>/xai/biomarkers/ (crop_cells.csv, crop_ci.csv, crop_vs_phase2.csv, decision.json, intervals.csv,
          figures/<image_id>.png, figures_summary.csv)
 Usage (from ml/cellular/; GPU for --crops / --figures):
     python -m xai.biomarker_explain --crops
@@ -88,8 +88,12 @@ def crops(cfg: dict) -> None:
         for s in (s for s in samples if s.fold == k):
             labels, det = model.predict_instances(to_input(s.image))
             saved = inst_dir / f"{s.crop_id}.png"
-            if saved.exists():
-                same.append(np.array_equal(cv2.imread(str(saved), cv2.IMREAD_UNCHANGED).astype(np.int32), labels))
+            if saved.exists():                    # vs the Phase 2 out-of-fold prediction (label-agnostic)
+                old = cv2.imread(str(saved), cv2.IMREAD_UNCHANGED).astype(np.int32)
+                m = match_cells(labels, old, 0.5)
+                same.append({"identical": bool(np.array_equal(old, labels)), "n_new": int(len(np.unique(labels)) - 1),
+                             "n_old": int(len(np.unique(old)) - 1), "matched": len(m),
+                             "mean_iou": float(m["iou"].mean()) if len(m) else np.nan})
             analysable = s.mask != IGNORE
             ref, _, comp_g = extract_cells(instances_from_mask(s.mask), analysable, p)
             cells, _, comp_p = extract_cells(labels, analysable, p)
@@ -116,7 +120,13 @@ def crops(cfg: dict) -> None:
     cells.to_csv(out / "crop_cells.csv", index=False)
     cis.to_csv(out / "crop_ci.csv", index=False)
     if same:
-        print(f"  re-predicted instances identical to the Phase 2 out-of-fold ones: {sum(same)} / {len(same)} crops")
+        sm = pd.DataFrame(same)
+        sm.to_csv(out / "crop_vs_phase2.csv", index=False)
+        print(f"  re-predicted vs Phase 2 out-of-fold instances ({len(sm)} crops): identical label images "
+              f"{int(sm['identical'].sum())}; cells {sm['n_new'].sum()} now vs {sm['n_old'].sum()} then; "
+              f"matched (IoU > 0.5) {100 * sm['matched'].sum() / sm['n_new'].sum():.1f} % of now, "
+              f"{100 * sm['matched'].sum() / sm['n_old'].sum():.1f} % of then; mean IoU of matches "
+              f"{sm['mean_iou'].mean():.3f}; worst crop {100 * (sm['matched'] / sm['n_new']).min():.1f} % matched")
     decide(cfg, cells, cis)
 
 
