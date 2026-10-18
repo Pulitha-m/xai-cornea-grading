@@ -3,9 +3,11 @@ import { HomeRedirect } from "@/components/auth/HomeRedirect"
 import { ProtectedRoute } from "@/components/auth/ProtectedRoute"
 import { RoleGuard } from "@/components/auth/RoleGuard"
 import { AppLayout } from "@/components/layout/AppLayout"
-import { ANALYSIS_PATH, PLANNED_MODULES } from "@/lib/roles"
+import { ANALYSIS_PATH, DISEASE_PATH, GRADING_PATH, PLANNED_MODULES } from "@/lib/roles"
 import { AnalysisPage } from "@/pages/AnalysisPage"
 import { ComingSoonPage } from "@/pages/ComingSoonPage"
+import { DiseasePage } from "@/pages/DiseasePage"
+import { GradingPage } from "@/pages/GradingPage"
 import { LoginPage } from "@/pages/LoginPage"
 import { NotFoundPage } from "@/pages/NotFoundPage"
 import { UnauthorizedPage } from "@/pages/UnauthorizedPage"
@@ -46,6 +48,14 @@ export const routes: RouteObject[] = [
                     {
                         element: <RoleGuard allow={["DOCTOR", "NURSE"]} permission="analysis:run" />,
                         children: [{ path: ANALYSIS_PATH, element: <AnalysisPage /> }],
+                    },
+                    {
+                        element: <RoleGuard allow={["DOCTOR", "NURSE"]} permission="analysis:run" />,
+                        children: [{ path: GRADING_PATH, element: <GradingPage /> }],
+                    },
+                    {
+                        element: <RoleGuard allow={["DOCTOR", "NURSE"]} permission="analysis:run" />,
+                        children: [{ path: DISEASE_PATH, element: <DiseasePage /> }],
                     },
                     ...PLANNED_MODULES.map(
                         (module): RouteObject => ({

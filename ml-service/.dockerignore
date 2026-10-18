@@ -4,3 +4,11 @@
 .pytest_cache
 .env
 .env.*
+# The ONNX backbones are regenerated and verified in the Docker build, never copied in.
+models/domain_validator/*.onnx
+models/grading_backbone/
+models/**/*.verified.json
+# v2 disease model: only the ONNX exports are served; the .pt training weights stay out of the image.
+models/disease_v2/*.pt
+models/disease_v2/summary_*.json
+models/disease_v2/combined_summary.json

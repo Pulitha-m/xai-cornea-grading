@@ -19,12 +19,15 @@ const NETWORK_ERROR = "Unable to reach the server. Check your connection and try
 export class ApiError extends Error {
     readonly status: number
     readonly fieldErrors: Record<string, string>
+    /** Stable machine-readable reason from the server (e.g. INVALID_IMAGE_DOMAIN), when provided. */
+    readonly code: string | null
 
-    constructor(status: number, message: string, fieldErrors: Record<string, string> = {}) {
+    constructor(status: number, message: string, fieldErrors: Record<string, string> = {}, code: string | null = null) {
         super(message)
         this.name = "ApiError"
         this.status = status
         this.fieldErrors = fieldErrors
+        this.code = code
     }
 }
 
@@ -113,15 +116,31 @@ async function parse<T>(response: Response): Promise<T> {
 
 /** Converts an error response into a message that is safe to show to the user. */
 async function toApiError(response: Response): Promise<ApiError> {
-    if (response.status >= 500) {
-        return new ApiError(response.status, GENERIC_ERROR)
+    let text = ""
+    try {
+        text = await response.text()
+    } catch {
+        // Unreadable body: fall through to the generic message.
+    }
+    return errorFromBody(response.status, text)
+}
+
+/**
+ * Server error bodies are built to be safe for display. A 5xx is only shown verbatim
+ * when it carries a server-assigned code; otherwise (e.g. a proxy error page) a
+ * generic message is used.
+ */
+function errorFromBody(status: number, text: string): ApiError {
+    let payload: { message?: unknown; fieldErrors?: unknown; code?: unknown } = {}
+    try {
+        payload = JSON.parse(text)
+    } catch {
+        // Non-JSON body: fall through to the generic message.
     }
 
-    let payload: { message?: unknown; fieldErrors?: unknown } = {}
-    try {
-        payload = await response.json()
-    } catch {
-        // Non-JSON body (e.g. proxy error page): fall through to the generic message.
+    const code = typeof payload.code === "string" && payload.code ? payload.code : null
+    if (status >= 500 && code === null) {
+        return new ApiError(status, GENERIC_ERROR)
     }
 
     const message = typeof payload.message === "string" && payload.message ? payload.message : GENERIC_ERROR
@@ -130,7 +149,57 @@ async function toApiError(response: Response): Promise<ApiError> {
             ? (payload.fieldErrors as Record<string, string>)
             : {}
 
-    return new ApiError(response.status, message, fieldErrors)
+    return new ApiError(status, message, fieldErrors, code)
+}
+
+interface UploadOptions {
+    /** Called with the fraction of the request body sent, from 0 to 1. */
+    onProgress?: (fraction: number) => void
+}
+
+/**
+ * Multipart upload with progress (fetch cannot report upload progress). Uses the same
+ * Bearer token, 401 refresh-and-retry and error handling as {@link apiRequest}.
+ */
+export async function apiUpload<T>(path: string, form: FormData, options: UploadOptions = {}): Promise<T> {
+    let result = await sendUpload(path, form, options)
+
+    if (result.status === 401 && sessionHandlers) {
+        const refreshed = await sessionHandlers.refresh()
+        if (refreshed) {
+            result = await sendUpload(path, form, options)
+        } else {
+            sessionHandlers.onSessionExpired()
+        }
+    }
+
+    if (result.status >= 200 && result.status < 300) {
+        return JSON.parse(result.text) as T
+    }
+    throw errorFromBody(result.status, result.text)
+}
+
+function sendUpload(path: string, form: FormData, { onProgress }: UploadOptions): Promise<{ status: number; text: string }> {
+    return new Promise((resolve, reject) => {
+        const xhr = new XMLHttpRequest()
+        xhr.open("POST", `${API_BASE_URL}${path}`)
+        xhr.withCredentials = true
+        xhr.setRequestHeader("Accept", "application/json")
+        if (accessToken) {
+            xhr.setRequestHeader("Authorization", `Bearer ${accessToken}`)
+        }
+        if (onProgress) {
+            xhr.upload.onprogress = (event) => {
+                if (event.lengthComputable) {
+                    onProgress(event.loaded / event.total)
+                }
+            }
+        }
+        xhr.onload = () => resolve({ status: xhr.status, text: xhr.responseText })
+        xhr.onerror = () => reject(new ApiError(0, NETWORK_ERROR))
+        xhr.ontimeout = () => reject(new ApiError(0, "The upload timed out. Try again."))
+        xhr.send(form)
+    })
 }
 
 function readCookie(name: string): string | null {

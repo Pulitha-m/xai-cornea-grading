@@ -1,5 +1,2 @@
-def run_recommendation_analysis(image_url: str) -> dict:
-    return {
-        "recommendation": "Suitable for further evaluation",
-        "confidence": 0.88,
-    }
+def run_recommendation_analysis(image) -> dict:
+    raise NotImplementedError("Recommendation is not available until the modules it depends on are validated.")

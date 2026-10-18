@@ -1,9 +1,12 @@
 import type { ReactNode } from "react"
-import type { AnalyzeResponse } from "@/api/analysis"
-import { formatCount, formatPercent, humanize, isFailed, moduleStatus } from "@/lib/analysis-format"
-import { alertError } from "@/lib/styles"
+import type { AnalyzeResponse, GradingResult } from "@/api/analysis"
+import { formatCount, formatPercent, humanize, isFailed, isNotImplemented, moduleStatus } from "@/lib/analysis-format"
+import { featureLabel } from "@/lib/grading-features"
+import { alertError, alertWarning } from "@/lib/styles"
 import { Card } from "@/components/dashboard/PageHeader"
 import { ConfidenceMeter } from "@/components/analysis/ConfidenceMeter"
+import { ImageValidationNote } from "@/components/analysis/ImageValidationNote"
+import { EcdReferenceDetails, GradeShares, sectionLabel } from "@/components/grading/grading-parts"
 import { Field } from "@/components/ui/field"
 import { StatusBadge } from "@/components/ui/status-badge"
 
@@ -27,6 +30,8 @@ export function AnalysisResults({ result }: { result: AnalyzeResponse }) {
                 </p>
             </div>
 
+            {result.imageValidation && <ImageValidationNote validation={result.imageValidation} />}
+
             <div className="grid gap-6 lg:grid-cols-2">
                 <ModuleResult
                     title="Cellular analysis"
@@ -43,17 +48,10 @@ export function AnalysisResults({ result }: { result: AnalyzeResponse }) {
 
                 <ModuleResult
                     title="Cornea grade"
-                    description="Predicted grade for specialist review — not an eye-bank grading decision."
+                    description="Grade from the hybrid model (clinical features and image) for specialist review — not an eye-bank grading decision."
                     status={grading.status}
                 >
-                    <div className="flex flex-wrap items-end gap-6">
-                        <dl>
-                            <Field label="Predicted grade" value={grading.grade} />
-                        </dl>
-                        <div className="min-w-48 flex-1">
-                            <ConfidenceMeter value={grading.confidence} />
-                        </div>
-                    </div>
+                    <GradingDetails grading={grading} />
                 </ModuleResult>
 
                 <ModuleResult
@@ -87,6 +85,61 @@ export function AnalysisResults({ result }: { result: AnalyzeResponse }) {
     )
 }
 
+/**
+ * The grade comes from the hybrid random forest (24 features + image). Its tree votes are shown as such: they have
+ * not been calibrated, so they are not a confidence. The ECD rule's grade is shown alongside as
+ * the single-feature reference the model was compared with.
+ */
+function GradingDetails({ grading }: { grading: GradingResult }) {
+    const warnings = grading.warnings ?? []
+    const notRecorded = grading.featuresNotRecorded ?? []
+
+    return (
+        <div className="space-y-4">
+            <dl className="grid grid-cols-2 gap-4">
+                <Field label="Predicted grade" value={grading.grade} />
+                <Field label="Inputs recorded" value={`${24 - notRecorded.length} of 24`} />
+            </dl>
+
+            {grading.modelProbabilities && Object.keys(grading.modelProbabilities).length > 0 && (
+                <div>
+                    <p className={sectionLabel}>Share of trees voting for each grade</p>
+                    <p className="mt-0.5 text-xs text-muted-foreground">Not calibrated — not a confidence</p>
+                    <GradeShares shares={grading.modelProbabilities} />
+                </div>
+            )}
+
+            {warnings.length > 0 && (
+                <div role="alert" className={alertWarning}>
+                    <p className="font-medium">Check these inputs before relying on the grade:</p>
+                    <ul className="mt-1 list-disc pl-5">
+                        {warnings.map((warning, index) => (
+                            <li key={`${warning.code}-${warning.field ?? index}`}>{warning.message}</li>
+                        ))}
+                    </ul>
+                </div>
+            )}
+
+            {notRecorded.length > 0 && (
+                <details className="text-xs text-muted-foreground">
+                    <summary className="cursor-pointer">
+                        {notRecorded.length} input{notRecorded.length === 1 ? "" : "s"} not recorded
+                    </summary>
+                    <p className="mt-1">{notRecorded.map(featureLabel).join(", ")}</p>
+                </details>
+            )}
+
+            {grading.ecdReference && (
+                <div className="border-t border-border pt-4">
+                    <EcdReferenceDetails reference={grading.ecdReference} />
+                </div>
+            )}
+
+            {grading.message && <p className="text-xs text-muted-foreground">{grading.message}</p>}
+        </div>
+    )
+}
+
 function ModuleResult({
     title,
     description,
@@ -107,6 +160,8 @@ function ModuleResult({
                 <p className={alertError}>
                     This module could not complete the analysis. The other modules are unaffected.
                 </p>
+            ) : isNotImplemented(status) ? (
+                <p className="text-sm text-muted-foreground">This module is not available yet.</p>
             ) : (
                 children
             )}

@@ -1,0 +1,212 @@
+{
+  "test_counts": {
+    "positives": 197,
+    "negatives": 1155
+  },
+  "negatives": {
+    "all": {
+      "n": 1155,
+      "accepted": 0.0,
+      "uncertain": 0.0,
+      "rejected": 1.0,
+      "accepted_count": 0
+    },
+    "coco": {
+      "n": 995,
+      "accepted": 0.0,
+      "uncertain": 0.0,
+      "rejected": 1.0,
+      "accepted_count": 0
+    },
+    "synthetic_document": {
+      "n": 76,
+      "accepted": 0.0,
+      "uncertain": 0.0,
+      "rejected": 1.0,
+      "accepted_count": 0
+    },
+    "synthetic_screenshot": {
+      "n": 84,
+      "accepted": 0.0,
+      "uncertain": 0.0,
+      "rejected": 1.0,
+      "accepted_count": 0
+    },
+    "coco:person": {
+      "n": 559,
+      "accepted": 0.0,
+      "uncertain": 0.0,
+      "rejected": 1.0,
+      "accepted_count": 0
+    },
+    "coco:animal": {
+      "n": 198,
+      "accepted": 0.0,
+      "uncertain": 0.0,
+      "rejected": 1.0,
+      "accepted_count": 0
+    },
+    "coco:vehicle": {
+      "n": 239,
+      "accepted": 0.0,
+      "uncertain": 0.0,
+      "rejected": 1.0,
+      "accepted_count": 0
+    },
+    "coco:food": {
+      "n": 144,
+      "accepted": 0.0,
+      "uncertain": 0.0,
+      "rejected": 1.0,
+      "accepted_count": 0
+    },
+    "coco:indoor": {
+      "n": 115,
+      "accepted": 0.0,
+      "uncertain": 0.0,
+      "rejected": 1.0,
+      "accepted_count": 0
+    },
+    "coco:buildings": {
+      "n": 114,
+      "accepted": 0.0,
+      "uncertain": 0.0,
+      "rejected": 1.0,
+      "accepted_count": 0
+    },
+    "coco:landscapes": {
+      "n": 198,
+      "accepted": 0.0,
+      "uncertain": 0.0,
+      "rejected": 1.0,
+      "accepted_count": 0
+    }
+  },
+  "positives": {
+    "all": {
+      "n": 197,
+      "accepted": 1.0,
+      "uncertain": 0.0,
+      "rejected": 0.0,
+      "accepted_count": 197
+    },
+    "grade A+": {
+      "n": 111,
+      "accepted": 1.0,
+      "uncertain": 0.0,
+      "rejected": 0.0,
+      "accepted_count": 111
+    },
+    "grade A": {
+      "n": 52,
+      "accepted": 1.0,
+      "uncertain": 0.0,
+      "rejected": 0.0,
+      "accepted_count": 52
+    },
+    "grade B": {
+      "n": 30,
+      "accepted": 1.0,
+      "uncertain": 0.0,
+      "rejected": 0.0,
+      "accepted_count": 30
+    }
+  },
+  "positives_degraded": {
+    "gaussian_blur_r2": {
+      "n": 197,
+      "accepted": 1.0,
+      "uncertain": 0.0,
+      "rejected": 0.0,
+      "accepted_count": 197
+    },
+    "gaussian_blur_r5": {
+      "n": 197,
+      "accepted": 1.0,
+      "uncertain": 0.0,
+      "rejected": 0.0,
+      "accepted_count": 197
+    },
+    "downscale_25pct": {
+      "n": 197,
+      "accepted": 1.0,
+      "uncertain": 0.0,
+      "rejected": 0.0,
+      "accepted_count": 197
+    }
+  },
+  "feature_extraction_failures": [
+    [
+      "C:\\Users\\pulit\\OneDrive\\Desktop\\University\\Y4S1\\research\\xai-cornea-grading\\ml\\grading\\data\\external\\coco\\val2017\\000000293044.jpg",
+      "IMAGE_DIMENSIONS_INVALID"
+    ],
+    [
+      "C:\\Users\\pulit\\OneDrive\\Desktop\\University\\Y4S1\\research\\xai-cornea-grading\\ml\\grading\\data\\external\\coco\\val2017\\000000456394.jpg",
+      "IMAGE_DIMENSIONS_INVALID"
+    ],
+    [
+      "C:\\Users\\pulit\\OneDrive\\Desktop\\University\\Y4S1\\research\\xai-cornea-grading\\ml\\grading\\data\\external\\coco\\val2017\\000000449661.jpg",
+      "IMAGE_DIMENSIONS_INVALID"
+    ],
+    [
+      "C:\\Users\\pulit\\OneDrive\\Desktop\\University\\Y4S1\\research\\xai-cornea-grading\\ml\\grading\\data\\external\\coco\\val2017\\000000460682.jpg",
+      "IMAGE_DIMENSIONS_INVALID"
+    ],
+    [
+      "C:\\Users\\pulit\\OneDrive\\Desktop\\University\\Y4S1\\research\\xai-cornea-grading\\ml\\grading\\data\\external\\coco\\val2017\\000000107339.jpg",
+      "IMAGE_DIMENSIONS_INVALID"
+    ],
+    [
+      "C:\\Users\\pulit\\OneDrive\\Desktop\\University\\Y4S1\\research\\xai-cornea-grading\\ml\\grading\\data\\external\\coco\\val2017\\000000527220.jpg",
+      "IMAGE_DIMENSIONS_INVALID"
+    ],
+    [
+      "C:\\Users\\pulit\\OneDrive\\Desktop\\University\\Y4S1\\research\\xai-cornea-grading\\ml\\grading\\data\\external\\coco\\val2017\\000000098261.jpg",
+      "IMAGE_DIMENSIONS_INVALID"
+    ],
+    [
+      "C:\\Users\\pulit\\OneDrive\\Desktop\\University\\Y4S1\\research\\xai-cornea-grading\\ml\\grading\\data\\external\\coco\\val2017\\000000268831.jpg",
+      "IMAGE_DIMENSIONS_INVALID"
+    ],
+    [
+      "C:\\Users\\pulit\\OneDrive\\Desktop\\University\\Y4S1\\research\\xai-cornea-grading\\ml\\grading\\data\\external\\coco\\val2017\\000000149770.jpg",
+      "IMAGE_DIMENSIONS_INVALID"
+    ],
+    [
+      "C:\\Users\\pulit\\OneDrive\\Desktop\\University\\Y4S1\\research\\xai-cornea-grading\\ml\\grading\\data\\external\\coco\\val2017\\000000205333.jpg",
+      "IMAGE_DIMENSIONS_INVALID"
+    ],
+    [
+      "C:\\Users\\pulit\\OneDrive\\Desktop\\University\\Y4S1\\research\\xai-cornea-grading\\ml\\grading\\data\\external\\coco\\val2017\\000000298251.jpg",
+      "IMAGE_DIMENSIONS_INVALID"
+    ],
+    [
+      "C:\\Users\\pulit\\OneDrive\\Desktop\\University\\Y4S1\\research\\xai-cornea-grading\\ml\\grading\\data\\external\\coco\\val2017\\000000375469.jpg",
+      "IMAGE_DIMENSIONS_INVALID"
+    ],
+    [
+      "C:\\Users\\pulit\\OneDrive\\Desktop\\University\\Y4S1\\research\\xai-cornea-grading\\ml\\grading\\data\\external\\coco\\val2017\\000000536343.jpg",
+      "IMAGE_DIMENSIONS_INVALID"
+    ],
+    [
+      "C:\\Users\\pulit\\OneDrive\\Desktop\\University\\Y4S1\\research\\xai-cornea-grading\\ml\\grading\\data\\external\\coco\\val2017\\000000185473.jpg",
+      "IMAGE_DIMENSIONS_INVALID"
+    ],
+    [
+      "C:\\Users\\pulit\\OneDrive\\Desktop\\University\\Y4S1\\research\\xai-cornea-grading\\ml\\grading\\data\\external\\coco\\val2017\\000000485237.jpg",
+      "IMAGE_DIMENSIONS_INVALID"
+    ],
+    [
+      "C:\\Users\\pulit\\OneDrive\\Desktop\\University\\Y4S1\\research\\xai-cornea-grading\\ml\\grading\\data\\external\\coco\\val2017\\000000096549.jpg",
+      "IMAGE_DIMENSIONS_INVALID"
+    ],
+    [
+      "C:\\Users\\pulit\\OneDrive\\Desktop\\University\\Y4S1\\research\\xai-cornea-grading\\ml\\grading\\data\\external\\coco\\val2017\\000000329614.jpg",
+      "IMAGE_DIMENSIONS_INVALID"
+    ],
+    [
+      "C:\\Users\\pulit\\OneDrive\\Desktop\\University\\Y4S1\\research\\xai-cornea-grading\\ml\\grading\\data\\external\\coco\\val2017\\000000143068.jpg",
+      "IMAGE_DIMENSIONS_INVALID"
+    ]
+  ]
+}

@@ -3,7 +3,9 @@ import {
     BrainCircuitIcon,
     ClipboardListIcon,
     FileTextIcon,
+    GaugeIcon,
     LayoutDashboardIcon,
+    MicroscopeIcon,
     PackageIcon,
     ShieldCheckIcon,
     UsersIcon,
@@ -28,6 +30,8 @@ export const DASHBOARD_PATHS: Record<Role, string> = {
 }
 
 export const ANALYSIS_PATH = "/analysis"
+export const DISEASE_PATH = "/disease"
+export const GRADING_PATH = "/grading"
 
 export function dashboardPathFor(role: Role): string {
     return DASHBOARD_PATHS[role]
@@ -54,6 +58,20 @@ export const NAV_ITEMS: NavItem[] = [
         label: "AI analysis",
         to: ANALYSIS_PATH,
         icon: BrainCircuitIcon,
+        roles: ["DOCTOR", "NURSE"],
+        permission: "analysis:run",
+    },
+    {
+        label: "Cornea grading",
+        to: GRADING_PATH,
+        icon: GaugeIcon,
+        roles: ["DOCTOR", "NURSE"],
+        permission: "analysis:run",
+    },
+    {
+        label: "Disease screening",
+        to: DISEASE_PATH,
+        icon: MicroscopeIcon,
         roles: ["DOCTOR", "NURSE"],
         permission: "analysis:run",
     },
