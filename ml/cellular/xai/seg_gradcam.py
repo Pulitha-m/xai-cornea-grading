@@ -4,6 +4,8 @@ XAI step 3 — Seg-Grad-CAM for StarDist (Vinogradova et al. 2020): which pixels
 Explained score of a cell = sum of StarDist's object probability over the cell's instance (at the resolution of
 the probability map). Grad-CAM weighting as in step 1 (mean gradient per channel) at a late layer — StarDist's
 'features' conv after the U-Net, the last layer before the output heads.
+HiResCAM (Draelos & Carin 2020; exploratory, added after Grad-CAM failed the deletion test): gradient x
+activation per pixel, summed over channels - keeps WHERE the gradient comes from (Grad-CAM averages it away).
 
   two_outputs(keras_model, layer)   model x -> (layer activations, object probability)
   seg_cam(model2, x, region_g)      heatmap at the layer's resolution (>= 0) and the score
@@ -75,9 +77,10 @@ def to_grid(region: np.ndarray, shape: tuple[int, int]) -> np.ndarray:
     return r
 
 
-def seg_cam(model2, x: np.ndarray, region_g: np.ndarray) -> tuple[np.ndarray, float]:
+def seg_cam(model2, x: np.ndarray, region_g: np.ndarray, method: str = "gradcam") -> tuple[np.ndarray, float]:
     """x (H, W) float32 network input; region_g bool at the probability map's resolution.
-    Returns (Grad-CAM heatmap at the layer's resolution, >= 0; score = sum of probability over region_g)."""
+    Returns (heatmap at the layer's resolution, >= 0; score = sum of probability over region_g).
+    method: 'gradcam' (mean gradient per channel x activation) or 'hirescam' (gradient x activation per pixel)."""
     import tensorflow as tf
     inp = tf.convert_to_tensor(x[None, ..., None], tf.float32)
     m = tf.convert_to_tensor(region_g[None, ..., None], tf.float32)
@@ -87,8 +90,13 @@ def seg_cam(model2, x: np.ndarray, region_g: np.ndarray) -> tuple[np.ndarray, fl
     g = tape.gradient(score, a)
     a = np.asarray(a, np.float32)[0]
     g = np.asarray(g, np.float32)[0]
-    w = g.mean((0, 1))
-    return np.maximum((a * w).sum(-1), 0), float(score)
+    if method == "gradcam":
+        cam = (a * g.mean((0, 1))).sum(-1)
+    elif method == "hirescam":
+        cam = (a * g).sum(-1)
+    else:
+        raise ValueError(f"unknown method {method!r}")
+    return np.maximum(cam, 0), float(score)
 
 
 def scores(model2, xs, region_g: np.ndarray, batch: int = 8) -> np.ndarray:

@@ -344,7 +344,13 @@ xai:
   #   secondary heat share on the cell + a ring_px ring vs that region's area share (one-sided Wilcoxon);
   #             heat share on the wall band (ring_px either side of the outline) vs its area share;
   #             heat on the cell for wrong vs correct and green vs flagged cells (descriptive)
+  # DEVIATION (2026-10-18, after the result): Grad-CAM FAILED the primary deletion test (median drop 0.012 vs
+  # 0.045 shifted, p = 0.89) - its channel-mean weights light up every cell centre in the window, not the
+  # explained cell. HiResCAM (gradient x activation per pixel) added as an EXPLORATORY comparison on the same
+  # cells and test; the Grad-CAM verdict stands and is not replaced.
   segmentation:
+    method: gradcam                     # primary (pre-registered)
+    compare: [hirescam]                 # exploratory, added post hoc
     layer: features
     n_green: 30
     n_flagged: 30

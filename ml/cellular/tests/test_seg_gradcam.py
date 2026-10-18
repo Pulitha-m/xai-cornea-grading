@@ -108,3 +108,17 @@ def test_hooked_model_gives_the_same_heatmap():
     cam1, s1 = seg_cam(two_outputs(km, "features"), x, x > 0)
     cam2, s2 = seg_cam(_Hooked(km, "features"), x, x > 0)     # fallback used for StarDist's model
     assert np.allclose(cam1, cam2, atol=1e-6) and np.isclose(s1, s2)
+
+
+def test_hirescam_keeps_the_location_of_the_gradient():
+    from xai.seg_gradcam import seg_cam, two_outputs
+    model2 = two_outputs(toy_model(), "features")
+    x = np.zeros((16, 16), np.float32)
+    x[4:8, 4:8] = 1                                         # the explained cell
+    x[10:14, 10:14] = 1                                     # a neighbour that looks the same
+    region = np.zeros_like(x, bool)
+    region[4:8, 4:8] = True
+    g, _ = seg_cam(model2, x, region, "gradcam")
+    h, _ = seg_cam(model2, x, region, "hirescam")
+    assert g[10:14, 10:14].min() > 0                        # Grad-CAM: the neighbour lights up too
+    assert h[region].min() > 0 and h[~region].max() == 0    # HiResCAM: only the explained cell

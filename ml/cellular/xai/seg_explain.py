@@ -4,9 +4,10 @@ Rules: config.yaml -> xai.segmentation (fixed before any result).
 
   --evaluate   the 40 annotated crops, each predicted by the Phase 2 StarDist fold model that never saw it
                (the same cells, levels and errors as step 2); a random sample of GREEN and of YELLOW / RED cells:
-               deletion test (primary), heat on the cell and its walls, wrong vs correct cells; example figure
+               deletion test (primary: Grad-CAM), heat on the cell and its walls, wrong vs correct cells;
+               the same for the comparison methods (HiResCAM, exploratory); example figures
 
-Outputs: <outputs_dir>/xai/segmentation/ (cells.csv, decision.json, figures/examples.png)
+Outputs: <outputs_dir>/xai/segmentation/ (cells.csv, decision.json, figures/examples.png, examples_<method>.png)
 Usage (from ml/cellular/; GPU):
     python -m xai.seg_explain --evaluate
 """
@@ -27,6 +28,9 @@ from xai.biomarker_explain import label_cells
 from xai.reliability import cell_confidence, reliability
 from xai.seg_gradcam import (delete, pad_to, rolled_in_window, scores, seg_cam, shares, to_grid, top_in_window,
                              two_outputs, upsample, window)
+
+
+NAMES = {"gradcam": "Seg-Grad-CAM", "hirescam": "HiResCAM"}
 
 
 def out_root(cfg: dict):
@@ -82,11 +86,11 @@ def draw(t: pd.DataFrame, xs: dict) -> pd.DataFrame:
 
 
 def explain_cell(model2, x: np.ndarray, hw: tuple[int, int], grid: tuple[int, int], region: np.ndarray,
-                 xs: dict, rng: np.random.Generator) -> tuple[dict, dict]:
+                 xs: dict, rng: np.random.Generator, method: str = "gradcam") -> tuple[dict, dict]:
     """One cell: heatmap, deletion test, heat shares. x and region are padded; hw = the crop's real size."""
     g_shape = (x.shape[0] // grid[0], x.shape[1] // grid[1])
     region_g = to_grid(region, g_shape)
-    cam, s0 = seg_cam(model2, x, region_g)
+    cam, s0 = seg_cam(model2, x, region_g, method)
     heat = upsample(cam, x.shape)
     heat[hw[0]:], heat[:, hw[1]:] = 0, 0                               # padding is not part of the crop
     win = window(region, xs["context_px"], hw)
@@ -120,9 +124,11 @@ def evaluate(cfg: dict) -> None:
     print(f"{len(pool)} predicted complete cells on {pool['crop_id'].nunique()} crops; sample: "
           f"{(pick['group'] == 'green').sum()} green, {(pick['group'] == 'flagged').sum()} yellow / red", flush=True)
 
-    rng = np.random.default_rng(xs["seed"])
-    rows, views = [], []
-    want = {"green": xs["n_examples"] // 2, "flagged": xs["n_examples"] - xs["n_examples"] // 2}
+    methods = [xs["method"], *xs.get("compare", [])]
+    rngs = {m: np.random.default_rng(xs["seed"]) for m in methods}     # own stream: primary run reproducible
+    rows, views = [], {m: [] for m in methods}
+    want = {m: {"green": xs["n_examples"] // 2, "flagged": xs["n_examples"] - xs["n_examples"] // 2}
+            for m in methods}
     for k, model in models.items():
         model2 = two_outputs(model.keras_model, xs["layer"])
         grid = tuple(int(g) for g in model.config.grid)
@@ -131,16 +137,20 @@ def evaluate(cfg: dict) -> None:
             s = by_id[r.crop_id]
             x = pad_to(to_input(s.image), div)
             region = pad_to(labels_of[r.crop_id] == r.instance, div, mode="constant")
-            row, view = explain_cell(model2, x, s.image.shape, grid, region, xs, rng)
-            rows.append({**r._asdict(), **row})
-            if want[r.group] > 0:
-                want[r.group] -= 1
-                views.append({**r._asdict(), **view})
+            for m in methods:
+                row, view = explain_cell(model2, x, s.image.shape, grid, region, xs, rngs[m], m)
+                rows.append({**r._asdict(), "method": m, **row})
+                if want[m][r.group] > 0:
+                    want[m][r.group] -= 1
+                    views[m].append({**r._asdict(), **view})
         print(f"  fold {k}: done", flush=True)
     t = pd.DataFrame(rows)
     t.to_csv(out_root(cfg) / "cells.csv", index=False)
-    decide(cfg, t)
-    figure(cfg, views)
+    summaries = {m: decide(cfg, t[t["method"] == m].reset_index(drop=True), m, m == xs["method"]) for m in methods}
+    (out_root(cfg) / "decision.json").write_text(json.dumps(summaries, indent=2))
+    print(f"\nResults: {out_root(cfg)}")
+    for m in methods:
+        figure(cfg, views[m], m, m == xs["method"])
 
 
 def _p(a, b=None, alternative="greater") -> float:
@@ -149,7 +159,7 @@ def _p(a, b=None, alternative="greater") -> float:
     return float(wilcoxon(d, alternative=alternative).pvalue) if np.any(d != 0) else float("nan")
 
 
-def decide(cfg: dict, t: pd.DataFrame) -> None:
+def decide(cfg: dict, t: pd.DataFrame, method: str = "gradcam", primary: bool = True) -> dict:
     xs = cfg["xai"]["segmentation"]
     p_del = _p(t["drop_cam"], t["drop_shift"])
     p_cell = _p(t["heat_cell"], t["area_cell"])
@@ -164,6 +174,7 @@ def decide(cfg: dict, t: pd.DataFrame) -> None:
     mw = lambda c, a, b: (float(mannwhitneyu(t.loc[a, c].dropna(), t.loc[b, c].dropna()).pvalue)
                           if a.sum() and b.sum() else float("nan"))
     summary = {
+        "role": "primary (pre-registered)" if primary else "exploratory (added after the primary result)",
         "cells": int(len(t)), "crops": int(t["crop_id"].nunique()), "wrong": int(t["wrong"].sum()),
         "faithfulness": {"median_drop_cam": med("drop_cam"), "median_drop_shift": med("drop_shift"),
                          "cam_beats_shift": int((t["drop_cam"] > t["drop_shift"]).sum()),
@@ -175,10 +186,10 @@ def decide(cfg: dict, t: pd.DataFrame) -> None:
         "p_heat_cell_wrong_vs_correct": mw("heat_cell", t["wrong"], ~t["wrong"]),
         "p_heat_cell_green_vs_flagged": mw("heat_cell", t["group"] == "green", t["group"] == "flagged"),
     }
-    (out_root(cfg) / "decision.json").write_text(json.dumps(summary, indent=2))
     f = summary["faithfulness"]
-    print(f"\n{len(t)} cells on {summary['crops']} crops ({summary['wrong']} wrong vs the manual masks)")
-    print(f"PRIMARY  deletion of the top {100 * xs['top_share']:.0f} % heat pixels: median score drop "
+    print(f"\n=== {NAMES.get(method, method)}: {summary['role']} ===")
+    print(f"{len(t)} cells on {summary['crops']} crops ({summary['wrong']} wrong vs the manual masks)")
+    print(f"{'PRIMARY' if primary else 'EXPLORATORY'}  deletion of the top {100 * xs['top_share']:.0f} % heat pixels: median score drop "
           f"{f['median_drop_cam']:.3f} vs {f['median_drop_shift']:.3f} for the shifted mask; heatmap better in "
           f"{f['cam_beats_shift']} / {len(t)} cells; Wilcoxon p = {p_del:.2g} -> {'PASS' if f['pass'] else 'FAIL'}")
     pl = summary["plausibility"]
@@ -189,10 +200,10 @@ def decide(cfg: dict, t: pd.DataFrame) -> None:
     print(pd.DataFrame(groups).T.to_string())
     print(f"heat on the cell, wrong vs correct: p = {summary['p_heat_cell_wrong_vs_correct']:.2g}; "
           f"green vs flagged: p = {summary['p_heat_cell_green_vs_flagged']:.2g} (Mann-Whitney, descriptive)")
-    print(f"\nResults: {out_root(cfg)}")
+    return summary
 
 
-def figure(cfg: dict, views: list[dict]) -> None:
+def figure(cfg: dict, views: list[dict], method: str = "gradcam", primary: bool = True) -> None:
     import matplotlib
     matplotlib.use("Agg")
     import matplotlib.pyplot as plt
@@ -214,21 +225,22 @@ def figure(cfg: dict, views: list[dict]) -> None:
         ax[1].imshow(v["img"], cmap="gray", vmin=0, vmax=1)
         ax[1].imshow(v["heat"], cmap="jet", alpha=0.45, vmin=0, vmax=vmax)
         ax[1].contour(v["region"], levels=[0.5], colors="w", linewidths=0.6)
-        ax[1].set_title("Seg-Grad-CAM (one scale for all rows)", fontsize=8)
-        drop = lambda s: 100 * (v["score"] - s) / v["score"]
+        ax[1].set_title(f"{NAMES.get(method, method)} (one scale for all rows)", fontsize=8)
+        change = lambda s: 100 * (s - v["score"]) / v["score"]
         ax[2].imshow(v["x_top"], cmap="gray", vmin=0, vmax=1)
         ax[2].set_title(f"top {100 * cfg['xai']['segmentation']['top_share']:.0f} % heat removed\n"
-                        f"score -{drop(v['score_cam']):.0f} %", fontsize=8)
+                        f"score {change(v['score_cam']):+.0f} %", fontsize=8)
         ax[3].imshow(v["x_shift"], cmap="gray", vmin=0, vmax=1)
-        ax[3].set_title(f"same mask shifted\nscore -{drop(v['score_shift0']):.0f} %", fontsize=8)
+        ax[3].set_title(f"same mask shifted\nscore {change(v['score_shift0']):+.0f} %", fontsize=8)
         for a in ax:
             a.axis("off")
     fig.tight_layout()
     d = out_root(cfg) / "figures"
     d.mkdir(exist_ok=True)
-    fig.savefig(d / "examples.png", dpi=90)
+    name = "examples.png" if primary else f"examples_{method}.png"
+    fig.savefig(d / name, dpi=90)
     plt.close(fig)
-    print(f"Figure: {d / 'examples.png'}")
+    print(f"Figure: {d / name}")
 
 
 def main() -> None:
