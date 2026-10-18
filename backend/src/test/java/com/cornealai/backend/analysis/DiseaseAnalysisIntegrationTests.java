@@ -3,6 +3,7 @@ package com.cornealai.backend.analysis;
 import com.cornealai.backend.analysis.client.MlServiceClient;
 import com.cornealai.backend.analysis.dto.disease.DiseaseAnalyzeResponse;
 import com.cornealai.backend.analysis.dto.disease.DiseaseFinding;
+import com.cornealai.backend.analysis.dto.disease.GradcamFocus;
 import com.cornealai.backend.analysis.dto.disease.InputCheck;
 import com.cornealai.backend.analysis.dto.disease.InputIssue;
 import com.cornealai.backend.analysis.entity.DiseaseAnalysisRun;
@@ -84,7 +85,8 @@ class DiseaseAnalysisIntegrationTests extends IntegrationTestSupport {
         assertThat(run.getStatus()).isEqualTo("completed");
         assertThat(run.isForced()).isFalse();
         assertThat(run.getMeasurementsJson()).contains("\"ECD_CD_cells_per_mm2\":2650");
-        assertThat(run.getResultJson()).contains("\"detected\":[\"FECD\"]").doesNotContain("iVBORw0KGgo");
+        assertThat(run.getResultJson()).contains("\"detected\":[\"FECD\"]").contains("\"region\":\"lower right\"")
+                .doesNotContain("iVBORw0KGgo");
     }
 
     @Test
@@ -148,8 +150,9 @@ class DiseaseAnalysisIntegrationTests extends IntegrationTestSupport {
 
     private static DiseaseAnalyzeResponse completed() {
         List<DiseaseFinding> findings = List.of(
-                new DiseaseFinding("FECD", "FECD", 0.8, 0.23, true, "iVBORw0KGgo="),
-                new DiseaseFinding("Guttata", "Guttata", 0.1, 0.44, false, null));
+                new DiseaseFinding("FECD", "FECD", 0.8, 0.23, true, "iVBORw0KGgo=",
+                        new GradcamFocus("lower right", 0.12)),
+                new DiseaseFinding("Guttata", "Guttata", 0.1, 0.44, false, null, null));
         return new DiseaseAnalyzeResponse(null, "CASE-1", "completed", "Research tool, not a medical diagnosis.",
                 null, new InputCheck(true, false, List.of(), List.of()), null, "densenet121_image_numbers_fusion_v2",
                 findings, List.of("FECD"), false, List.of(), "Mild", Map.of("FECDgroup", 0.3), Map.of(), List.of(), true);

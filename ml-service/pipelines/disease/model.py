@@ -133,6 +133,19 @@ def gradcam_map(cam: np.ndarray) -> np.ndarray:
     return (cam - cam.min()) / (cam.max() - cam.min() + 1e-8)
 
 
+HOT_LEVEL = 0.5  # share of the normalised map at or above this counts as highlighted
+_ROWS, _COLS = ("upper", "middle", "lower"), ("left", "centre", "right")
+
+
+def gradcam_focus(cam: np.ndarray) -> dict:
+    """Where the map is hottest (3 x 3 grid of the image) and how much of the image is highlighted."""
+    heat = gradcam_map(cam)
+    y, x = np.unravel_index(int(np.argmax(heat)), heat.shape)
+    row, col = _ROWS[min(2, 3 * y // heat.shape[0])], _COLS[min(2, 3 * x // heat.shape[1])]
+    region = "centre" if (row, col) == ("middle", "centre") else f"{row} {col}".replace("middle ", "").replace(" centre", "")
+    return {"region": region, "coverage": round(float((heat >= HOT_LEVEL).mean()), 3)}
+
+
 def overlay_png(prepared: np.ndarray, cam: np.ndarray) -> str:
     """Base64 PNG of the input image with the Grad-CAM heat map (jet, 40% opacity), as in the notebook."""
     image = load_config()["image"]

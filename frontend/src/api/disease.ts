@@ -49,6 +49,15 @@ export interface DiseaseFinding {
     detected: boolean
     /** Base64 PNG of the Grad-CAM over the input image, for detected diseases. */
     gradcamPng: string | null
+    /** Where the map is hottest and the share of the image it highlights, for detected diseases. */
+    gradcamFocus: GradcamFocus | null
+}
+
+export interface GradcamFocus {
+    /** "centre", "upper", "lower", "left", "right" or a corner such as "lower right". */
+    region: string
+    /** Share of the image at or above half the map's maximum (0–1). */
+    coverage: number
 }
 
 export interface SeverityFinding {

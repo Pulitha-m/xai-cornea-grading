@@ -32,11 +32,11 @@ const COMPLETED: DiseaseAnalyzeResponse = {
     imageQuality: QUALITY,
     method: "densenet121_image_numbers_fusion_v2",
     diseases: [
-        { code: "FECD", label: "Fuchs endothelial corneal dystrophy (FECD)", probability: 0.82, threshold: 0.23, detected: true, gradcamPng: "iVBORw0KGgo=" },
-        { code: "Guttata", label: "Guttata", probability: 0.12, threshold: 0.44, detected: false, gradcamPng: null },
-        { code: "Folds", label: "Descemet folds", probability: 0.3, threshold: 0.49, detected: false, gradcamPng: null },
-        { code: "PolyPleo", label: "Polymegathism / pleomorphism", probability: 0.2, threshold: 0.44, detected: false, gradcamPng: null },
-        { code: "LowCD", label: "Low cell density", probability: 0.1, threshold: 0.47, detected: false, gradcamPng: null },
+        { code: "FECD", label: "Fuchs endothelial corneal dystrophy (FECD)", probability: 0.82, threshold: 0.23, detected: true, gradcamPng: "iVBORw0KGgo=", gradcamFocus: { region: "lower right", coverage: 0.09 } },
+        { code: "Guttata", label: "Guttata", probability: 0.12, threshold: 0.44, detected: false, gradcamPng: null, gradcamFocus: null },
+        { code: "Folds", label: "Descemet folds", probability: 0.3, threshold: 0.49, detected: false, gradcamPng: null, gradcamFocus: null },
+        { code: "PolyPleo", label: "Polymegathism / pleomorphism", probability: 0.2, threshold: 0.44, detected: false, gradcamPng: null, gradcamFocus: null },
+        { code: "LowCD", label: "Low cell density", probability: 0.1, threshold: 0.47, detected: false, gradcamPng: null, gradcamFocus: null },
     ],
     detected: ["FECD"],
     normal: false,
@@ -107,6 +107,27 @@ describe("DiseasePage", () => {
         expect(severity.getByText("Overall severity").parentElement).toHaveTextContent("Mod/Sev")
         expect(screen.getByRole("img", { name: /Grad-CAM heat map for Fuchs/ })).toHaveAttribute("src", "data:image/png;base64,iVBORw0KGgo=")
         expect(screen.getByText("Donor age not recorded; the training median is used.")).toBeInTheDocument()
+    })
+
+    it("explains each Grad-CAM map and can show the original image instead", async () => {
+        vi.stubGlobal("URL", Object.assign(URL, { createObjectURL: () => "blob:original", revokeObjectURL: () => {} }))
+        vi.mocked(analyzeDisease).mockResolvedValue(COMPLETED)
+        renderApp("/disease", makeAuth({ user: makeUser("DOCTOR") }))
+
+        const user = await fillAndAnalyse({})
+
+        const gradcam = within(await screen.findByRole("region", { name: "Grad-CAM explanations" }))
+        expect(gradcam.getByText("How to read these maps")).toBeInTheDocument()
+        expect(gradcam.getByText(/Strongest in the/)).toHaveTextContent(
+            "Strongest in the lower right of the image; 9% of the image highlighted (focused).")
+        expect(gradcam.getByText(/Guttae: dark, round or oval spots/)).toBeInTheDocument()
+        expect(gradcam.getByText(/test AUC numbers only 0.87, image only 0.83/)).toBeInTheDocument()
+
+        await user.click(gradcam.getByRole("button", { name: "Show original" }))
+        expect(gradcam.getByRole("img", { name: /Original image/ })).toHaveAttribute("src", "blob:original")
+        await user.click(gradcam.getByRole("button", { name: "Show heat map" }))
+        expect(gradcam.getByRole("img", { name: /Grad-CAM heat map/ })).toBeInTheDocument()
+        vi.unstubAllGlobals()
     })
 
     it("shows failed input checks and can run anyway with force", async () => {

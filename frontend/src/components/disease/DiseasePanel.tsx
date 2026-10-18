@@ -203,7 +203,7 @@ export function DiseasePanel() {
                 )}
             </Card>
 
-            {result && !checksFailed && <DiseaseResults result={result} />}
+            {result && !checksFailed && <DiseaseResults result={result} originalUrl={previewUrl} />}
         </div>
     )
 }

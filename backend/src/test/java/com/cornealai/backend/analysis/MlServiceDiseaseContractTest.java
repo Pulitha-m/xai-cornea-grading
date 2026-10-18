@@ -60,6 +60,7 @@ class MlServiceDiseaseContractTest {
         for (DiseaseFinding finding : response.diseases()) {
             assertEquals(finding.detected(), finding.probability() >= finding.threshold());
             assertEquals(finding.detected(), finding.gradcamPng() != null);
+            assertEquals(finding.detected(), finding.gradcamFocus() != null);
         }
         assertThat(response.overallSeverity()).isIn("None", "Mild", "Mod/Sev");
         assertThat(response.severityProbabilities()).containsKeys("FECDgroup", "Folds", "Guttata");

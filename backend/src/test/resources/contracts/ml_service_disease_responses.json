@@ -34,7 +34,11 @@
         "probability": 0.8231721936896932,
         "threshold": 0.23486328125,
         "detected": true,
-        "gradcamPng": "iVBORw0KGgoAAAANSUhEUgAAAYAAAAEgCAIAAAAy...(truncated)"
+        "gradcamPng": "iVBORw0KGgoAAAANSUhEUgAAAYAAAAEgCAIAAAAy...(truncated)",
+        "gradcamFocus": {
+          "region": "upper right",
+          "coverage": 0.085
+        }
       },
       {
         "code": "Guttata",
@@ -42,7 +46,8 @@
         "probability": 0.12053293409669794,
         "threshold": 0.441650390625,
         "detected": false,
-        "gradcamPng": null
+        "gradcamPng": null,
+        "gradcamFocus": null
       },
       {
         "code": "Folds",
@@ -50,7 +55,11 @@
         "probability": 0.7083932716666494,
         "threshold": 0.4873046875,
         "detected": true,
-        "gradcamPng": "iVBORw0KGgoAAAANSUhEUgAAAYAAAAEgCAIAAAAy...(truncated)"
+        "gradcamPng": "iVBORw0KGgoAAAANSUhEUgAAAYAAAAEgCAIAAAAy...(truncated)",
+        "gradcamFocus": {
+          "region": "upper right",
+          "coverage": 0.155
+        }
       },
       {
         "code": "PolyPleo",
@@ -58,7 +67,11 @@
         "probability": 0.7979430384151897,
         "threshold": 0.4404296875,
         "detected": true,
-        "gradcamPng": "iVBORw0KGgoAAAANSUhEUgAAAYAAAAEgCAIAAAAy...(truncated)"
+        "gradcamPng": "iVBORw0KGgoAAAANSUhEUgAAAYAAAAEgCAIAAAAy...(truncated)",
+        "gradcamFocus": {
+          "region": "upper right",
+          "coverage": 0.084
+        }
       },
       {
         "code": "LowCD",
@@ -66,7 +79,11 @@
         "probability": 0.9775122749304253,
         "threshold": 0.46630859375,
         "detected": true,
-        "gradcamPng": "iVBORw0KGgoAAAANSUhEUgAAAYAAAAEgCAIAAAAy...(truncated)"
+        "gradcamPng": "iVBORw0KGgoAAAANSUhEUgAAAYAAAAEgCAIAAAAy...(truncated)",
+        "gradcamFocus": {
+          "region": "upper right",
+          "coverage": 0.09
+        }
       }
     ],
     "detected": [

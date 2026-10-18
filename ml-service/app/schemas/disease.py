@@ -22,6 +22,11 @@ class ImageQuality(BaseModel):
     unusualRejectAbove: float
 
 
+class GradcamFocus(BaseModel):
+    region: str = Field(..., description="Where the map is hottest: centre, upper/lower, left/right or a corner")
+    coverage: float = Field(..., description="Share of the image at or above half the map's maximum")
+
+
 class DiseaseFinding(BaseModel):
     code: str
     label: str
@@ -29,6 +34,7 @@ class DiseaseFinding(BaseModel):
     threshold: float
     detected: bool
     gradcamPng: str | None = Field(None, description="Base64 PNG: Grad-CAM over the input image (detected only)")
+    gradcamFocus: GradcamFocus | None = None
 
 
 class SeverityFinding(BaseModel):

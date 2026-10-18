@@ -112,10 +112,12 @@ def analyse(gray: np.ndarray, rgb: np.ndarray, values: dict, force: bool = False
     findings = []
     for j, c in enumerate(diseases):
         detected = c in found
+        explain = detected and include_gradcam
         findings.append({
             "code": c, "label": LABELS.get(c, c), "probability": float(P[j]), "threshold": float(thresholds[c]),
             "detected": detected,
-            "gradcamPng": model.overlay_png(prepared, prediction.cams[j]) if detected and include_gradcam else None,
+            "gradcamPng": model.overlay_png(prepared, prediction.cams[j]) if explain else None,
+            "gradcamFocus": model.gradcam_focus(prediction.cams[j]) if explain else None,
         })
     severity = severities(P, PS, found, values.get("ECD_CD_cells_per_mm2"))
     overall = max((s["grade"] for s in severity), key=lambda s: SEVERITY_ORDER[s]) if severity else "None"
