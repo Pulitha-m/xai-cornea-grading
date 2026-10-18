@@ -379,6 +379,37 @@ xai:
     alpha: 0.05
 
 # -----------------------------------------------------------------------------
+# Phase 7 - final test on the frozen test set (final_test.py). Fixed 2026-10-18, BEFORE any test image is
+# processed (the git commit of this block dates the pre-registration).
+# Frozen: code (git commit, no uncommitted changes in ml/cellular), config.yaml, models (ROI CNN, StarDist
+#   final), scale 0.7960 um/px. --freeze records their hashes; --run refuses if anything differs. ONE run:
+#   no tuning, no re-run after seeing results (a disconnect only resumes the same run).
+# Data: all 197 included TEST images - never used for training, selection, calibration or thresholds.
+# Pipeline: pipeline.CellularPipeline exactly as validated (ROI -> StarDist -> complete cells -> biomarkers).
+# Analysis set: images with >= min_cells complete cells (same rule as Phases 5-6); the others are reported
+#   as failures (count, ids) - nothing else is excluded.
+# Per biomarker vs Konan (same definitions as Phases 5-6): bias, MAPE, share within the scope target,
+#   Bland-Altman, Spearman rho; 95 % CI of MAPE and within-target share by bootstrap over images.
+# Target judgement: a biomarker target is MET if the test MAPE <= target (mean |% error| over images). The
+#   within-target share is read against the realistic ceiling vs a ~110-cell reference (Phase 5 s1.2b).
+# Generalisation: the same table on validation (Phase 6, inside ROI) side by side; gap = test - val.
+# Not judgeable on test (no reference maps / masks on test images): roi_iou, seg_dice, seg_iou - reported
+#   from validation / cross-validation, labelled as such.
+# Secondary (descriptive): failures and quality flags; reliability levels; 95 % CI coverage of Konan;
+#   by ECD band; compactness CV <= 15 % share; the largest ECD errors.
+# -----------------------------------------------------------------------------
+final_test:
+  split: test
+  min_cells: 30
+  n_boot: 2000
+  seed: 23
+  ceiling_within_target_pct: {ecd_cells_per_mm2: 85, cv_pct: 86, hex_pct: 77}   # Phase 5 s1.2b
+  validation_only:                    # measured before Phase 7, not re-measurable on test
+    roi_iou: {value: 0.809, where: "10 val reference maps (Phase 6)"}
+    seg_dice: {value: 0.872, where: "5-fold CV, 39 crops (Phase 2, StarDist flat)"}
+    seg_iou: {value: 0.776, where: "5-fold CV, 39 crops (Phase 2, StarDist flat)"}
+
+# -----------------------------------------------------------------------------
 # Validation targets from the research scope (Phase 7).
 # -----------------------------------------------------------------------------
 targets:
