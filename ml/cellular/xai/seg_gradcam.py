@@ -21,15 +21,41 @@ import numpy as np
 from scipy import ndimage as ndi
 
 
+class _Hooked:
+    """km with `layer` hooked: calling it returns (the layer's activations, the first output). Used when a
+    functional sub-model cannot be built (StarDist's model mixes Keras versions: 'KerasTensor has no node')."""
+
+    def __init__(self, km, layer: str):
+        self.km, self.store = km, {}
+        lay = km.get_layer(layer)
+        orig = lay.call
+
+        def call(*args, **kwargs):
+            out = orig(*args, **kwargs)
+            self.store["a"] = out
+            return out
+        lay.call = call
+
+    def __call__(self, x, training: bool = False):
+        self.store.clear()
+        out = self.km(x, training=training)
+        if "a" not in self.store:
+            raise RuntimeError("layer hook not called - the model does not run the layer's call() eagerly")
+        return self.store["a"], out[0] if isinstance(out, (list, tuple)) else out
+
+
 def two_outputs(km, layer: str):
-    """Functional model: input -> [activations of `layer`, first output (StarDist: object probability)]."""
+    """Callable: input -> (activations of `layer`, first output (StarDist: object probability))."""
     try:
-        import tf_keras as K                     # StarDist with TF >= 2.16 builds Keras-2 models
-        if not isinstance(km, K.Model):
-            raise ImportError
-    except ImportError:
-        from tensorflow import keras as K
-    return K.Model(km.inputs, [km.get_layer(layer).output, km.outputs[0]])
+        try:
+            import tf_keras as K                 # StarDist with TF >= 2.16 builds Keras-2 models
+            if not isinstance(km, K.Model):
+                raise ImportError
+        except ImportError:
+            from tensorflow import keras as K
+        return K.Model(km.inputs, [km.get_layer(layer).output, km.outputs[0]])
+    except (AttributeError, TypeError, ValueError):
+        return _Hooked(km, layer)
 
 
 def pad_to(a: np.ndarray, div: int, mode: str = "reflect") -> np.ndarray:

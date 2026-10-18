@@ -98,3 +98,13 @@ def test_seg_cam_finds_the_bright_cell_and_deletion_lowers_its_score():
     shifted = rolled_in_window(top, win, np.random.default_rng(0), 3)
     sc = scores(model2, [delete(x, m, win) for m in [top, *shifted]], region)
     assert sc[0] < s0 and sc[0] < sc[1:].min()              # removing the heat hurts most
+
+
+def test_hooked_model_gives_the_same_heatmap():
+    from xai.seg_gradcam import _Hooked, seg_cam, two_outputs
+    km = toy_model()
+    x = np.zeros((16, 16), np.float32)
+    x[4:8, 4:8] = 1
+    cam1, s1 = seg_cam(two_outputs(km, "features"), x, x > 0)
+    cam2, s2 = seg_cam(_Hooked(km, "features"), x, x > 0)     # fallback used for StarDist's model
+    assert np.allclose(cam1, cam2, atol=1e-6) and np.isclose(s1, s2)
