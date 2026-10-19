@@ -62,7 +62,7 @@ ml-service/models/domain_validator/*
 !ml-service/models/domain_validator/*.json
 # v2 disease + severity models: ONNX exports of the trained weights, their runtime config
 # (scaling, thresholds, check limits; aggregate values only) and the unusual-image reference
-# (DenseNet features of the training images) and the head weights used for SHAP.
+# (DenseNet features of the training images), and heads.npz (layer weights used for SHAP).
 # Regenerate with ml/disease-new/scripts/.
 # The .pt training weights and the result summaries stay ignored.
 !ml-service/models/disease_v2/

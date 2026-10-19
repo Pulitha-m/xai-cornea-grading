@@ -119,6 +119,7 @@ describe("DiseasePage", () => {
         expect(severity.getByText("Overall severity").parentElement).toHaveTextContent("Mod/Sev")
         expect(screen.getByRole("img", { name: /Grad-CAM heat map for Fuchs/ })).toHaveAttribute("src", "data:image/png;base64,iVBORw0KGgo=")
         expect(screen.getByText("Donor age not recorded; the training median is used.")).toBeInTheDocument()
+        expect(within(screen.getByRole("region", { name: "Inputs used" })).queryByText(/deficit/i)).not.toBeInTheDocument()
     })
 
     it("explains each Grad-CAM map and can show the original image instead", async () => {

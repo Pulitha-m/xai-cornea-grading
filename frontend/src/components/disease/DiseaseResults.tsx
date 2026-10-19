@@ -102,8 +102,9 @@ export function DiseaseResults({ result, originalUrl = null }: { result: Disease
 
                 <Card title="Inputs used" description="Blank values were filled with the training median, as in training.">
                     <dl className="grid grid-cols-2 gap-4 sm:grid-cols-3">
-                        {Object.entries(result.measurementsUsed ?? {}).map(([name, value]) => (
-                            <Field key={name} label={name === "ECD_Deficit" ? "ECD deficit (derived)" : measurementLabel(name)}
+                        {/* ECD_Deficit is derived from ECD for the model only; not shown to clinicians. */}
+                        {Object.entries(result.measurementsUsed ?? {}).filter(([name]) => name !== "ECD_Deficit").map(([name, value]) => (
+                            <Field key={name} label={measurementLabel(name)}
                                 value={value === null ? null : value.toLocaleString("en-GB")} />
                         ))}
                     </dl>
