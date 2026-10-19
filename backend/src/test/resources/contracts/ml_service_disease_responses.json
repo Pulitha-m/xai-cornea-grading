@@ -38,6 +38,42 @@
         "gradcamFocus": {
           "region": "upper right",
           "coverage": 0.085
+        },
+        "shap": {
+          "baseline": 0.12661251209187097,
+          "prediction": 0.8231722023476771,
+          "values": [
+            {
+              "input": "ECD_CD_cells_per_mm2",
+              "value": 1667.0,
+              "imputed": false,
+              "contribution": 0.6932076649860891
+            },
+            {
+              "input": "SD",
+              "value": 180.0,
+              "imputed": false,
+              "contribution": 0.014672208405892022
+            },
+            {
+              "input": "CV",
+              "value": 30.0,
+              "imputed": false,
+              "contribution": 0.012134025778486357
+            },
+            {
+              "input": "HEX_percent",
+              "value": 72.0,
+              "imputed": false,
+              "contribution": -0.0044930253751322945
+            },
+            {
+              "input": "Donor_Age",
+              "value": 73.0,
+              "imputed": false,
+              "contribution": -0.018961183539529174
+            }
+          ]
         }
       },
       {
@@ -47,7 +83,43 @@
         "threshold": 0.441650390625,
         "detected": false,
         "gradcamPng": null,
-        "gradcamFocus": null
+        "gradcamFocus": null,
+        "shap": {
+          "baseline": 0.15454446651583037,
+          "prediction": 0.12053292950036754,
+          "values": [
+            {
+              "input": "ECD_CD_cells_per_mm2",
+              "value": 1667.0,
+              "imputed": false,
+              "contribution": -0.037166569687083796
+            },
+            {
+              "input": "SD",
+              "value": 180.0,
+              "imputed": false,
+              "contribution": 0.0009823926503688312
+            },
+            {
+              "input": "CV",
+              "value": 30.0,
+              "imputed": false,
+              "contribution": 0.0029667142133616826
+            },
+            {
+              "input": "HEX_percent",
+              "value": 72.0,
+              "imputed": false,
+              "contribution": 0.003138032407177302
+            },
+            {
+              "input": "Donor_Age",
+              "value": 73.0,
+              "imputed": false,
+              "contribution": -0.003932106599286851
+            }
+          ]
+        }
       },
       {
         "code": "Folds",
@@ -59,6 +131,42 @@
         "gradcamFocus": {
           "region": "upper right",
           "coverage": 0.155
+        },
+        "shap": {
+          "baseline": 0.7238130115309487,
+          "prediction": 0.7083932908706057,
+          "values": [
+            {
+              "input": "ECD_CD_cells_per_mm2",
+              "value": 1667.0,
+              "imputed": false,
+              "contribution": -0.010947769121899441
+            },
+            {
+              "input": "SD",
+              "value": 180.0,
+              "imputed": false,
+              "contribution": -0.00044923433915734497
+            },
+            {
+              "input": "CV",
+              "value": 30.0,
+              "imputed": false,
+              "contribution": -0.0027034959459786958
+            },
+            {
+              "input": "HEX_percent",
+              "value": 72.0,
+              "imputed": false,
+              "contribution": -0.005584311712449129
+            },
+            {
+              "input": "Donor_Age",
+              "value": 73.0,
+              "imputed": false,
+              "contribution": 0.004265090459141582
+            }
+          ]
         }
       },
       {
@@ -71,6 +179,42 @@
         "gradcamFocus": {
           "region": "upper right",
           "coverage": 0.084
+        },
+        "shap": {
+          "baseline": 0.26597949048828246,
+          "prediction": 0.7979430339739049,
+          "values": [
+            {
+              "input": "ECD_CD_cells_per_mm2",
+              "value": 1667.0,
+              "imputed": false,
+              "contribution": 0.5563453335731352
+            },
+            {
+              "input": "SD",
+              "value": 180.0,
+              "imputed": false,
+              "contribution": 0.005951542257252756
+            },
+            {
+              "input": "CV",
+              "value": 30.0,
+              "imputed": false,
+              "contribution": -0.00700743832553613
+            },
+            {
+              "input": "HEX_percent",
+              "value": 72.0,
+              "imputed": false,
+              "contribution": -0.02713597396326689
+            },
+            {
+              "input": "Donor_Age",
+              "value": 73.0,
+              "imputed": false,
+              "contribution": 0.003810079944037625
+            }
+          ]
         }
       },
       {
@@ -83,6 +227,42 @@
         "gradcamFocus": {
           "region": "upper right",
           "coverage": 0.09
+        },
+        "shap": {
+          "baseline": 0.04494206590953259,
+          "prediction": 0.9775122706530626,
+          "values": [
+            {
+              "input": "ECD_CD_cells_per_mm2",
+              "value": 1667.0,
+              "imputed": false,
+              "contribution": 0.9363760533296348
+            },
+            {
+              "input": "SD",
+              "value": 180.0,
+              "imputed": false,
+              "contribution": 0.009483280429787624
+            },
+            {
+              "input": "CV",
+              "value": 30.0,
+              "imputed": false,
+              "contribution": 0.005064360465984759
+            },
+            {
+              "input": "HEX_percent",
+              "value": 72.0,
+              "imputed": false,
+              "contribution": -0.009369162138119752
+            },
+            {
+              "input": "Donor_Age",
+              "value": 73.0,
+              "imputed": false,
+              "contribution": -0.00898432734375747
+            }
+          ]
         }
       }
     ],
@@ -105,7 +285,43 @@
         "grade": "Mod/Sev",
         "probability": 0.5743503458545584,
         "threshold": 0.5703125,
-        "method": "model"
+        "method": "model",
+        "shap": {
+          "baseline": 0.4995203318613072,
+          "prediction": 0.5743503691492093,
+          "values": [
+            {
+              "input": "ECD_CD_cells_per_mm2",
+              "value": 1667.0,
+              "imputed": false,
+              "contribution": 0.10691951673365772
+            },
+            {
+              "input": "SD",
+              "value": 180.0,
+              "imputed": false,
+              "contribution": 0.001451121404784143
+            },
+            {
+              "input": "CV",
+              "value": 30.0,
+              "imputed": false,
+              "contribution": -0.017638318650512335
+            },
+            {
+              "input": "HEX_percent",
+              "value": 72.0,
+              "imputed": false,
+              "contribution": -0.031156436396778824
+            },
+            {
+              "input": "Donor_Age",
+              "value": 73.0,
+              "imputed": false,
+              "contribution": 0.015254154196751447
+            }
+          ]
+        }
       },
       {
         "group": "Folds",
@@ -116,7 +332,43 @@
         "grade": "Mod/Sev",
         "probability": 0.7825992186825781,
         "threshold": 0.49072265625,
-        "method": "model"
+        "method": "model",
+        "shap": {
+          "baseline": 0.40428886620878685,
+          "prediction": 0.7825992134720838,
+          "values": [
+            {
+              "input": "ECD_CD_cells_per_mm2",
+              "value": 1667.0,
+              "imputed": false,
+              "contribution": 0.3898587247341632
+            },
+            {
+              "input": "SD",
+              "value": 180.0,
+              "imputed": false,
+              "contribution": 0.006883292737378693
+            },
+            {
+              "input": "CV",
+              "value": 30.0,
+              "imputed": false,
+              "contribution": -0.00240505051861217
+            },
+            {
+              "input": "HEX_percent",
+              "value": 72.0,
+              "imputed": false,
+              "contribution": -0.020212490577643995
+            },
+            {
+              "input": "Donor_Age",
+              "value": 73.0,
+              "imputed": false,
+              "contribution": 0.0041858708880112925
+            }
+          ]
+        }
       }
     ],
     "overallSeverity": "Mod/Sev",

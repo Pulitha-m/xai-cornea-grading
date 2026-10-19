@@ -4,6 +4,7 @@ import { measurementLabel } from "@/lib/disease-measurements"
 import { coverageLabel, GRADCAM_EXPLANATIONS } from "@/lib/gradcam-explanations"
 import { alertError, alertWarning } from "@/lib/styles"
 import { Card } from "@/components/dashboard/PageHeader"
+import { ShapCard } from "@/components/disease/ShapCard"
 import { Field } from "@/components/ui/field"
 import { StatusBadge, type StatusTone } from "@/components/ui/status-badge"
 
@@ -124,6 +125,8 @@ export function DiseaseResults({ result, originalUrl = null }: { result: Disease
                     </div>
                 </Card>
             )}
+
+            <ShapCard result={result} />
 
             {result.message && <p className="text-xs text-muted-foreground">{result.message}</p>}
         </section>

@@ -20,6 +20,18 @@ const QUALITY = {
     unusualDistance: 0.155, unusualWarnAbove: 0.17, unusualRejectAbove: 0.188,
 }
 
+const FECD_SHAP = {
+    baseline: 0.13,
+    prediction: 0.82,
+    values: [
+        { input: "ECD_CD_cells_per_mm2", value: 1667, imputed: false, contribution: 0.69 },
+        { input: "SD", value: 180, imputed: false, contribution: 0.01 },
+        { input: "CV", value: 30, imputed: false, contribution: 0.003 },
+        { input: "HEX_percent", value: 72, imputed: false, contribution: -0.01 },
+        { input: "Donor_Age", value: null, imputed: true, contribution: 0 },
+    ],
+}
+
 const COMPLETED: DiseaseAnalyzeResponse = {
     analysisId: "run-1",
     caseId: "CASE-7",
@@ -32,15 +44,15 @@ const COMPLETED: DiseaseAnalyzeResponse = {
     imageQuality: QUALITY,
     method: "densenet121_image_numbers_fusion_v2",
     diseases: [
-        { code: "FECD", label: "Fuchs endothelial corneal dystrophy (FECD)", probability: 0.82, threshold: 0.23, detected: true, gradcamPng: "iVBORw0KGgo=", gradcamFocus: { region: "lower right", coverage: 0.09 } },
-        { code: "Guttata", label: "Guttata", probability: 0.12, threshold: 0.44, detected: false, gradcamPng: null, gradcamFocus: null },
-        { code: "Folds", label: "Descemet folds", probability: 0.3, threshold: 0.49, detected: false, gradcamPng: null, gradcamFocus: null },
-        { code: "PolyPleo", label: "Polymegathism / pleomorphism", probability: 0.2, threshold: 0.44, detected: false, gradcamPng: null, gradcamFocus: null },
-        { code: "LowCD", label: "Low cell density", probability: 0.1, threshold: 0.47, detected: false, gradcamPng: null, gradcamFocus: null },
+        { code: "FECD", label: "Fuchs endothelial corneal dystrophy (FECD)", probability: 0.82, threshold: 0.23, detected: true, gradcamPng: "iVBORw0KGgo=", gradcamFocus: { region: "lower right", coverage: 0.09 }, shap: FECD_SHAP },
+        { code: "Guttata", label: "Guttata", probability: 0.12, threshold: 0.44, detected: false, gradcamPng: null, gradcamFocus: null, shap: FECD_SHAP },
+        { code: "Folds", label: "Descemet folds", probability: 0.3, threshold: 0.49, detected: false, gradcamPng: null, gradcamFocus: null, shap: FECD_SHAP },
+        { code: "PolyPleo", label: "Polymegathism / pleomorphism", probability: 0.2, threshold: 0.44, detected: false, gradcamPng: null, gradcamFocus: null, shap: FECD_SHAP },
+        { code: "LowCD", label: "Low cell density", probability: 0.1, threshold: 0.47, detected: false, gradcamPng: null, gradcamFocus: null, shap: FECD_SHAP },
     ],
     detected: ["FECD"],
     normal: false,
-    severity: [{ group: "FECDgroup", label: "FECD group", diseases: ["FECD"], grade: "Mod/Sev", probability: 0.7, threshold: 0.57, method: "model" }],
+    severity: [{ group: "FECDgroup", label: "FECD group", diseases: ["FECD"], grade: "Mod/Sev", probability: 0.7, threshold: 0.57, method: "model", shap: { ...FECD_SHAP, baseline: 0.5, prediction: 0.7 } }],
     overallSeverity: "Mod/Sev",
     severityProbabilities: { FECDgroup: 0.7, Folds: 0.2, Guttata: 0.3 },
     measurementsUsed: { ECD_CD_cells_per_mm2: 1667, ECD_Deficit: 833, SD: 180, CV: 30, HEX_percent: 72, Donor_Age: null },
@@ -128,6 +140,28 @@ describe("DiseasePage", () => {
         await user.click(gradcam.getByRole("button", { name: "Show heat map" }))
         expect(gradcam.getByRole("img", { name: /Grad-CAM heat map/ })).toBeInTheDocument()
         vi.unstubAllGlobals()
+    })
+
+    it("shows how each CellChek value moved the probability (SHAP)", async () => {
+        vi.mocked(analyzeDisease).mockResolvedValue(COMPLETED)
+        renderApp("/disease", makeAuth({ user: makeUser("DOCTOR") }))
+
+        const user = await fillAndAnalyse({})
+
+        const shap = within(await screen.findByRole("region", { name: /How the CellChek values affected the result/ }))
+        expect(shap.getByRole("button", { name: /Fuchs/ })).toHaveAttribute("aria-pressed", "true")
+        expect(shap.getByText(/this image with typical values/)).toHaveTextContent("13%")
+        expect(shap.getByText(/this image with typical values/)).toHaveTextContent("82%")
+        const ecdRow = shap.getByRole("row", { name: /ECD/ })
+        expect(ecdRow).toHaveTextContent("1,667 cells/mm²")
+        expect(ecdRow).toHaveTextContent("+69")
+        expect(shap.getByRole("row", { name: /Coefficient of variation/ })).toHaveTextContent("+<1")
+        expect(shap.getByRole("row", { name: /Hexagonality/ })).toHaveTextContent("−1")
+        expect(shap.getByRole("row", { name: /Donor age/ })).toHaveTextContent("not recorded (median used)")
+
+        await user.click(shap.getByRole("button", { name: "Severity: FECD group" }))
+        expect(shap.getByText(/this image with typical values/)).toHaveTextContent("50%")
+        expect(shap.getByRole("button", { name: "Guttata" })).toBeInTheDocument()
     })
 
     it("shows failed input checks and can run anyway with force", async () => {

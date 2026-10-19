@@ -61,6 +61,9 @@ class MlServiceDiseaseContractTest {
             assertEquals(finding.detected(), finding.probability() >= finding.threshold());
             assertEquals(finding.detected(), finding.gradcamPng() != null);
             assertEquals(finding.detected(), finding.gradcamFocus() != null);
+            double sum = finding.shap().values().stream().mapToDouble(v -> v.contribution()).sum();
+            assertEquals(finding.shap().prediction(), finding.shap().baseline() + sum, 1e-6);
+            assertEquals(finding.probability(), finding.shap().prediction(), 1e-6);
         }
         assertThat(response.overallSeverity()).isIn("None", "Mild", "Mod/Sev");
         assertThat(response.severityProbabilities()).containsKeys("FECDgroup", "Folds", "Guttata");

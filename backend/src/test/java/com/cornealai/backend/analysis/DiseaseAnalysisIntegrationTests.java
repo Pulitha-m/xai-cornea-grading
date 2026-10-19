@@ -151,8 +151,8 @@ class DiseaseAnalysisIntegrationTests extends IntegrationTestSupport {
     private static DiseaseAnalyzeResponse completed() {
         List<DiseaseFinding> findings = List.of(
                 new DiseaseFinding("FECD", "FECD", 0.8, 0.23, true, "iVBORw0KGgo=",
-                        new GradcamFocus("lower right", 0.12)),
-                new DiseaseFinding("Guttata", "Guttata", 0.1, 0.44, false, null, null));
+                        new GradcamFocus("lower right", 0.12), null),
+                new DiseaseFinding("Guttata", "Guttata", 0.1, 0.44, false, null, null, null));
         return new DiseaseAnalyzeResponse(null, "CASE-1", "completed", "Research tool, not a medical diagnosis.",
                 null, new InputCheck(true, false, List.of(), List.of()), null, "densenet121_image_numbers_fusion_v2",
                 findings, List.of("FECD"), false, List.of(), "Mild", Map.of("FECDgroup", 0.3), Map.of(), List.of(), true);

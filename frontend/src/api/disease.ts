@@ -51,6 +51,26 @@ export interface DiseaseFinding {
     gradcamPng: string | null
     /** Where the map is hottest and the share of the image it highlights, for detected diseases. */
     gradcamFocus: GradcamFocus | null
+    /** Effect of each CellChek value on this disease's probability. */
+    shap: ShapExplanation | null
+}
+
+export interface ShapValue {
+    /** Measurement name; ECD includes its derived ECD_Deficit. */
+    input: string
+    value: number | null
+    /** Not recorded: the training median was used, so the contribution is 0. */
+    imputed: boolean
+    /** Exact Shapley value in probability units (e.g. 0.12 = +12 percentage points). */
+    contribution: number
+}
+
+/** Effect of the CellChek values with the image fixed: baseline + Σ contributions = prediction. */
+export interface ShapExplanation {
+    /** Probability with all five values at their training median. */
+    baseline: number
+    prediction: number
+    values: ShapValue[]
 }
 
 export interface GradcamFocus {
@@ -69,6 +89,8 @@ export interface SeverityFinding {
     probability: number | null
     threshold: number | null
     method: string
+    /** Effect of each CellChek value on P(Mod/Sev), for model-graded groups. */
+    shap: ShapExplanation | null
 }
 
 export interface DiseaseAnalyzeResponse {

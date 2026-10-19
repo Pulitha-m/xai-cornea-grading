@@ -183,7 +183,7 @@
     },
     "disease": {
       "file": "disease_fusion_densenet121.onnx",
-      "sha256": "ffed42a891e74f6cae328012c1d24b8be448b0d4c03efdfc477cba89360fa102",
+      "sha256": "3e18a145ec01ecd511483cade706edb840677763219105d18943249110b23a45",
       "source_weights": "final_densenet121/Image_plus_numbers.pt",
       "source_sha256": "8aed21b39f25fbf4f03bed50c55ba6efbfc2839f9db14584f620f889d8dc653f",
       "inputs": {
@@ -201,14 +201,15 @@
       "outputs": [
         "logits",
         "cams",
-        "embedding"
+        "embedding",
+        "pooled"
       ],
       "max_abs_difference_vs_torch": 7.510185241699219e-06,
       "gradcam_max_abs_difference_vs_autograd": 6.556510925292969e-07
     },
     "severity": {
       "file": "severity_multitask_densenet121.onnx",
-      "sha256": "8b21e05c819c1e07096cc5f7eb3070417b0c89a0b7cc317e929510bab85fde81",
+      "sha256": "b25d1d7ccdb6aaea17ebfcb5ef732ab4bdf3866b0195ba87fba96cb4822965df",
       "source_weights": "severity_densenet121/final_multitask.pt",
       "source_sha256": "2613eb3c5c64bcca06e848044ea3ddb6907a768087f91b19a08d2fc0751b93b8",
       "inputs": {
@@ -225,9 +226,16 @@
       },
       "outputs": [
         "disease_logits",
-        "severity_logits"
+        "severity_logits",
+        "pooled"
       ],
       "max_abs_difference_vs_torch": 1.9073486328125e-06
+    },
+    "heads": {
+      "file": "heads.npz",
+      "sha256": "3dd863338f4861c328b709aa635ebd88f3db1c9066e7fc5fc21a68a98e3eaaaf",
+      "description": "tab MLP and heads of both models, for exact SHAP on the numbers (image fixed)",
+      "max_abs_difference_vs_torch": 2.5033950805664062e-06
     }
   }
 }

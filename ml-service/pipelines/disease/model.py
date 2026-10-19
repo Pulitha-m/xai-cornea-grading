@@ -26,6 +26,7 @@ class Models:
     disease: object       # onnxruntime.InferenceSession
     severity: object
     ood_reference: np.ndarray  # (n_train, 1024) L2-normalised training embeddings
+    heads: dict                # layer weights after the backbones (pipelines/disease/explain.py)
 
 
 @dataclass
@@ -34,6 +35,8 @@ class Prediction:
     severity_probabilities: np.ndarray  # (n_heads,)
     cams: np.ndarray                    # (5, h, w), unflipped image, before resizing
     embedding: np.ndarray               # (1024,), unflipped image, L2-normalised
+    pooled_disease: np.ndarray          # (2, 1024) disease backbone features, image and flip
+    pooled_severity: np.ndarray         # (2, 1024) severity backbone features, image and flip
 
 
 @lru_cache
@@ -43,6 +46,7 @@ def load_models() -> Models:
     disease_path = checked_file(config["models"]["disease"]["file"], config["models"]["disease"]["sha256"])
     severity_path = checked_file(config["models"]["severity"]["file"], config["models"]["severity"]["sha256"])
     ood_path = checked_file(config["ood"]["file"], config["ood"]["sha256"])
+    heads_path = checked_file(config["models"]["heads"]["file"], config["models"]["heads"]["sha256"])
 
     import onnxruntime as ort
 
@@ -51,10 +55,13 @@ def load_models() -> Models:
     providers = ["CPUExecutionProvider"]
     with np.load(ood_path) as ood:
         reference = ood["ref"].astype(np.float32)
+    with np.load(heads_path) as h:
+        heads = {k: h[k].astype(np.float64) for k in h.files}
     return Models(
         disease=ort.InferenceSession(str(disease_path), options, providers=providers),
         severity=ort.InferenceSession(str(severity_path), options, providers=providers),
         ood_reference=reference,
+        heads=heads,
     )
 
 
@@ -109,13 +116,15 @@ def predict(prepared: np.ndarray, tab: np.ndarray) -> Prediction:
     batch = np.concatenate([x, x[:, :, :, ::-1]], axis=0).copy()   # image and horizontal flip
     tabs = np.repeat(tab, 2, axis=0)
 
-    logits, cams, embedding = models.disease.run(None, {"image": batch, "tab": tabs})
-    _, severity_logits = models.severity.run(None, {"image": batch, "tab": tabs})
+    logits, cams, embedding, pooled_disease = models.disease.run(None, {"image": batch, "tab": tabs})
+    _, severity_logits, pooled_severity = models.severity.run(None, {"image": batch, "tab": tabs})
     return Prediction(
         disease_probabilities=sigmoid(logits).mean(axis=0),
         severity_probabilities=sigmoid(severity_logits).mean(axis=0),
         cams=cams[0],
         embedding=embedding[0],
+        pooled_disease=pooled_disease,
+        pooled_severity=pooled_severity,
     )
 
 
