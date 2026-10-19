@@ -12,10 +12,6 @@ Holm-corrected.
 
 Usage (from ml/cellular/; on Colab after the setup cell):
     python -m segmentation.compare --classical                  # score the classical baseline (once)
-    python -m segmentation.compare --rescore                    # re-score all runs from saved masks
-    python -m segmentation.compare --h-sensitivity 0.3 0.4 0.5 0.6 0.7   # sensitivity analysis only
-    python -m segmentation.compare --h-tuned-cv 0.1 0.2 0.3 0.4 0.5      # h chosen on the other folds
-    python -m segmentation.compare --pair stardist_finetune_raw stardist_finetune_flat  # ablation
     python -m segmentation.compare                              # table + statistics
     python -m segmentation.compare --figure round1_019 round1_002
 """
@@ -34,8 +30,7 @@ from config import load_config
 from data_prep.check_annotations import IGNORE, INTERIOR, WALL
 from segmentation.classical import ClassicalParams, segment
 from segmentation.data import load_samples, round_dir
-from segmentation.metrics import print_summary, score_crop, score_run, summarise
-from segmentation.postprocess import walls_to_mask
+from segmentation.metrics import print_summary, score_run, summarise
 
 METRICS = ("cell_f1", "boundary_f1", "dice_interior", "iou_interior")
 
@@ -56,128 +51,6 @@ def classical_run(cfg: dict, seg_out: Path) -> None:
     print_summary("classical", scores)
 
 
-def rescore(cfg: dict, seg_out: Path) -> None:
-    """Re-score every run from its saved masks (after a metric is added); no model is re-run."""
-    samples = load_samples(cfg, "raw")
-    for mask_dir in sorted(seg_out.glob("*/masks")):
-        preds = {f.stem: cv2.imread(str(f), cv2.IMREAD_GRAYSCALE) for f in mask_dir.glob("*.png")}
-        scores = score_run(samples, preds, mask_dir.parent)
-        print(f"Re-scored {mask_dir.parent.name}: {len(scores)} crops")
-
-
-def h_sensitivity(cfg: dict, seg_out: Path, hs: list[float]) -> None:
-    """
-    Sensitivity analysis (NOT model selection): re-score every wall-map run from
-    its saved out-of-fold wall probabilities with other watershed thresholds h.
-    Official results (fixed h = seg_models.watershed_h) are not changed; output
-    goes to <seg_out>/sensitivity/h_sensitivity.csv.
-    """
-    samples = load_samples(cfg, "raw")
-    rows = []
-    for oof_dir in sorted(seg_out.glob("*/oof")):
-        run = oof_dir.parent.name
-        for h in hs:
-            per = [{"fold": s.fold, **score_crop(walls_to_mask(np.load(oof_dir / f"{s.crop_id}.npy"), h), s.mask)}
-                   for s in samples if (oof_dir / f"{s.crop_id}.npy").exists()]
-            df = pd.DataFrame(per)
-            per_fold = df.groupby("fold")[["cell_f1", "boundary_f1"]].mean()
-            rows.append({"run": run, "h": h, "n_crops": len(df),
-                         "cell_f1_mean": per_fold["cell_f1"].mean(), "cell_f1_sd": per_fold["cell_f1"].std(ddof=1),
-                         "boundary_f1_mean": per_fold["boundary_f1"].mean(),
-                         "area_ratio_tess_median": df["area_ratio_tess"].median()})
-            print(f"  {run:16s} h={h:.2f}  cell F1 {rows[-1]['cell_f1_mean']:.3f}", flush=True)
-
-    table = pd.DataFrame(rows)
-    (seg_out / "sensitivity").mkdir(exist_ok=True)
-    table.to_csv(seg_out / "sensitivity" / "h_sensitivity.csv", index=False)
-    official = cfg["seg_models"]["watershed_h"]
-    for col, title in (("cell_f1_mean", "Cell F1"), ("area_ratio_tess_median", "Centre-line area ratio (1.0 = correct)")):
-        print(f"\n{title} by watershed threshold h (official h = {official}):")
-        print(table.pivot(index="run", columns="h", values=col).round(3).to_string())
-    best = table.loc[table.groupby("run")["cell_f1_mean"].idxmax(), ["run", "h", "cell_f1_mean"]]
-    print("\nBest h per run (for interpretation only):")
-    print(best.round(3).to_string(index=False))
-
-    instance = {p.parent.name: pd.read_csv(p) for p in seg_out.glob("*/scores.csv")
-                if (p.parent / "inst").exists()}
-    if instance:
-        print("\nInstance models (no watershed, unaffected by h) for reference:")
-        for name, df in sorted(instance.items()):
-            print(f"  {name:24s} cell F1 {summarise(df)['cell_f1_mean']:.3f}")
-
-
-def h_tuned_cv(cfg: dict, seg_out: Path, hs: list[float]) -> None:
-    """
-    Sensitivity analysis (NOT model selection): leakage-free tuned watershed h for
-    the wall-map runs. For each test fold, h is chosen on the out-of-fold
-    predictions of the OTHER folds only (best mean cell F1), then applied to the
-    test fold. Compared with the instance models (no h) by paired Wilcoxon tests,
-    Holm-corrected. Output: <seg_out>/sensitivity/h_tuned_cv.csv (one row per crop).
-    """
-    samples = load_samples(cfg, "raw")
-    tuned_rows = []
-    for oof_dir in sorted(seg_out.glob("*/oof")):
-        run = oof_dir.parent.name
-        scored = [{"crop_id": s.crop_id, "fold": s.fold, "h": h,
-                   **score_crop(walls_to_mask(np.load(oof_dir / f"{s.crop_id}.npy"), h), s.mask)}
-                  for s in samples if (oof_dir / f"{s.crop_id}.npy").exists() for h in hs]
-        df = pd.DataFrame(scored)
-        chosen = []
-        for k in sorted(df["fold"].unique()):
-            h_k = df[df["fold"] != k].groupby("h")["cell_f1"].mean().idxmax()   # other folds only
-            pick = df[(df["fold"] == k) & (df["h"] == h_k)]
-            tuned_rows += [{"run": f"{run}_tunedh", **r} for r in pick.to_dict("records")]
-            chosen.append(float(h_k))
-        print(f"  {run}: h chosen per fold = {chosen}", flush=True)
-
-    tuned = pd.DataFrame(tuned_rows)
-    (seg_out / "sensitivity").mkdir(exist_ok=True)
-    tuned.to_csv(seg_out / "sensitivity" / "h_tuned_cv.csv", index=False)
-
-    runs = {name: g for name, g in tuned.groupby("run")}
-    runs.update({p.parent.name: pd.read_csv(p) for p in seg_out.glob("*/scores.csv") if (p.parent / "inst").exists()})
-    table = pd.DataFrame({n: {**summarise(df, ("cell_f1", "boundary_f1")),
-                              "area_ratio_tess_median": df["area_ratio_tess"].median()}
-                          for n, df in runs.items()}).T.sort_values("cell_f1_mean", ascending=False)
-    print("\nWall-map runs with cross-validated h vs instance models (mean +- SD over folds):")
-    print(table[["n_crops", "cell_f1_mean", "cell_f1_sd", "boundary_f1_mean", "area_ratio_tess_median"]]
-          .astype(float).round(3).to_string())
-
-    paired = pd.DataFrame({n: df.set_index("crop_id")["cell_f1"] for n, df in runs.items()}).dropna()
-    best = paired.mean().idxmax()
-    raw = {}
-    for name in paired.columns.drop(best):
-        try:
-            raw[name] = wilcoxon(paired[best], paired[name]).pvalue
-        except ValueError:
-            raw[name] = 1.0
-    print(f"\nPaired cell F1 on {len(paired)} crops, {best} vs each (Wilcoxon, Holm):")
-    for name, p in sorted(holm(raw).items(), key=lambda kv: kv[1]):
-        print(f"  {best} vs {name:28s} mean diff {(paired[best] - paired[name]).mean():+.3f}   Holm p = {p:.2g}")
-
-
-def pair(seg_out: Path, run_a: str, run_b: str, alpha: float) -> None:
-    """Paired comparison of two runs on the same crops (used for the preprocessing ablation)."""
-    a, b = (pd.read_csv(seg_out / r / "scores.csv").set_index("crop_id") for r in (run_a, run_b))
-    common = a.index.intersection(b.index)
-    print(f"{run_a} vs {run_b} on {len(common)} paired crops (mean +- SD over folds):")
-    for name, df in ((run_a, a), (run_b, b)):
-        d = df.loc[common]
-        s = summarise(d.reset_index(), METRICS)
-        challenging = d.loc[d["difficulty"] == "challenging", "cell_f1"].mean()
-        print(f"  {name:24s} cell F1 {s['cell_f1_mean']:.3f} +- {s['cell_f1_sd']:.3f}   "
-              f"boundary F1 {s['boundary_f1_mean']:.3f}   challenging {challenging:.3f}   "
-              f"area ratio (centre line) {d['area_ratio_tess'].median():.3f}")
-    diff = (a.loc[common, "cell_f1"] - b.loc[common, "cell_f1"]).dropna()
-    p = wilcoxon(diff).pvalue if (diff != 0).any() else 1.0
-    print(f"\nCell F1 difference {run_a} - {run_b}: mean {diff.mean():+.3f}, "
-          f"{run_a} better on {(diff > 0).sum()} / {len(diff)} crops, Wilcoxon p = {p:.3g}")
-    if p < alpha:
-        print(f"-> significant at alpha = {alpha}: {run_a if diff.mean() > 0 else run_b} is better")
-    else:
-        print(f"-> not significant at alpha = {alpha}: no evidence of a difference")
-
-
 def holm(pvals: dict[str, float]) -> dict[str, float]:
     """Holm-Bonferroni adjusted p-values."""
     order = sorted(pvals, key=pvals.get)
@@ -196,13 +69,11 @@ def comparison(seg_out: Path, n_crops: int) -> None:
 
     table = pd.DataFrame({name: summarise(df, METRICS) for name, df in runs.items()}).T
     table["area_ratio_median"] = [runs[n]["area_ratio"].median() for n in table.index]
-    table["area_ratio_tess_median"] = [runs[n]["area_ratio_tess"].median() if "area_ratio_tess" in runs[n]
-                                       else float("nan") for n in table.index]
     table["cell_f1_challenging"] = [runs[n].loc[runs[n]["difficulty"] == "challenging", "cell_f1"].mean()
                                     for n in table.index]
     table = table.sort_values("cell_f1_mean", ascending=False)
     cols = ["n_crops"] + [f"{m}_{s}" for m in METRICS for s in ("mean", "sd")] + \
-           ["cell_f1_challenging", "area_ratio_median", "area_ratio_tess_median"]
+           ["cell_f1_challenging", "area_ratio_median"]
     table[cols].to_csv(seg_out / "comparison.csv")
     pd.set_option("display.width", 220)
     print("Mean +- SD over folds (sorted by cell F1):")
@@ -268,12 +139,6 @@ def main() -> None:
     ap = argparse.ArgumentParser(description="Segmentation model comparison.")
     ap.add_argument("--classical", action="store_true", help="score the classical baseline on the folds")
     ap.add_argument("--figure", nargs="+", metavar="CROP_ID", help="overlay figure for these crops")
-    ap.add_argument("--rescore", action="store_true", help="re-score all runs from their saved masks")
-    ap.add_argument("--h-sensitivity", type=float, nargs="+", metavar="H",
-                    help="sensitivity analysis: re-score wall-map runs with these watershed thresholds")
-    ap.add_argument("--h-tuned-cv", type=float, nargs="+", metavar="H",
-                    help="sensitivity analysis: h chosen per fold on the other folds, vs instance models")
-    ap.add_argument("--pair", nargs=2, metavar=("RUN_A", "RUN_B"), help="paired comparison of two runs")
     args = ap.parse_args()
 
     cfg = load_config()
@@ -281,14 +146,6 @@ def main() -> None:
     seg_out.mkdir(parents=True, exist_ok=True)
     if args.classical:
         classical_run(cfg, seg_out)
-    elif args.rescore:
-        rescore(cfg, seg_out)
-    elif args.h_sensitivity:
-        h_sensitivity(cfg, seg_out, args.h_sensitivity)
-    elif args.h_tuned_cv:
-        h_tuned_cv(cfg, seg_out, args.h_tuned_cv)
-    elif args.pair:
-        pair(seg_out, *args.pair, cfg["seg_models"]["ablation"]["alpha"])
     elif args.figure:
         figure(cfg, seg_out, args.figure)
     else:
