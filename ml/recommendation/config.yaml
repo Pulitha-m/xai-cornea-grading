@@ -6,6 +6,7 @@ paths:
   raw_workbook: data/raw/dataset_final_labeled.xlsx
   matching_dataset: data/processed/matching_dataset.xlsx
   followup_cohort: data/simulated/followup_cohort.xlsx   # Part B cohort (simulated until NEBSL follow-up arrives)
+  followup_dataset: data/processed/followup_landmark.xlsx  # P2 output: landmark table + split
   outputs: outputs
   models: models
 
@@ -26,3 +27,10 @@ matching:
     serology: 0.20               # confirmed clear = 1, not confirmed = 0.5 (positive excluded)
     freshness: 0.10              # fewer days in storage is better
     surgery_compatibility: 0.05  # endothelial surgery needs measured endothelium
+
+followup:
+  landmark_month: 12          # predictions are made at the 12-month visit
+  input_months: [3, 6, 12]    # first-year visits used as inputs
+  horizons: [24, 36, 60]      # ECD predicted at these months
+  split: [0.70, 0.15, 0.15]   # train / validation / test, by graft
+  seed: 42

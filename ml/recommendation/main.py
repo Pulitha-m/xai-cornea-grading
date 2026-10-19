@@ -13,6 +13,7 @@ From ml/:
     uv run python -m recommendation.main ahp        # weights from the filled AHP sheet (--apply to save)
     uv run python -m recommendation.main simulate   # simulated follow-up cohort (simulation study)
     uv run python -m recommendation.main followup-eda   # P1: describe the follow-up cohort
+    uv run python -m recommendation.main followup-data  # P2: landmark dataset, split, preprocessing
 """
 import argparse
 
@@ -33,6 +34,7 @@ TASKS = {
     "ahp": None,
     "simulate": None,
     "followup-eda": pipeline.run_followup_eda,
+    "followup-data": pipeline.run_followup_dataset,
     "trajectory": pipeline.run_trajectory,
     "risk": pipeline.run_risk,
     "followup": pipeline.run_followup,
@@ -144,6 +146,8 @@ def main() -> None:
         for line in log:
             print(" OK", line)
         print(f"\nReport: {path}")
+    elif a.task == "followup-data":
+        _print_followup_data(pipeline.run_followup_dataset(cfg))
     elif a.task == "followup-eda":
         _print_followup_eda(pipeline.run_followup_eda(cfg), cfg)
     elif a.task == "explain":
@@ -205,6 +209,23 @@ def _print_explain(res: dict, cfg: dict) -> None:
                   f"{c['Cand_Days_In_Storage']} d in storage: {c['Why']}{tag}")
     out = f"{cfg['paths']['outputs']}/explain"
     print(f"\nSaved: {out}/shap_summary.md, {out}/shap_global_reasons.png, {out}/explanations.xlsx")
+
+
+def _print_followup_data(res: dict) -> None:
+    s = res["summary"]
+    print(f"\nData source: {res['source']}")
+    print(f"Design: predict at month {s['landmark_month']} from visits {s['input_months']}; "
+          f"ECD targets at {s['horizons']} months; {s['n_features']} model inputs")
+    print("\n1. Split by graft:")
+    print(pd.DataFrame(s["splits"]).T.to_string())
+    if s["missing_inputs"]:
+        print("\n2. Missing inputs (imputed with the training median, flagged): " +
+              ", ".join(f"{k} {v}" for k, v in s["missing_inputs"].items()))
+    print("\n3. Leakage checks:")
+    for c in res["checks"]:
+        print(f"   {'ok  ' if c['ok'] else 'FAIL'} {c['check']:<54} {c['detail']}")
+    print(f"\nAll checks pass: {res['all_checks_pass']}")
+    print(f"Saved: {res['dataset']}\nPreprocessor: {res['preprocessor']}")
 
 
 def _print_followup_eda(res: dict, cfg: dict) -> None:

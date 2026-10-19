@@ -9,6 +9,7 @@ Implemented:
 
 Part B (post-transplant follow-up; simulated cohort until real follow-up data arrives):
     run_followup_eda   P1: data checks, ECD trends, Kaplan-Meier survival, visits, rejection
+    run_followup_dataset  P2: 12-month landmark dataset, split by graft, train-only preprocessing
     run_trajectory, run_risk, run_followup   planned (P3-P7)
 """
 import json
@@ -384,6 +385,19 @@ def run_followup_eda(cfg: dict) -> dict:
         raise FileNotFoundError(f"{cohort} not found. Create it first: "
                                 "uv run python -m recommendation.main simulate")
     return run(cohort, Path(cfg["paths"]["outputs"]) / "followup_eda")
+
+
+def run_followup_dataset(cfg: dict) -> dict:
+    """P2: 12-month landmark dataset, graft-level split, train-only preprocessing, leakage checks."""
+    from recommendation.data_prep.followup_dataset import build
+
+    paths, f = cfg["paths"], cfg["followup"]
+    cohort = Path(paths["followup_cohort"])
+    if not cohort.exists():
+        raise FileNotFoundError(f"{cohort} not found. Create it first: "
+                                "uv run python -m recommendation.main simulate")
+    return build(cohort, paths["followup_dataset"], Path(paths["models"]) / "followup_preprocessor.json",
+                 fractions=tuple(f["split"]), seed=f["seed"])
 
 
 def run_trajectory(cfg: dict):
