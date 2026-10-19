@@ -5,6 +5,7 @@
 paths:
   raw_workbook: data/raw/dataset_final_labeled.xlsx
   matching_dataset: data/processed/matching_dataset.xlsx
+  followup_cohort: data/simulated/followup_cohort.xlsx   # Part B cohort (simulated until NEBSL follow-up arrives)
   outputs: outputs
   models: models
 

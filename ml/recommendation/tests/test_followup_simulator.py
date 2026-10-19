@@ -1,11 +1,11 @@
-"""Tests for the SYNTHETIC follow-up simulator."""
-from recommendation.data_prep.synthetic_followup import simulate, validate
+"""Tests for the follow-up simulator."""
+from recommendation.data_prep.followup_simulator import simulate, validate
 
 
-def test_every_row_is_marked_synthetic():
+def test_every_row_records_its_data_source():
     g, v = simulate(100, seed=1)
-    assert g["is_synthetic"].all() and v["is_synthetic"].all()
-    assert g["graft_id"].str.startswith("SIM-").all()
+    assert (g["data_source"] == "simulated").all() and (v["data_source"] == "simulated").all()
+    assert g["graft_id"].str.fullmatch(r"G\d{4}").all()
 
 
 def test_same_seed_gives_same_data():

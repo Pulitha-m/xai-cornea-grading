@@ -25,7 +25,7 @@ recommendation/
 ├── experiments/         Experiment configs and notes
 ├── tests/               Unit tests (tiny made-up fixtures, no real data)
 │
-├── data/                (git-ignored) raw/ and processed/ NEBSL data; synthetic/ simulated follow-up cohort
+├── data/                (git-ignored) raw/ and processed/ NEBSL data; simulated/ follow-up cohort
 ├── outputs/             (git-ignored) metrics, figures, reports
 └── models/              (git-ignored) trained model files
 ```

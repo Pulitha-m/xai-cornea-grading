@@ -11,7 +11,8 @@ From ml/:
     uv run python -m recommendation.main export     # trained ranker -> ml-service JSON
     uv run python -m recommendation.main pack       # workbook for the NEBSL clinician meeting
     uv run python -m recommendation.main ahp        # weights from the filled AHP sheet (--apply to save)
-    uv run python -m recommendation.main simulate   # SYNTHETIC follow-up dataset (simulation study)
+    uv run python -m recommendation.main simulate   # simulated follow-up cohort (simulation study)
+    uv run python -m recommendation.main followup-eda   # P1: describe the follow-up cohort
 """
 import argparse
 
@@ -31,6 +32,7 @@ TASKS = {
     "pack": None,
     "ahp": None,
     "simulate": None,
+    "followup-eda": pipeline.run_followup_eda,
     "trajectory": pipeline.run_trajectory,
     "risk": pipeline.run_risk,
     "followup": pipeline.run_followup,
@@ -45,7 +47,7 @@ def main() -> None:
     ap.add_argument("--out", default=None, help="export: where to write the model JSON")
     ap.add_argument("--file", default=None, help="ahp: filled meeting-pack workbook")
     ap.add_argument("--apply", action="store_true", help="ahp: write the weights into config.yaml")
-    ap.add_argument("--n", type=int, default=500, help="simulate: number of synthetic grafts")
+    ap.add_argument("--n", type=int, default=500, help="simulate: number of simulated grafts")
     ap.add_argument("--seed", type=int, default=42, help="simulate: random seed")
     a = ap.parse_args()
 
@@ -63,14 +65,13 @@ def main() -> None:
     elif a.task == "simulate":
         from pathlib import Path
 
-        from recommendation.data_prep.synthetic_followup import plot, write
+        from recommendation.data_prep.followup_simulator import plot, write
 
-        root = Path(cfg["paths"]["raw_workbook"]).parent.parent / "synthetic"
-        root.mkdir(parents=True, exist_ok=True)
-        out = root / "followup_SYNTHETIC.xlsx"
+        out = Path(cfg["paths"]["followup_cohort"])
+        out.parent.mkdir(parents=True, exist_ok=True)
         res = write(out, a.n, a.seed)
-        fig = plot(out, Path(cfg["paths"]["outputs"]) / "synthetic")
-        print("\n*** SYNTHETIC DATA: simulated follow-up, not patient data ***")
+        fig = plot(out, Path(cfg["paths"]["outputs"]) / "simulation")
+        print("\nData source: simulated cohort (method development)")
         print(f"Grafts {res['grafts']}, visits {res['visits']}, failed {res['failed']}, "
               f"rejection episodes {res['rejections']}, low-ECD events {res['low_ecd']}")
         print("\nPattern checks against the literature:")
@@ -143,6 +144,8 @@ def main() -> None:
         for line in log:
             print(" OK", line)
         print(f"\nReport: {path}")
+    elif a.task == "followup-eda":
+        _print_followup_eda(pipeline.run_followup_eda(cfg), cfg)
     elif a.task == "explain":
         res = pipeline.run_explain(cfg)
         _print_explain(res, cfg)
@@ -202,6 +205,39 @@ def _print_explain(res: dict, cfg: dict) -> None:
                   f"{c['Cand_Days_In_Storage']} d in storage: {c['Why']}{tag}")
     out = f"{cfg['paths']['outputs']}/explain"
     print(f"\nSaved: {out}/shap_summary.md, {out}/shap_global_reasons.png, {out}/explanations.xlsx")
+
+
+def _print_followup_eda(res: dict, cfg: dict) -> None:
+    src, s = res["source"], res["summary"]
+    print(f"\nData source: {src}")
+    print("\n1. Data checks:")
+    for c in res["checks"]:
+        print(f"   {'ok  ' if c['ok'] else 'FAIL'} {c['check']:<44} {c['detail']}")
+    print(f"\n2. Cohort: {s['grafts']} grafts, {s['visits']} visits "
+          f"(median {s['visits_per_graft_median']:.0f} per graft), median follow-up {s['follow_up_months_median']:.1f} months")
+    print(f"   failures {s['graft_failures']}, censored {s['censored']}, low-ECD events {s['low_ecd_events']}, "
+          f"rejection episodes {s['rejection_episodes']}")
+    trend = pd.DataFrame(res["measures_over_time"])
+    print("\n3. Median ECD (cells/mm2), month 0 = donor:")
+    print(trend.pivot(index="months_after_surgery", columns="procedure", values="ecd_median").to_string(
+        float_format="{:.0f}".format))
+    for name, title in (("graft_failure", "graft failure"), ("low_ecd", "low ECD (<1000)")):
+        e = res["survival"][name]
+        print(f"\n4. Kaplan-Meier, {title}: " + ", ".join(f"{k} {v}" for k, v in e["overall"].items()))
+        for by, d in e["logrank"].items():
+            groups = ", ".join(f"{lv} {g['S(60)']}" for lv, g in e["by"][by].items())
+            print(f"   by {by:<17} S(60): {groups}   log-rank p {d['p']:.4f}")
+    att = pd.DataFrame(res["visit_attendance"])
+    print("\n5. Visit attendance among grafts still followed: " + ", ".join(
+        f"{m} mo {a:.0%}" for m, a in zip(att["month"], att["attendance"])))
+    rej = pd.DataFrame(res["rejection_effect"]).set_index("month")
+    if {"rejection", "no_rejection"} <= set(rej.columns):
+        print("\n6. Median cell loss, rejection vs none: " + ", ".join(
+            f"{m} mo {r:.0%} vs {n:.0%}" for m, r, n in zip(rej.index, rej["rejection"], rej["no_rejection"])
+            if m in (12, 36, 60)))
+    out = f"{cfg['paths']['outputs']}/followup_eda"
+    print(f"\nAll checks pass: {res['all_checks_pass']}")
+    print(f"Saved: {out}/followup_eda_summary.md, {out}/followup_eda.json, figures: {', '.join(res['figures'])}")
 
 
 def _print_ranker(res: dict, cfg: dict) -> None:

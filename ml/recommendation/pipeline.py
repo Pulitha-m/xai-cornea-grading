@@ -7,8 +7,9 @@ Implemented:
     run_analysis   ablation, learning curve, subgroup and error analysis of the ranker
     run_counterfactual  "what would make this cornea #1?" for examples and all missed requests
 
-Planned (need recipient follow-up data from NEBSL):
-    run_trajectory, run_risk, run_followup
+Part B (post-transplant follow-up; simulated cohort until real follow-up data arrives):
+    run_followup_eda   P1: data checks, ECD trends, Kaplan-Meier survival, visits, rejection
+    run_trajectory, run_risk, run_followup   planned (P3-P7)
 """
 import json
 from pathlib import Path
@@ -372,6 +373,17 @@ def run_counterfactual(cfg: dict, n_examples: int = 3) -> dict:
         md += ["", f"Median days fewer in storage needed: {summary['median_days_fewer']:.0f}"]
     (out / "counterfactuals.md").write_text("\n".join(md) + "\n", encoding="utf-8")
     return results
+
+
+def run_followup_eda(cfg: dict) -> dict:
+    """P1: describe the follow-up cohort (checks, ECD trends, survival, visits, rejection)."""
+    from recommendation.data_prep.followup_eda import run
+
+    cohort = Path(cfg["paths"]["followup_cohort"])
+    if not cohort.exists():
+        raise FileNotFoundError(f"{cohort} not found. Create it first: "
+                                "uv run python -m recommendation.main simulate")
+    return run(cohort, Path(cfg["paths"]["outputs"]) / "followup_eda")
 
 
 def run_trajectory(cfg: dict):
