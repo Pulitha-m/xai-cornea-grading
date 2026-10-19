@@ -132,9 +132,37 @@ Processing order: measurement types → `decode_image` → domain validator (sam
 - **Artifacts** (`models/disease_v2/`, committed): `corneal_config.json` (number scaling, thresholds, check limits, the models' SHA-256; exported by `ml/disease-new/scripts/export_corneal_config.py`), the two ONNX models (from the trained `.pt` files by `export_onnx_models.py`, which checks the ONNX outputs against torch and the in-graph Grad-CAM against autograd) and `ood_reference_v2.npz`. Loaded once at startup; files that do not match the config's SHA-256 give `503 MODEL_NOT_READY`.
 - **Parity:** `tests/test_disease_parity.py` runs the service pipeline on `ml/disease-new/data/test_images/` (git-ignored) and compares with the notebook's saved test predictions; the maximum difference must be < 0.01 (currently 0.0028). Skipped where the data is absent. Print the table with `uv run python -m tests.test_disease_parity`.
 
+## Cellular analysis (Component 3)
+
+`POST /cellular/analyze` (`app/routers/cellular.py`, `pipelines/cellular/`), on its own page (backend `POST /api/analysis/cellular`). It is **not** run by `/analyze`, whose `cellular` module stays `not_implemented`. It serves the validated pipeline of `ml/cellular/pipeline.py`. **Research tool for a specialist, not a clinical measurement.**
+
+Multipart form fields: `image`, `caseId`. Processing order: `decode_image` (same limits) → domain validator (same rejections as `/analyze`) → the pipeline. The pipeline gets the uploaded bytes decoded with OpenCV (greyscale), as in the research, so the served numbers match it.
+
+- **Steps:**
+  1. **ROI:** EfficientNet-B0 on 162 px tiles with a half-tile stride. P(analysable) is averaged per pixel; the ROI is P ≥ 0.5 inside the lit area, with small parts and holes removed.
+  2. **Cells:** StarDist on the flat-preprocessed image, normalised over the lit area.
+  3. **Complete cells:** cells touching the image border or the unanalysable area are excluded; side counts are taken only for fully surrounded cells.
+  4. **Biomarkers:** ECD, mean and SD of the cell area, CV, HEX, compactness and the distributions, at the calibrated scale of 0.796 µm/px.
+- **Explanations (they never change a number):**
+  - quality flags (`error` = not reliable);
+  - 95 % CIs of ECD, CV and HEX by bootstrap over 64 px blocks of cells (sampling only, not segmentation error);
+  - the share of the area variance from the 5 % most extreme cells;
+  - per-cell reliability: red = implausible size or shape; yellow = low StarDist confidence; green otherwise. In the research evaluation, AUC was 0.814 for wrong cells, but about 70 % of wrong cells stay green;
+  - three base64 PNG overlays: measured cells by side count, reliability, and cell area.
+- **Artifacts** (`models/cellular/`, committed): `roi_cnn.onnx` (the image resize, ImageNet normalisation and sigmoid are inside the graph), `stardist.onnx` (tf2onnx), and `cellular_config.json`. The config holds every setting copied from `ml/cellular/config.yaml`, the SHA-256 of both files, the source commit and versions, and the export parity. All are written by `ml/cellular/export_web.py`. Files that do not match the SHA-256 give `503 MODEL_NOT_READY`. Loaded once at startup.
+- **No PyTorch or TensorFlow:** both networks run in onnxruntime. StarDist's post-processing (candidate threshold, sparse NMS, polygons to labels) uses the `stardist` package's own functions, reproduced step by step in `pipelines/cellular/stardist_onnx.py`; TensorFlow is never imported.
+- **Code:** `steps.py`, `cells.py` and `explain.py` are copied unchanged from `ml/cellular` (commit 7c26b0d). Only one guard is added: an image with no complete cells gets a plain image instead of the area overlay.
+- **Parity:**
+  - On 13 validation images, the export compared this path with the validated pipeline (PyTorch on GPU in mixed precision, TensorFlow). StarDist cells were identical in count and 100 % matched. Floating-point differences flipped one ROI block in 2 images. Largest differences: cells 0.91 %, ECD 0.12 %, CV 0.14 %, HEX 0.45 %. For comparison, the ECD error against the instrument on the test set is 5.8 %.
+  - `tests/test_cellular_parity.py` runs the served pipeline on the 3 git-ignored reference images (`tests/data/cellular_reference/`, from the export). It allows ≤ 0.1 % difference from the exported web path, and cells ≤ 1 %, ECD and CV ≤ 0.2 %, HEX ≤ 0.5 % from the validated pipeline. Skipped where the data is absent. Print the table with `uv run python -m tests.test_cellular_parity`.
+- **Validation (research, frozen test set, 197 images, against the instrument's ~110-cell counts):** mean cell area (MAPE 5.7 %) and CV (8.3 %) met their targets; ECD (5.8 %, target 5 %) and HEX (11.6 %, target 10 %) did not. HEX is systematically lower, by 5.7 points. See `ml/cellular/docs/phase/phase_7_final_test.md`.
+- **Limitations:**
+  - Validated only on 1296 × 972 images from one eye bank's specular microscope. The scale (µm/px) is specific to it, and other sizes get the `not_validated_size` warning.
+  - About 9 s per image on a laptop CPU.
+
 ## Other modules
 
-Cellular analysis and recommendation return `not_implemented` with no values.
+Recommendation returns `not_implemented` with no values.
 
 ## Configuration
 
@@ -145,6 +173,7 @@ Cellular analysis and recommendation return `not_implemented` with no values.
 | `IMAGE_MAX_PIXELS` | 40000000 | Maximum total pixels |
 | `DOMAIN_VALIDATOR_DIR` | `models/domain_validator` | Validator artifacts |
 | `DISEASE_MODEL_DIR` | `models/disease_v2` | v2 disease model artifacts |
+| `CELLULAR_MODEL_DIR` | `models/cellular` | Cellular analysis artifacts (ROI CNN, StarDist, config) |
 | `DOMAIN_VALIDATOR_DEV_BYPASS` | unset | **Development only.** `true` skips domain validation; responses are marked `UNVALIDATED_DEV_MODE` and never valid |
 
 ## Docker and the ONNX backbones

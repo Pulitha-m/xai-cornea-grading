@@ -68,6 +68,13 @@ ml-service/models/domain_validator/*
 ml-service/models/disease_v2/*
 !ml-service/models/disease_v2/corneal_config.json
 !ml-service/models/disease_v2/*.onnx
+# Cellular analysis (Component 3): ONNX exports of the ROI CNN and the StarDist network and their runtime config
+# (settings copied from ml/cellular/config.yaml, SHA-256 of both files, parity with the validated pipeline).
+# Regenerate with ml/cellular/export_web.py. The parity reference images (tests/data/) stay ignored: patient data.
+!ml-service/models/cellular/
+ml-service/models/cellular/*
+!ml-service/models/cellular/cellular_config.json
+!ml-service/models/cellular/*.onnx
 !ml-service/models/disease_v2/ood_reference_v2.npz
 # Records of backbones verified on this machine (written by the export scripts).
 ml-service/models/**/*.verified.json

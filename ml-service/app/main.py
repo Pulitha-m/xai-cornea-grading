@@ -15,10 +15,12 @@ from app.schemas.analysis import (
     RecommendationResult,
     RejectedResponse,
 )
+from app.routers import cellular as cellular_router
 from app.routers import disease as disease_router
 from app.routers import grading as grading_router
 from app.routers.grading import parse_clinical_features
-from pipelines.cellular.service import run_cellular_analysis
+from pipelines.cellular.config import CellularModelNotReady
+from pipelines.cellular.service import run_cellular_analysis, warm_up as warm_up_cellular
 from pipelines.disease.config import DiseaseModelNotReady
 from pipelines.disease.service import run_disease_analysis, warm_up as warm_up_disease
 from pipelines.grading.explain import load_explainer as load_grading_explainer
@@ -37,6 +39,11 @@ async def lifespan(app: FastAPI):
         warm_up_disease()
     except DiseaseModelNotReady:
         logger.exception("Disease models not loaded")
+    # Load the cellular models once; if they are unavailable, /cellular/analyze answers MODEL_NOT_READY.
+    try:
+        warm_up_cellular()
+    except CellularModelNotReady:
+        logger.exception("Cellular models not loaded")
     # Import shap and build the grading explainer now, not on the first request (~4 s).
     try:
         load_grading_explainer()
@@ -51,6 +58,7 @@ app = FastAPI(
     version="0.2.0",
     lifespan=lifespan,
 )
+app.include_router(cellular_router.router)
 app.include_router(disease_router.router)
 app.include_router(grading_router.router)
 
