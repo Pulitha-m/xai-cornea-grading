@@ -45,13 +45,29 @@ image:
   cell_spacing_px: 28.2               # median cell centre-to-centre distance (audit, FFT)
 
 # -----------------------------------------------------------------------------
-# Physical scale (Phase 4). um_per_px stays null until calibrated.
+# Physical scale. um_per_px calibrated in Phase 4 (calibration/scale.py; docs/phase/phase_4_scale.md).
 # um_per_px_prelim comes from the audit (calibration split only) and may be used
 # for rough sanity checks before Phase 4 — never for reported results.
 # -----------------------------------------------------------------------------
 scale:
-  um_per_px: null
+  um_per_px: 0.7960                   # OFFICIAL (Phase 6, pipeline with ROI): median of 69 calibration images
+                                      # measured inside the ROI, 95% CI 0.7914-0.8062
+  um_per_px_no_roi: 0.7945            # Phase 4 (whole lit area, no ROI), 95% CI 0.7888-0.8046; used only to
+                                      # reproduce the Phase 4-5 results (biomarkers.validate without --roi)
   um_per_px_prelim: 0.752
+
+# Scale calibration (Phase 4). Rules fixed before any calibration result was seen.
+# Per calibration image: s_i = sqrt(Konan mean cell area [um^2] / our mean cell area [px^2]),
+# our area = Phase 3 extraction, all complete cells, centre-line area (the quantity Phase 5 reports).
+# um_per_px = MEDIAN of s_i (robust to region mismatch: Konan ~110 operator-chosen cells, we measure
+# the whole lit area); 95 % CI by bootstrap over images. Validation images only CHECK the scale.
+calibration:
+  split: calibration                  # 69 images carved out of train in Phase 0, used for nothing else
+  run: stardist_finetune_flat         # Phase 2 winner, lit-tissue normalisation
+  min_cells: 30                       # images with fewer complete cells are not used
+  n_bootstrap: 2000
+  seed: 23
+  check_split: val
 
 # -----------------------------------------------------------------------------
 # Classical baseline segmenter (Phase 1). Factors are multiples of
@@ -98,6 +114,46 @@ roi:
   n_images_val: 10
   n_repeat: 3                         # images shown again (rotated 180 deg) for intra-rater repeatability
   seed: 11                            # separate from split.seed and annotation.seed
+  round2:                             # Phase 6: more TRAIN tissues, labelled before any ROI model result.
+    n_images_train: 20                # new tissues (none from round 1); val reference maps stay round 1 only
+    tercile_share: {low: 0.5, mid: 0.3, high: 0.2}   # extra weight on lower quality -> more artefacts
+    n_repeat: 2                       # round-1 TRAIN images shown again (rot180): drift check vs round 1
+    seed: 12
+
+# -----------------------------------------------------------------------------
+# ROI selection model (Phase 6, Sub-component 3.1). Rules fixed before any ROI model result.
+# Target: tile is ANALYSABLE (good / usable) vs POOR (Phase 1: the distinction labelled consistently,
+# kappa 0.80). Train = round1 + round2 train tiles (40 tissues); the 10 round-1 val images are only
+# used for the final ROI IoU (scope target roi_iou). Three methods, same folds (grouped by image):
+#   lit     tile analysable if > lit_min_share of it is lit (the mask used so far; no learning)
+#   logreg  tile quality features + logistic regression
+#   cnn     EfficientNet-B0 (ImageNet) fine-tuned on the tile (channels raw / flat / lit)
+# Decision: primary = mean per-image tile IoU of the analysable area (CV, threshold fixed);
+# a more complex method (lit < logreg < cnn) replaces a simpler one only if it has the higher mean
+# AND a paired Wilcoxon test over the train images gives p < alpha; otherwise the simpler one stays.
+# ROI map: windows of one tile with half-tile stride, probabilities averaged per pixel,
+# ROI = (p >= threshold) AND lit; islands and holes smaller than min_island_tiles x tile removed.
+# All analysable regions form the ROI (largest connected region reported as a sensitivity check).
+# -----------------------------------------------------------------------------
+roi_model:
+  rounds: [round1, round2]
+  n_folds: 5
+  fold_seed: 17
+  threshold: 0.5
+  alpha: 0.05
+  lit_min_share: 0.5                  # same "more than half" rule as the labelling protocol
+  logreg_C: 1.0
+  cnn:
+    arch: efficientnet_b0
+    pretrained: true                  # torchvision ImageNet weights
+    input_px: 224                     # 162 px tile resized to the network's native size
+    epochs: 15                        # fixed; no early stopping on the held-out fold
+    batch_size: 32
+    lr: 3.0e-4
+    weight_decay: 1.0e-4
+    seed: 42
+  stride_px: 81                       # half a tile
+  min_island_tiles: 0.5               # ROI parts / holes smaller than half a tile are removed
 
 # -----------------------------------------------------------------------------
 # Segmentation model comparison (Phase 2). Every model uses the SAME folds
@@ -135,6 +191,223 @@ seg_models:
     batch_size: 1
     keep_checkpoints: false           # fine-tuned models are ~1.2 GB each -> Colab disk only, not Drive
     seed: 42
+  stardist:                           # StarDist 2D (TensorFlow); installed in the Colab notebook only
+    pretrained: 2D_versatile_fluo     # fine-tuned from this model (bright objects on darker background)
+    n_val_crops: 4                    # taken from each fold's TRAINING crops: best checkpoint + thresholds
+    epochs: 100
+    steps_per_epoch: 50
+    batch_size: 4
+    learning_rate: 1.0e-4             # fine-tuning rate (lower than training from scratch)
+    seed: 42
+  nnunet:                             # nnU-Net v2, 2D configuration; installed in the Colab notebook only
+    dataset_id: 501                   # "flat" inputs -> 501, "raw" inputs -> 502
+    trainer: nnUNetTrainer_100epochs  # reduced budget (nnU-Net default: 1000 epochs); final checkpoint
+                                      # is used, so the test fold never selects a checkpoint
+  full_image:                         # step 2.7: finalists on FULL validation images vs Konan
+    split: val
+    min_cells: 30                     # fewer complete cells in an image = failure for that run
+    n_bootstrap: 2000                 # paired bootstrap of the Spearman difference between finalists
+    seed: 7
+    # Decision (fixed before results): primary = Spearman(mean cell area, Konan mean area) on images
+    # every run measured; finalist with the higher rho wins if the 95% CI of the paired difference
+    # excludes 0, otherwise tie -> StarDist (simpler, ~60x smaller, faster).
+    # Result (2026-10-15): StarDist selected (rho 0.813 vs 0.733, diff CI [-0.136, -0.028]).
+  ablation:                           # step 2.8: preprocessing ablation on the winner (StarDist)
+    model: stardist
+    alpha: 0.05
+    # Rule (fixed before results): "raw" replaces the default "flat" only if it is significantly better
+    # (paired Wilcoxon on cell F1, p < alpha); tie or flat better -> keep "flat" (validated pipeline).
+
+# -----------------------------------------------------------------------------
+# Individual cell extraction (Phase 3, Sub-component 3.3). Decisions fixed before
+# any extraction result was seen. All sizes in pixels (um after Phase 4).
+# -----------------------------------------------------------------------------
+extraction:
+  run: stardist_finetune_flat         # segmentation used (Phase 2 winner)
+  grow_px: 3                          # cells grow up to the wall centre line (Phase 2 decision); larger gaps stay empty
+  edge_margin_px: 2                   # cells within this distance of the image border / unanalysable area are incomplete
+  ring_px: 2                          # width of the ring around a cell used to find its neighbours
+  min_contact_fraction: 0.04          # a neighbour is a SIDE if it covers >= 4 % of the ring (corner touches are not sides)
+  max_open_fraction: 0.10             # sides counted only if <= 10 % of the ring is not another cell (fully surrounded)
+  poly_epsilon_fraction: 0.04         # polygon-fit side count (secondary): approxPolyDP tolerance x perimeter
+  min_area_factor: 0.25               # FLAG (not remove) cells < 0.25 x the image's median cell area
+  max_area_factor: 3.0                # ... and > 3 x the median
+
+# -----------------------------------------------------------------------------
+# Biomarkers (Phase 5, Sub-component 3.4). Rules fixed before any biomarker result was seen.
+# Per image, from the Phase 3 per-cell table and the Phase 4 scale; ALL complete cells (flagged cells
+# kept: Phase 3 showed they change almost nothing). Error vs Konan = 100 x (ours - Konan) / Konan;
+# an image meets a target if |error| <= targets.<biomarker>_pct_error. CV and HEX are also reported
+# as absolute differences in percentage points.
+# -----------------------------------------------------------------------------
+biomarkers:
+  run: stardist_finetune_flat
+  split: val                          # test stays frozen until Phase 7
+  min_cells: 30
+  worst_n: 6                          # images with the largest |ECD error| get overlay figures
+
+# -----------------------------------------------------------------------------
+# Error analysis (diagnostic, after Phase 6; biomarkers/error_analysis.py). Konan measures ~110 cells in
+# an operator-chosen patch (~40,000 um2 = ~252 x 252 px at 0.796 um/px, Phase 5 s1.2b). Our measured
+# cells (ROI pipeline) are cut into all patches of that size to see whether patch choice explains the
+# disagreement. Patch rules are compared on the CALIBRATION images first; validation only confirms.
+# Nothing here changes the reported pipeline.
+# -----------------------------------------------------------------------------
+error_analysis:
+  patch_px: 252
+  stride_px: 63                       # quarter patch
+  min_patch_cells: 60                 # Konan's smallest count in validation is 67
+
+# -----------------------------------------------------------------------------
+# End-to-end pipeline (pipeline.py): one image -> ROI -> segmentation -> cells -> biomarkers.
+# Same models, rules and scale as the reported results (ROI pipeline, scale.um_per_px).
+# Quality flags are warnings for the reviewer, fixed before any pipeline result; they never change a number.
+# -----------------------------------------------------------------------------
+pipeline:
+  run: stardist_finetune_flat
+  min_cells: 30                       # fewer complete cells -> result NOT reliable (same limit as Phases 4-5)
+  min_cells_with_sides: 100           # fewer cells with a side count -> HEX less reliable (Konan counts ~110 cells)
+  min_roi_share_of_lit: 0.5           # ROI keeps less than half of the lit area -> mostly poor image
+  max_flagged_share: 0.05             # > 5 % implausibly small / large cells -> check the segmentation
+
+# -----------------------------------------------------------------------------
+# Explainability (XAI). Explanations never change a number. Rules fixed before any result.
+# Step 1 - ROI model (Phase 6 EfficientNet-B0): Grad-CAM++ of the "poor" score (-logit) = why a
+# region is left out of the ROI; Grad-CAM reported for comparison only. Evaluated on the
+# validation reference images (fully tile-labelled, never used for training); unit = image
+# (windows overlap and are not independent), one-sided Wilcoxon over images.
+#   faithfulness (primary): in windows the model calls poor, replacing the top `top_share` of the
+#     heatmap with neutral lit tissue lowers P(poor) MORE than replacing the same mask shifted to
+#     another place in the window (`n_random` circular shifts)
+#   plausibility (secondary): in windows partly labelled poor (each part >= min_mixed_share), the
+#     heatmap's share inside the poor-labelled part exceeds that part's area share
+# DEVIATION (2026-10-18, after the evaluation): the pre-registered method was Grad-CAM++. It passed
+# faithfulness only narrowly (7/10 images, p = 0.042; 0.053 = fail on the re-run with other random shifts) and
+# FAILED plausibility in the wrong direction
+# (heatmap share in the poor part 0.28 vs 0.50 area; pointing game 0.31 vs 0.49 chance) - it mostly
+# highlights the analysable tissue. Grad-CAM passed both (10/10 images, p = 0.001 each), so Grad-CAM
+# is used and Grad-CAM++ stays as the comparison; both are reported (docs: xai.md).
+# Figures: excluded UNLIT area is shown as "too dark" (lit mask, a rule - CAMs cannot localise the absence
+# of signal); the heatmap is shown on lit tissue only, from raw heatmaps scaled once over all images.
+# -----------------------------------------------------------------------------
+xai:
+  roi:
+    method: gradcam
+    compare: [gradcam++]
+    layer: features.8                   # last EfficientNet-B0 block (7 x 7 at 224 px input)
+    min_p_poor: 0.5                     # windows explained in the deletion test
+    min_lit_share: 0.05                 # windows with (almost) no lit tissue are skipped
+    top_share: 0.2
+    n_random: 5
+    min_mixed_share: 0.25
+    alpha: 0.05
+    seed: 7
+    n_examples: 8                       # example windows in the figure
+    example_p_poor: [0.5, 0.95]         # examples where P(poor) can visibly move (not saturated at 1)
+    example_min_lit_share: 0.5          # examples of 'lit but poor' (dark windows are explained by the lit mask)
+  # Step 2 - biomarkers (xai/reliability.py, xai/biomarker_explain.py). Rules fixed 2026-10-18, before any result.
+  # Per measured cell: confidence = StarDist object probability of the instance the cell comes from;
+  #   RED    implausible size (existing flags: < 0.25 / > 3 x median area) or implausible shape
+  #          (side count known and outside sides_range, or compactness < min_compactness; hexagon = 0.907)
+  #   YELLOW otherwise, if confidence is unknown or below the midpoint between the model's detection
+  #          threshold and 1
+  #   GREEN  otherwise.
+  # Evaluation on the 40 annotated crops with the out-of-fold Phase 2 fold models: a predicted complete
+  # cell is WRONG if it has no reference match (IoU <= error_iou) or its area is off by > error_area_pct.
+  #   primary   AUC of (1 - confidence) for wrong cells; pass if the 95 % CI (bootstrap over crops)
+  #             lies above 0.5
+  #   secondary error rate rises green < yellow < red; side-count errors reported the same way
+  # 95 % CI of ECD / CV / HEX: bootstrap over spatial blocks of block_px (neighbouring cells are
+  # correlated); per-cell bootstrap reported for comparison. Coverage of the reference (manual) value on
+  # the crops is reported (expected < 95 %: the CI covers sampling, not segmentation error).
+  biomarkers:
+    min_compactness: 0.70
+    sides_range: [4, 8]
+    error_iou: 0.5
+    error_area_pct: 20
+    block_px: 64                        # ~2 cells; 16 blocks per 256 px crop, ~300 per image
+    n_boot: 2000
+    seed: 11
+    alpha: 0.05
+    top_variance_share: 0.05            # evidence overlay: the 5 % most extreme cells, their share of the area variance
+    n_images: 6                         # validation images with explanation figures
+  # Step 3 - segmentation (xai/seg_gradcam.py, xai/seg_explain.py). Fixed 2026-10-18, before any result.
+  # Seg-Grad-CAM (Vinogradova et al. 2020) of ONE cell: explained score = sum of StarDist's object probability
+  # over the cell's instance; Grad-CAM weighting (as step 1) at StarDist's last layer before the output heads
+  # ('features', the conv after the U-Net, at the resolution of the probability map).
+  # Sample: n_green GREEN + n_flagged YELLOW / RED predicted complete cells from the 40 crops (out-of-fold
+  # fold models, the same cells and levels as step 2), drawn at random with seed.
+  # Window: the instance's bounding box + context_px on each side (inside the crop).
+  #   primary   deletion: the top_share hottest pixels of the window -> the window's mean; relative drop of the
+  #             score vs the same mask rolled to another place in the window (mean of n_random rolls);
+  #             one-sided Wilcoxon signed-rank, pass if p < alpha
+  #   secondary heat share on the cell + a ring_px ring vs that region's area share (one-sided Wilcoxon);
+  #             heat share on the wall band (ring_px either side of the outline) vs its area share;
+  #             heat on the cell for wrong vs correct and green vs flagged cells (descriptive)
+  # DEVIATION (2026-10-18, after the result): Grad-CAM FAILED the primary deletion test (median drop 0.012 vs
+  # 0.045 shifted, p = 0.89) - its channel-mean weights light up every cell centre in the window, not the
+  # explained cell. HiResCAM (gradient x activation per pixel) added as an EXPLORATORY comparison on the same
+  # cells and test; the Grad-CAM verdict stands and is not replaced.
+  segmentation:
+    method: gradcam                     # primary (pre-registered)
+    compare: [hirescam]                 # exploratory, added post hoc
+    layer: features
+    n_green: 30
+    n_flagged: 30
+    context_px: 24                      # ~1 cell diameter
+    ring_px: 3                          # walls are 2-3 px
+    top_share: 0.2
+    n_random: 5
+    alpha: 0.05
+    seed: 13
+    n_examples: 8                       # example cells in the figure (half green, half flagged)
+  # Step 4 - expert oversight (oversight.py). Fixed 2026-10-18, before any result.
+  # The expert excludes cells and removes / adds ROI area; numbers are recomputed from the saved segmentation
+  # (no model re-run), every review is logged (append-only), the pipeline result is never changed.
+  # Review queue: RED cells first, then YELLOW, least confident first; every cell numbered.
+  # Evaluation (CPU, from the step 2 crop results: 40 crops, out-of-fold): simulated reviewers
+  #   none     keeps every cell (= the pipeline)
+  #   red      excludes the RED cells
+  #   flagged  excludes RED + YELLOW cells                  (primary policy)
+  #   oracle   excludes exactly the wrong cells             (upper bound: a perfect reviewer)
+  # Primary: per biomarker (ECD % error, CV / HEX points), paired two-sided Wilcoxon of |error vs manual|,
+  #   flagged vs none, Holm over the 3 biomarkers, alpha -> helps / hurts / no difference.
+  # Workload: cells in the queue (median per crop, share of all cells).
+  oversight:
+    queue_levels: [red, yellow]
+    primary_policy: flagged
+    alpha: 0.05
+
+# -----------------------------------------------------------------------------
+# Phase 7 - final test on the frozen test set (final_test.py). Fixed 2026-10-18, BEFORE any test image is
+# processed (the git commit of this block dates the pre-registration).
+# Frozen: code (git commit, no uncommitted changes in ml/cellular), config.yaml, models (ROI CNN, StarDist
+#   final), scale 0.7960 um/px. --freeze records their hashes; --run refuses if anything differs. ONE run:
+#   no tuning, no re-run after seeing results (a disconnect only resumes the same run).
+# Data: all 197 included TEST images - never used for training, selection, calibration or thresholds.
+# Pipeline: pipeline.CellularPipeline exactly as validated (ROI -> StarDist -> complete cells -> biomarkers).
+# Analysis set: images with >= min_cells complete cells (same rule as Phases 5-6); the others are reported
+#   as failures (count, ids) - nothing else is excluded.
+# Per biomarker vs Konan (same definitions as Phases 5-6): bias, MAPE, share within the scope target,
+#   Bland-Altman, Spearman rho; 95 % CI of MAPE and within-target share by bootstrap over images.
+# Target judgement: a biomarker target is MET if the test MAPE <= target (mean |% error| over images). The
+#   within-target share is read against the realistic ceiling vs a ~110-cell reference (Phase 5 s1.2b).
+# Generalisation: the same table on validation (Phase 6, inside ROI) side by side; gap = test - val.
+# Not judgeable on test (no reference maps / masks on test images): roi_iou, seg_dice, seg_iou - reported
+#   from validation / cross-validation, labelled as such.
+# Secondary (descriptive): failures and quality flags; reliability levels; 95 % CI coverage of Konan;
+#   by ECD band; compactness CV <= 15 % share; the largest ECD errors.
+# -----------------------------------------------------------------------------
+final_test:
+  split: test
+  min_cells: 30
+  n_boot: 2000
+  seed: 23
+  ceiling_within_target_pct: {ecd_cells_per_mm2: 85, cv_pct: 86, hex_pct: 77}   # Phase 5 s1.2b
+  validation_only:                    # measured before Phase 7, not re-measurable on test
+    roi_iou: {value: 0.809, where: "10 val reference maps (Phase 6)"}
+    seg_dice: {value: 0.872, where: "5-fold CV, 39 crops (Phase 2, StarDist flat)"}
+    seg_iou: {value: 0.776, where: "5-fold CV, 39 crops (Phase 2, StarDist flat)"}
 
 # -----------------------------------------------------------------------------
 # Validation targets from the research scope (Phase 7).
@@ -147,4 +420,6 @@ targets:
   cv_pct_error: 10.0
   hex_pct_error: 10.0
   mean_area_pct_error: 8.0
-  compactness_cv: 15.0
+  compactness_cv: 15.0                # not defined in the scope (confirmed 2026-10-16); OUR definition (Phase 5):
+                                      # CV of per-cell compactness within an image <= 15 %
+                                      # (supporting: mean compactness vs reference masks on the 40 crops)
