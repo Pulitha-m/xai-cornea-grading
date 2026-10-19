@@ -34,10 +34,13 @@ def rejected(status_code: int, code: str, message: str, field: str | None = None
     return JSONResponse(status_code=status_code, content=body.model_dump(exclude_none=True))
 
 
-def png(rgb: np.ndarray) -> str:
-    ok, buf = cv2.imencode(".png", np.ascontiguousarray(rgb[..., ::-1]))
+JPEG_QUALITY = 90      # ~250 KB per 1296 x 972 overlay instead of ~2.5 MB as PNG; the numbers are unaffected
+
+
+def jpeg(rgb: np.ndarray) -> str:
+    ok, buf = cv2.imencode(".jpg", np.ascontiguousarray(rgb[..., ::-1]), [cv2.IMWRITE_JPEG_QUALITY, JPEG_QUALITY])
     if not ok:
-        raise ValueError("PNG encoding failed")
+        raise ValueError("JPEG encoding failed")
     return base64.b64encode(buf.tobytes()).decode("ascii")
 
 
@@ -107,8 +110,9 @@ async def analyze_cellular(
         return rejected(422, "IMAGE_DECODE_FAILED", "The image could not be read.", "image")
     try:
         outcome = service.analyse(gray, caseId)
-        images = {"overlayPng": png(outcome.images["overlay"]), "cvEvidencePng": png(outcome.images["cv_evidence"]),
-                  "reliabilityPng": png(outcome.images["reliability"]) if "reliability" in outcome.images else None}
+        images = {"overlayJpeg": jpeg(outcome.images["overlay"]),
+                  "cvEvidenceJpeg": jpeg(outcome.images["cv_evidence"]),
+                  "reliabilityJpeg": jpeg(outcome.images["reliability"]) if "reliability" in outcome.images else None}
     except CellularModelNotReady:
         logger.exception("Cellular models unavailable")
         return rejected(503, "MODEL_NOT_READY", "The cellular analysis models are unavailable. Try again later.")

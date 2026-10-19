@@ -148,7 +148,7 @@ Multipart form fields: `image`, `caseId`. Processing order: `decode_image` (same
   - 95 % CIs of ECD, CV and HEX by bootstrap over 64 px blocks of cells (sampling only, not segmentation error);
   - the share of the area variance from the 5 % most extreme cells;
   - per-cell reliability: red = implausible size or shape; yellow = low StarDist confidence; green otherwise. In the research evaluation, AUC was 0.814 for wrong cells, but about 70 % of wrong cells stay green;
-  - three base64 PNG overlays: measured cells by side count, reliability, and cell area.
+  - three base64 JPEG overlays (quality 90, ~250 KB each): measured cells by side count, reliability, and cell area.
 - **Artifacts** (`models/cellular/`, committed): `roi_cnn.onnx` (the image resize, ImageNet normalisation and sigmoid are inside the graph), `stardist.onnx` (tf2onnx), and `cellular_config.json`. The config holds every setting copied from `ml/cellular/config.yaml`, the SHA-256 of both files, the source commit and versions, and the export parity. All are written by `ml/cellular/export_web.py`. Files that do not match the SHA-256 give `503 MODEL_NOT_READY`. Loaded once at startup.
 - **No PyTorch or TensorFlow:** both networks run in onnxruntime. StarDist's post-processing (candidate threshold, sparse NMS, polygons to labels) uses the `stardist` package's own functions, reproduced step by step in `pipelines/cellular/stardist_onnx.py`; TensorFlow is never imported.
 - **Code:** `steps.py`, `cells.py` and `explain.py` are copied unchanged from `ml/cellular` (commit 7c26b0d). Only one guard is added: an image with no complete cells gets a plain image instead of the area overlay.

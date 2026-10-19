@@ -53,9 +53,9 @@ class CellularReliability(BaseModel):
 
 
 class CellularImages(BaseModel):
-    overlayPng: str = Field(..., description="Base64 PNG: ROI (cyan), measured cells coloured by side count")
-    reliabilityPng: str | None = Field(None, description="Base64 PNG: cells green / yellow / red")
-    cvEvidencePng: str = Field(..., description="Base64 PNG: cells by area vs the median; most extreme outlined")
+    overlayJpeg: str = Field(..., description="Base64 JPEG: ROI (cyan), measured cells coloured by side count")
+    reliabilityJpeg: str | None = Field(None, description="Base64 JPEG: cells green / yellow / red")
+    cvEvidenceJpeg: str = Field(..., description="Base64 JPEG: cells by area vs the median; most extreme outlined")
 
 
 class CellularAnalyzeResponse(BaseModel):

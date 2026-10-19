@@ -81,8 +81,8 @@ def test_success_maps_the_report_to_the_response(client, cellular_domain, monkey
     assert b["sideDistributionPct"]["6"] == 61.2 and b["flaggedCells"] == 2
     assert body["uncertainty"]["ecdCi95"] == [2750.0, 2850.0] and body["reliability"]["yellow"] == 15
     assert body["qualityFlags"][0]["code"] == "few_side_counts" and body["reliable"] is True
-    for key in ("overlayPng", "reliabilityPng", "cvEvidencePng"):
-        assert body["images"][key][:8] == "iVBORw0K"                       # base64 PNG signature
+    for key in ("overlayJpeg", "reliabilityJpeg", "cvEvidenceJpeg"):
+        assert body["images"][key][:4] == "/9j/"                           # base64 JPEG signature
     assert "not a clinical measurement" in body["message"]
 
 
@@ -157,4 +157,4 @@ def test_real_networks_on_a_synthetic_lattice(client, cellular_domain):
     assert r.status_code == 200
     body = r.json()
     assert body["reliable"] is False and "too_few_cells" in [f["code"] for f in body["qualityFlags"]]
-    assert body["biomarkers"]["cellCount"] == 0 and body["images"]["cvEvidencePng"]
+    assert body["biomarkers"]["cellCount"] == 0 and body["images"]["cvEvidenceJpeg"]
