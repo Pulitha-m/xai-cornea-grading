@@ -13,12 +13,8 @@ them directly with the first labelling (intra-rater agreement).
 
 In a notebook (after the setup cell):
     from data_prep.roi_labeller import RoiLabeller, summary
-    RoiLabeller().show()                     # round 1 (config roi.round)
-    RoiLabeller(round="round2").show()       # a later round
-    summary()  /  summary("round2")
-
-Repeats of a later round may be images labelled in an earlier round; summary()
-then compares them with that earlier labelling (drift check between rounds).
+    RoiLabeller().show()
+    summary()
 
 Class definitions: docs/roi_labelling_protocol.md
 """
@@ -48,9 +44,9 @@ def tile_size(height: int, width: int, rows: int, cols: int) -> int:
     return size
 
 
-def _round_dir(rnd: str | None = None) -> tuple[dict, Path]:
+def _round_dir() -> tuple[dict, Path]:
     cfg = load_config()
-    return cfg, cfg["paths"]["annotations_dir"] / "roi" / (rnd or cfg["roi"]["round"])
+    return cfg, cfg["paths"]["annotations_dir"] / "roi" / cfg["roi"]["round"]
 
 
 def _read_labels(path: Path) -> pd.DataFrame:
@@ -64,8 +60,8 @@ def _png(img: np.ndarray) -> bytes:
 class RoiLabeller:
     """Grid labelling widget. display_px = on-screen size of one tile (162 = 1:1)."""
 
-    def __init__(self, display_px: int = 128, round: str | None = None):
-        cfg, self.dir = _round_dir(round)
+    def __init__(self, display_px: int = 128):
+        cfg, self.dir = _round_dir()
         self.rows, self.cols = cfg["roi"]["grid_rows"], cfg["roi"]["grid_cols"]
         self.images_dir = cfg["paths"]["images_dir"]
         self.index = pd.read_csv(self.dir / "index.csv")
@@ -169,12 +165,11 @@ class RoiLabeller:
         self._go(self.pos + 1)
 
 
-def summary(round: str | None = None) -> pd.DataFrame:
-    """Progress, label counts per split, and intra-rater agreement on the repeats
-    (repeats of earlier-round images are compared with that earlier labelling)."""
+def summary() -> pd.DataFrame:
+    """Progress, label counts per split, and intra-rater agreement on the repeats."""
     from sklearn.metrics import cohen_kappa_score
 
-    _, out_dir = _round_dir(round)
+    _, out_dir = _round_dir()
     index = pd.read_csv(out_dir / "index.csv")
     lab = _read_labels(out_dir / "labels.csv")
     print(f"Images labelled: {lab['order'].nunique()} / {len(index)}   tiles: {len(lab)}")
@@ -187,10 +182,7 @@ def summary(round: str | None = None) -> pd.DataFrame:
     print(pd.crosstab(first["split"], first["label"], margins=True).reindex(
         columns=[*LABELS, "All"], fill_value=0).to_string())
 
-    earlier = [_read_labels(f) for f in out_dir.parent.glob("*/labels.csv") if f.parent != out_dir]
-    earlier = [e.assign(is_repeat=e["is_repeat"].astype(str).str.lower().eq("true")) for e in earlier if len(e)]
-    reference = pd.concat([first, *[e[~e["is_repeat"]] for e in earlier]])
-    pairs = lab[lab["is_repeat"]].merge(reference, on=["image_id", "tile_row", "tile_col"],
+    pairs = lab[lab["is_repeat"]].merge(first, on=["image_id", "tile_row", "tile_col"],
                                         suffixes=("_repeat", "_first"))
     if len(pairs):
         rank = {name: i for i, name in enumerate(LABELS)}
@@ -199,7 +191,4 @@ def summary(round: str | None = None) -> pd.DataFrame:
         print(f"  exact agreement      {(a == b).mean():.3f}")
         print(f"  Cohen's kappa        {cohen_kappa_score(a, b):.3f}")
         print(f"  weighted kappa (lin) {cohen_kappa_score(a, b, weights='linear'):.3f}  (ordinal good>usable>poor)")
-        pa, pb = a.eq(rank["poor"]), b.eq(rank["poor"])
-        print(f"  poor vs analysable   agreement {(pa == pb).mean():.3f}, kappa {cohen_kappa_score(pa, pb):.3f}"
-              "  (the distinction the ROI model learns)")
     return lab
