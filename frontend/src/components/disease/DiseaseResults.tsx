@@ -1,7 +1,10 @@
+import { useState } from "react"
 import type { DiseaseAnalyzeResponse, DiseaseFinding, ImageQuality, InputIssue } from "@/api/disease"
 import { measurementLabel } from "@/lib/disease-measurements"
+import { coverageLabel, GRADCAM_EXPLANATIONS } from "@/lib/gradcam-explanations"
 import { alertError, alertWarning } from "@/lib/styles"
 import { Card } from "@/components/dashboard/PageHeader"
+import { ShapCard } from "@/components/disease/ShapCard"
 import { Field } from "@/components/ui/field"
 import { StatusBadge, type StatusTone } from "@/components/ui/status-badge"
 
@@ -28,8 +31,11 @@ export function InputIssues({ title, issues, tone }: { title: string; issues: In
     )
 }
 
-/** The v2 disease report: findings, severity, image quality and Grad-CAM maps. */
-export function DiseaseResults({ result }: { result: DiseaseAnalyzeResponse }) {
+/**
+ * The v2 disease report: findings, severity, image quality and Grad-CAM maps.
+ * `originalUrl` is the uploaded image, shown in place of a heat map on request.
+ */
+export function DiseaseResults({ result, originalUrl = null }: { result: DiseaseAnalyzeResponse; originalUrl?: string | null }) {
     const diseases = result.diseases ?? []
     const detected = diseases.filter((d) => d.detected)
     const check = result.inputCheck
@@ -53,7 +59,7 @@ export function DiseaseResults({ result }: { result: DiseaseAnalyzeResponse }) {
             {check && <InputIssues tone="warning" title="Warnings:" issues={check.warnings} />}
 
             <div className="grid gap-6 lg:grid-cols-2">
-                <Card title="Disease findings" description="Probability from the image + numbers model. A disease counts as found at or above its threshold.">
+                <Card title="Disease findings">
                     <ul className="space-y-3">
                         {diseases.map((finding) => (
                             <FindingRow key={finding.code} finding={finding} />
@@ -61,7 +67,7 @@ export function DiseaseResults({ result }: { result: DiseaseAnalyzeResponse }) {
                     </ul>
                 </Card>
 
-                <Card title="Severity" description="Severity of each detected disease group; the overall severity is the worst.">
+                <Card title="Severity">
                     <div className="space-y-4">
                         <dl className="grid grid-cols-2 gap-4">
                             <Field label="Overall severity" value={result.overallSeverity === "None" ? "None (normal)" : result.overallSeverity} />
@@ -79,7 +85,6 @@ export function DiseaseResults({ result }: { result: DiseaseAnalyzeResponse }) {
                                             {s.probability !== null && (
                                                 <span className="text-xs text-muted-foreground tabular-nums">
                                                     P(Mod/Sev) {percent(s.probability)}
-                                                    {s.threshold !== null && ` · cut-off ${percent(s.threshold)}`}
                                                 </span>
                                             )}
                                             <StatusBadge tone={SEVERITY_TONE[s.grade] ?? "neutral"}>{s.grade}</StatusBadge>
@@ -97,8 +102,9 @@ export function DiseaseResults({ result }: { result: DiseaseAnalyzeResponse }) {
 
                 <Card title="Inputs used" description="Blank values were filled with the training median, as in training.">
                     <dl className="grid grid-cols-2 gap-4 sm:grid-cols-3">
-                        {Object.entries(result.measurementsUsed ?? {}).map(([name, value]) => (
-                            <Field key={name} label={name === "ECD_Deficit" ? "ECD deficit (derived)" : measurementLabel(name)}
+                        {/* ECD_Deficit is derived from ECD for the model only; not shown to clinicians. */}
+                        {Object.entries(result.measurementsUsed ?? {}).filter(([name]) => name !== "ECD_Deficit").map(([name, value]) => (
+                            <Field key={name} label={measurementLabel(name)}
                                 value={value === null ? null : value.toLocaleString("en-GB")} />
                         ))}
                     </dl>
@@ -110,27 +116,98 @@ export function DiseaseResults({ result }: { result: DiseaseAnalyzeResponse }) {
                 </Card>
             </div>
 
-            {detected.length > 0 && (
-                <Card title="Grad-CAM explanations" description="Image regions that most raised each detected disease's score (disease model, DenseNet features layer). An aid for review, not proof of the finding.">
-                    <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+            {detected.some((d) => d.gradcamPng) && (
+                <Card title="Grad-CAM explanations" description="Where in the image the model found the evidence for each detected disease. An aid for review, not proof of the finding.">
+                    <div className="space-y-6">
+                        <GradcamGuide />
                         {detected.filter((d) => d.gradcamPng).map((d) => (
-                            <figure key={d.code} className="space-y-1.5">
-                                <img
-                                    src={`data:image/png;base64,${d.gradcamPng}`}
-                                    alt={`Grad-CAM heat map for ${d.label}`}
-                                    className="w-full rounded-2xl border border-border"
-                                />
-                                <figcaption className="text-xs text-muted-foreground">
-                                    {d.label} (P = {d.probability.toFixed(2)})
-                                </figcaption>
-                            </figure>
+                            <GradcamPanel key={d.code} finding={d} originalUrl={originalUrl} />
                         ))}
                     </div>
                 </Card>
             )}
 
+            <ShapCard result={result} />
+
             {result.message && <p className="text-xs text-muted-foreground">{result.message}</p>}
         </section>
+    )
+}
+
+/** Colours of the jet colour map used for the overlays (low -> high). */
+const JET_GRADIENT = "linear-gradient(to right, #00007f, #0000ff, #00ffff, #ffff00, #ff0000, #7f0000)"
+
+function GradcamGuide() {
+    return (
+        <div className="rounded-2xl border border-border bg-sunken p-4 text-xs leading-relaxed">
+            <p className="font-semibold text-foreground">How to read these maps</p>
+            <div className="mt-2 max-w-sm" aria-hidden="true">
+                <div className="h-2.5 rounded-full" style={{ background: JET_GRADIENT }} />
+                <div className="mt-1 flex justify-between text-2xs text-muted-foreground">
+                    <span>Little influence</span>
+                    <span>Most influence</span>
+                </div>
+            </div>
+            <ul className="mt-3 list-disc space-y-1 pl-5 text-muted-foreground">
+                <li><span className="font-medium text-foreground">Red and yellow</span> areas raised this disease's score the most; <span className="font-medium text-foreground">blue</span> areas had little effect.</li>
+                <li>Check the highlighted area yourself: does it show the features listed for that disease? Use “Show original” to see it without colour.</li>
+                <li>The map shows <em>where the model looked</em>, not the outline of a lesion. It is coarse (blocks of about 1/12 of the image width), so edges are approximate.</li>
+                <li>If the hottest area is on the image border, a reflection, an out-of-focus patch or overlaid text, treat the finding with extra caution.</li>
+                <li>It explains only the image. The CellChek values also contribute; see the note under each disease.</li>
+            </ul>
+        </div>
+    )
+}
+
+function GradcamPanel({ finding, originalUrl }: { finding: DiseaseFinding; originalUrl: string | null }) {
+    const [showOriginal, setShowOriginal] = useState(false)
+    const explanation = GRADCAM_EXPLANATIONS[finding.code]
+    const focus = finding.gradcamFocus
+    const original = showOriginal && originalUrl !== null
+
+    return (
+        <figure className="grid gap-4 border-t border-border pt-5 md:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]">
+            <div className="space-y-2">
+                <img
+                    src={original ? originalUrl : `data:image/png;base64,${finding.gradcamPng}`}
+                    alt={original ? `Original image (${finding.label})` : `Grad-CAM heat map for ${finding.label}`}
+                    className="aspect-[4/3] w-full rounded-2xl border border-border object-cover"
+                />
+                {originalUrl && (
+                    <button
+                        type="button"
+                        aria-pressed={showOriginal}
+                        onClick={() => setShowOriginal((v) => !v)}
+                        className="rounded-full border border-border px-3 py-1 text-xs font-medium hover:bg-muted"
+                    >
+                        {showOriginal ? "Show heat map" : "Show original"}
+                    </button>
+                )}
+            </div>
+            <figcaption className="space-y-3 text-sm">
+                <p className="font-semibold">
+                    {finding.label} <span className="font-normal text-muted-foreground">(P = {finding.probability.toFixed(2)})</span>
+                </p>
+                {focus && (
+                    <p>
+                        <span className={sectionLabel}>Where the model looked</span>
+                        <br />
+                        Strongest in the <span className="font-medium">{focus.region === "centre" ? "centre" : focus.region}</span>{" "}
+                        of the image; {percent(focus.coverage)} of the image highlighted ({coverageLabel(focus.coverage)}).
+                    </p>
+                )}
+                {explanation && (
+                    <>
+                        <p>
+                            <span className={sectionLabel}>What to look for there</span>
+                            <br />
+                            {explanation.lookFor}
+                        </p>
+                        <p className="text-xs text-muted-foreground">{explanation.evidence}</p>
+                    </>
+                )}
+            </figcaption>
+        </figure>
     )
 }
 
@@ -154,7 +231,7 @@ function FindingRow({ finding }: { finding: DiseaseFinding }) {
                 <div className="absolute -top-1 h-3.5 w-0.5 bg-foreground/60" style={{ left: `${finding.threshold * 100}%` }} aria-hidden="true" />
             </div>
             <p className="mt-1 text-2xs text-muted-foreground tabular-nums">
-                Probability {percent(finding.probability)} · threshold {percent(finding.threshold)}
+                Probability {percent(finding.probability)}
             </p>
         </li>
     )

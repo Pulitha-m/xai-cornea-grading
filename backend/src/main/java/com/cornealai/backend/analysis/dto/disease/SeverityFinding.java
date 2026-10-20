@@ -10,6 +10,7 @@ public record SeverityFinding(
         String grade,
         Double probability,
         Double threshold,
-        String method
+        String method,
+        ShapExplanation shap
 ) {
 }

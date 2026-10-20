@@ -2,6 +2,7 @@ package com.cornealai.backend.analysis.client;
 
 import com.cornealai.backend.analysis.AnalysisRejectedException;
 import com.cornealai.backend.analysis.dto.AnalyzeResponse;
+import com.cornealai.backend.analysis.dto.disease.CellChekReport;
 import com.cornealai.backend.analysis.dto.cellular.CellularAnalyzeResponse;
 import com.cornealai.backend.analysis.dto.disease.DiseaseAnalyzeResponse;
 import com.cornealai.backend.analysis.dto.disease.ImageQuality;
@@ -145,6 +146,29 @@ public class MlServiceClient {
             log.warn("ml-service unreachable: {}", e.getClass().getSimpleName());
             throw new AnalysisRejectedException(HttpStatus.SERVICE_UNAVAILABLE, "MODEL_NOT_READY", null,
                     "The analysis service is unavailable. Try again later.");
+        }
+    }
+
+    /**
+     * Reads the CellChek values from a report image or .txt export (ml-service POST /disease/read-report),
+     * to pre-fill the disease form. Rejections are raised as for analyze().
+     */
+    public CellChekReport readCellChekReport(byte[] report, String filename) {
+        MultiValueMap<String, Object> form = new LinkedMultiValueMap<>();
+        form.add("report", new NamedBytes(report, filename));
+        try {
+            return restClient.post()
+                    .uri("/disease/read-report")
+                    .contentType(MediaType.MULTIPART_FORM_DATA)
+                    .body(form)
+                    .retrieve()
+                    .body(CellChekReport.class);
+        } catch (RestClientResponseException e) {
+            throw translate(e);
+        } catch (RestClientException e) {
+            log.warn("ml-service unreachable: {}", e.getClass().getSimpleName());
+            throw new AnalysisRejectedException(HttpStatus.SERVICE_UNAVAILABLE, "MODEL_NOT_READY", null,
+                    "The analysis service is unavailable. Enter the values by hand.");
         }
     }
 

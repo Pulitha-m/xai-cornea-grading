@@ -104,7 +104,7 @@ class DiseaseExport(nn.Module):
         # notebook's forward hook keeps are relu(acts) by the time Grad-CAM reads them.
         cams = F.relu(torch.einsum("bjc,bchw->bjhw", weights, F.relu(acts)))
         embedding = F.normalize(pooled, dim=1)
-        return logits, cams, embedding
+        return logits, cams, embedding, pooled
 
 
 class SeverityExport(nn.Module):
@@ -113,7 +113,33 @@ class SeverityExport(nn.Module):
         self.m = model
 
     def forward(self, image, tab):
-        return self.m(image, tab)
+        pooled = self.m.backbone(image)
+        z = self.m.shared(torch.cat([pooled, self.m.tab_mlp(tab)], 1))
+        return self.m.disease_head(z), self.m.severity_head(z), pooled
+
+
+# --- Head weights for SHAP on the numbers (image features fixed) ----------------------
+def head_arrays(dis: Fusion, sev: FusionMultiTask) -> dict:
+    """Layers after the backbone, so ml-service can re-run them in numpy for many number inputs."""
+    def lin(prefix, layer):
+        return {f"{prefix}_w": layer.weight.detach().numpy(), f"{prefix}_b": layer.bias.detach().numpy()}
+    return {
+        **lin("dis_tab1", dis.tab_mlp[0]), **lin("dis_tab2", dis.tab_mlp[3]),
+        **lin("dis_head1", dis.head[1]), **lin("dis_head2", dis.head[4]),
+        **lin("sev_tab1", sev.tab_mlp[0]), **lin("sev_tab2", sev.tab_mlp[3]),
+        **lin("sev_shared", sev.shared[1]), **lin("sev_disease", sev.disease_head), **lin("sev_severity", sev.severity_head),
+    }
+
+
+def numpy_heads(h: dict, pooled_dis, pooled_sev, tab):
+    """Same computation as ml-service pipelines/disease/explain.py (checked against torch here)."""
+    relu = lambda a: np.maximum(a, 0)
+    dense = lambda x, p: x @ h[f"{p}_w"].T + h[f"{p}_b"]
+    t = relu(dense(relu(dense(tab, "dis_tab1")), "dis_tab2"))
+    dis_logits = dense(relu(dense(np.concatenate([pooled_dis, t], 1), "dis_head1")), "dis_head2")
+    t = relu(dense(relu(dense(tab, "sev_tab1")), "sev_tab2"))
+    z = relu(dense(np.concatenate([pooled_sev, t], 1), "sev_shared"))
+    return dis_logits, dense(z, "sev_severity")
 
 
 # --- Reference implementations from the notebook -------------------------------------
@@ -193,9 +219,9 @@ def main():
     # Disease model.
     dis_path = out_dir / "disease_fusion_densenet121.onnx"
     wrapper = DiseaseExport(dis).eval()
-    export(wrapper, dis_path, ["logits", "cams", "embedding"], ["logits", "cams", "embedding"])
+    export(wrapper, dis_path, ["logits", "cams", "embedding", "pooled"], ["logits", "cams", "embedding", "pooled"])
     with torch.no_grad():
-        t_logits, t_cams, t_emb = wrapper(image, tab)
+        t_logits, t_cams, t_emb, _ = wrapper(image, tab)
         ref_logits = dis(image, tab)
         ref_emb = F.normalize(dis.backbone(image), dim=1)
     assert torch.allclose(t_logits, ref_logits, atol=1e-5), "wrapper logits differ from the notebook model"
@@ -203,7 +229,7 @@ def main():
     cam_diff = max(float(np.abs(minmax(t_cams[0, j].numpy()) - minmax(autograd_gradcam(dis, image[:1], tab[:1], j))).max())
                    for j in range(N_DISEASES))
     assert cam_diff < 1e-4, f"closed-form Grad-CAM differs from autograd Grad-CAM ({cam_diff:.2e})"
-    o_logits, o_cams, o_emb = run_onnx(dis_path, image, tab)
+    o_logits, o_cams, o_emb, o_pooled_dis = run_onnx(dis_path, image, tab)
     dis_diff = max(float(np.abs(o_logits - t_logits.numpy()).max()),
                    float(np.abs(o_emb - t_emb.numpy()).max()),
                    max(float(np.abs(minmax(o_cams[0, j]) - minmax(t_cams[0, j].numpy())).max()) for j in range(N_DISEASES)))
@@ -211,13 +237,21 @@ def main():
 
     # Severity model.
     sev_path = out_dir / "severity_multitask_densenet121.onnx"
-    export(SeverityExport(sev).eval(), sev_path, ["disease_logits", "severity_logits"],
-           ["disease_logits", "severity_logits"])
+    export(SeverityExport(sev).eval(), sev_path, ["disease_logits", "severity_logits", "pooled"],
+           ["disease_logits", "severity_logits", "pooled"])
     with torch.no_grad():
         s_dis, s_sev = sev(image, tab)
-    o_dis, o_sev = run_onnx(sev_path, image, tab)
+    o_dis, o_sev, o_pooled_sev = run_onnx(sev_path, image, tab)
     sev_diff = max(float(np.abs(o_dis - s_dis.numpy()).max()), float(np.abs(o_sev - s_sev.numpy()).max()))
     assert sev_diff < 1e-4, f"ONNX severity model differs from torch ({sev_diff:.2e})"
+
+    # Head weights: numpy re-run from the ONNX pooled features must reproduce the torch outputs.
+    heads_path = out_dir / "heads.npz"
+    heads = head_arrays(dis, sev)
+    np.savez(heads_path, **heads)
+    n_dis, n_sev = numpy_heads(heads, o_pooled_dis, o_pooled_sev, tab.numpy())
+    heads_diff = max(float(np.abs(n_dis - t_logits.numpy()).max()), float(np.abs(n_sev - s_sev.numpy()).max()))
+    assert heads_diff < 1e-4, f"numpy heads differ from torch ({heads_diff:.2e})"
 
     config["models"] = {
         "exported_with": {"torch": torch.__version__, "torchvision": torchvision.__version__, "opset": OPSET},
@@ -226,7 +260,7 @@ def main():
             "source_weights": "final_densenet121/Image_plus_numbers.pt",
             "source_sha256": sha256(args.weights_dir / "Image_plus_numbers.pt"),
             "inputs": {"image": [None, 3, IMG_H, IMG_W], "tab": [None, N_FEATURES]},
-            "outputs": ["logits", "cams", "embedding"],
+            "outputs": ["logits", "cams", "embedding", "pooled"],
             "max_abs_difference_vs_torch": dis_diff,
             "gradcam_max_abs_difference_vs_autograd": cam_diff,
         },
@@ -235,8 +269,13 @@ def main():
             "source_weights": "severity_densenet121/final_multitask.pt",
             "source_sha256": sha256(args.weights_dir / "final_multitask.pt"),
             "inputs": {"image": [None, 3, IMG_H, IMG_W], "tab": [None, N_FEATURES]},
-            "outputs": ["disease_logits", "severity_logits"],
+            "outputs": ["disease_logits", "severity_logits", "pooled"],
             "max_abs_difference_vs_torch": sev_diff,
+        },
+        "heads": {
+            "file": heads_path.name, "sha256": sha256(heads_path),
+            "description": "tab MLP and heads of both models, for exact SHAP on the numbers (image fixed)",
+            "max_abs_difference_vs_torch": heads_diff,
         },
     }
     config_path.write_text(json.dumps(config, indent=2) + "\n", encoding="utf-8")

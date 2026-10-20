@@ -1,8 +1,10 @@
 package com.cornealai.backend.analysis;
 
 import com.cornealai.backend.analysis.client.MlServiceClient;
+import com.cornealai.backend.analysis.dto.disease.CellChekReport;
 import com.cornealai.backend.analysis.dto.disease.DiseaseAnalyzeResponse;
 import com.cornealai.backend.analysis.dto.disease.DiseaseFinding;
+import com.cornealai.backend.analysis.dto.disease.GradcamFocus;
 import com.cornealai.backend.analysis.dto.disease.InputCheck;
 import com.cornealai.backend.analysis.dto.disease.InputIssue;
 import com.cornealai.backend.analysis.entity.DiseaseAnalysisRun;
@@ -88,7 +90,8 @@ class DiseaseAnalysisIntegrationTests extends IntegrationTestSupport {
         assertThat(run.getResultJson()).doesNotContain("12656R");
         assertThat(run.isForced()).isFalse();
         assertThat(run.getMeasurementsJson()).contains("\"ECD_CD_cells_per_mm2\":2650");
-        assertThat(run.getResultJson()).contains("\"detected\":[\"FECD\"]").doesNotContain("iVBORw0KGgo");
+        assertThat(run.getResultJson()).contains("\"detected\":[\"FECD\"]").contains("\"region\":\"lower right\"")
+                .doesNotContain("iVBORw0KGgo");
     }
 
     @Test
@@ -150,11 +153,65 @@ class DiseaseAnalysisIntegrationTests extends IntegrationTestSupport {
         verifyNoInteractions(mlServiceClient);
     }
 
+    @Test
+    void reportIsReadThroughMlServiceAndNotStored() throws Exception {
+        CellChekReport reading = new CellChekReport("image",
+                Map.of("ECD_CD_cells_per_mm2", 2016.0, "SD", 175.0, "CV", 35.0, "HEX_percent", 48.0, "Donor_Age", 59.0),
+                List.of(), "NEB-TEST L", "OS", 124.0, 61468.0, List.of());
+        when(mlServiceClient.readCellChekReport(any(), anyString())).thenReturn(reading);
+
+        mockMvc.perform(multipart("/api/analysis/disease/report")
+                        .file(new MockMultipartFile("file", "report.jpg", "image/jpeg", image()))
+                        .header(HttpHeaders.AUTHORIZATION, bearer(doctor)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.values.ECD_CD_cells_per_mm2").value(2016.0))
+                .andExpect(jsonPath("$.tissueId").value("NEB-TEST L"));
+        verify(storage, never()).store(anyString(), any(), anyString());
+        assertThat(runs.count()).isZero();
+    }
+
+    @Test
+    void nonClinicalRoleCannotReadReports() throws Exception {
+        AppUser support = createUser("support.report", RoleName.SUPPORT_STAFF);
+        mockMvc.perform(multipart("/api/analysis/disease/report")
+                        .file(new MockMultipartFile("file", "report.jpg", "image/jpeg", image()))
+                        .header(HttpHeaders.AUTHORIZATION, bearer(support)))
+                .andExpect(status().isForbidden());
+        verifyNoInteractions(mlServiceClient);
+    }
+
+    @Test
+    void reportIsReadThroughMlServiceAndNotStored() throws Exception {
+        CellChekReport reading = new CellChekReport("image",
+                Map.of("ECD_CD_cells_per_mm2", 2016.0, "SD", 175.0, "CV", 35.0, "HEX_percent", 48.0, "Donor_Age", 59.0),
+                List.of(), "NEB-TEST L", "OS", 124.0, 61468.0, List.of());
+        when(mlServiceClient.readCellChekReport(any(), anyString())).thenReturn(reading);
+
+        mockMvc.perform(multipart("/api/analysis/disease/report")
+                        .file(new MockMultipartFile("file", "report.jpg", "image/jpeg", image()))
+                        .header(HttpHeaders.AUTHORIZATION, bearer(doctor)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.values.ECD_CD_cells_per_mm2").value(2016.0))
+                .andExpect(jsonPath("$.tissueId").value("NEB-TEST L"));
+        verify(storage, never()).store(anyString(), any(), anyString());
+        assertThat(runs.count()).isZero();
+    }
+
+    @Test
+    void nonClinicalRoleCannotReadReports() throws Exception {
+        AppUser support = createUser("support.report", RoleName.SUPPORT_STAFF);
+        mockMvc.perform(multipart("/api/analysis/disease/report")
+                        .file(new MockMultipartFile("file", "report.jpg", "image/jpeg", image()))
+                        .header(HttpHeaders.AUTHORIZATION, bearer(support)))
+                .andExpect(status().isForbidden());
+        verifyNoInteractions(mlServiceClient);
+    }
+
     private static DiseaseAnalyzeResponse completed() {
         List<DiseaseFinding> findings = List.of(
                 new DiseaseFinding("FECD", "FECD", 0.8, 0.23, true, "iVBORw0KGgo="),
                 new DiseaseFinding("Guttata", "Guttata", 0.1, 0.44, false, null));
-        return new DiseaseAnalyzeResponse(null, "12656R", "completed", "Research tool, not a medical diagnosis.",
+        return new DiseaseAnalyzeResponse(null, "CASE-1", "completed", "Research tool, not a medical diagnosis.",
                 null, new InputCheck(true, false, List.of(), List.of()), null, "densenet121_image_numbers_fusion_v2",
                 findings, List.of("FECD"), false, List.of(), "Mild", Map.of("FECDgroup", 0.3), Map.of(), List.of(), true);
     }
