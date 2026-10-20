@@ -5,6 +5,8 @@
 paths:
   raw_workbook: data/raw/dataset_final_labeled.xlsx
   matching_dataset: data/processed/matching_dataset.xlsx
+  followup_cohort: data/simulated/followup_cohort.xlsx   # Part B cohort (simulated until NEBSL follow-up arrives)
+  followup_dataset: data/processed/followup_landmark.xlsx  # P2 output: landmark table + split
   outputs: outputs
   models: models
 
@@ -15,12 +17,35 @@ split:
 
 matching:
   storage_days: 14          # Eusol-C window used to decide which tissues were in stock
-  weights_version: placeholder-2026-10-08
-  # PLACEHOLDER weights. Replace with weights agreed with NEBSL clinicians
-  # (e.g. AHP pairwise comparison). Only their ratios matter.
+  weights_version: clinician-2026-10-18
+  # Clinical priority weights proposed by NEBSL clinicians (direct weighting, 2026-10-18).
+  # Previous researcher-set placeholders (placeholder-2026-10-08): grade_fit 0.35,
+  # endothelium 0.30, freshness 0.15, donor_age 0.10, preservation_time 0.10.
   weights:
-    grade_fit: 0.35          # closeness of tissue grade to requested grade
-    endothelium: 0.30        # ECD / CV / HEX quality (PK, DSEK, DMEK only)
-    freshness: 0.15          # fewer days in storage is better
-    donor_age: 0.10          # younger donor is better
-    preservation_time: 0.10  # shorter death-to-preservation time is better
+    grade_fit: 0.35              # tissue grade match (A+ / A / B)
+    endothelium: 0.30            # ECD / CV / HEX quality (PK, DSEK, DMEK only)
+    serology: 0.20               # confirmed clear = 1, not confirmed = 0.5 (positive excluded)
+    freshness: 0.10              # fewer days in storage is better
+    surgery_compatibility: 0.05  # endothelial surgery needs measured endothelium
+
+followup:
+  landmark_month: 12          # predictions are made at the 12-month visit
+  input_months: [3, 6, 12]    # first-year visits used as inputs
+  horizons: [24, 36, 60]      # ECD predicted at these months
+  split: [0.70, 0.15, 0.15]   # train / validation / test, by graft
+  seed: 42
+  # P7 follow-up alerts. PLACEHOLDER thresholds: agree them with NEBSL / corneal clinicians.
+  alerts:
+    version: placeholder-2026-10-20
+    red:                              # any one -> red, next visit in 3 months
+      failure_risk_12m: 0.20          # graft-failure risk within 12 months of this visit
+      ecd_12m_below: 750              # 12-month ECD (cells/mm2)
+      predicted_ecd_24m_below: 600    # predicted ECD at 24 months
+      # a rejection episode by 12 months is always red (clinical rule, not a threshold)
+    amber:                            # any one -> amber, next visit in 6 months
+      failure_risk_24m: 0.05
+      low_ecd_risk_24m: 0.30          # risk of ECD < 1000 within 24 months
+      ecd_60m_lower_band_below: 500   # lower end of the 80% band for 60-month ECD (1000 fired for 98% of
+                                      # training + validation grafts, so it could not separate anyone)
+      loss_12m_at_least: 0.40         # cell loss from donor by 12 months
+    interval_months: {green: 12, amber: 6, red: 3}

@@ -34,6 +34,8 @@ export const ANALYSIS_PATH = "/analysis"
 export const CELLULAR_PATH = "/cellular"
 export const DISEASE_PATH = "/disease"
 export const GRADING_PATH = "/grading"
+export const MATCHING_PATH = "/recipients"
+export const FOLLOWUP_PATH = "/post-transplant"
 
 export function dashboardPathFor(role: Role): string {
     return DASHBOARD_PATHS[role]
@@ -84,6 +86,20 @@ export const NAV_ITEMS: NavItem[] = [
         roles: ["DOCTOR", "NURSE"],
         permission: "analysis:run",
     },
+    {
+        label: "Recipients & matching",
+        to: MATCHING_PATH,
+        icon: UsersIcon,
+        roles: ["DOCTOR", "NURSE"],
+        permission: "analysis:run",
+    },
+    {
+        label: "Post-transplant follow-up",
+        to: FOLLOWUP_PATH,
+        icon: ActivityIcon,
+        roles: ["DOCTOR", "NURSE"],
+        permission: "analysis:run",
+    },
 ]
 
 export interface PlannedModule extends NavItem {
@@ -108,20 +124,6 @@ export const PLANNED_MODULES: PlannedModule[] = [
         icon: PackageIcon,
         roles: ["ADMIN", "MANAGER", "NURSE", "SUPPORT_STAFF"],
         description: "Storage status, availability and inter-branch transfers of donor tissue.",
-    },
-    {
-        label: "Recipients & matching",
-        to: "/recipients",
-        icon: UsersIcon,
-        roles: ["ADMIN", "MANAGER", "DOCTOR", "NURSE"],
-        description: "Waiting-list management and donor–recipient matching for clinical review.",
-    },
-    {
-        label: "Post-transplant follow-up",
-        to: "/post-transplant",
-        icon: ActivityIcon,
-        roles: ["ADMIN", "MANAGER", "DOCTOR", "NURSE"],
-        description: "Graft monitoring with endothelial measurements recorded at scheduled follow-up visits.",
     },
     {
         label: "Reports",

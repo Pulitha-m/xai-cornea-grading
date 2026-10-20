@@ -3,13 +3,15 @@ import { HomeRedirect } from "@/components/auth/HomeRedirect"
 import { ProtectedRoute } from "@/components/auth/ProtectedRoute"
 import { RoleGuard } from "@/components/auth/RoleGuard"
 import { AppLayout } from "@/components/layout/AppLayout"
-import { ANALYSIS_PATH, CELLULAR_PATH, DISEASE_PATH, GRADING_PATH, PLANNED_MODULES } from "@/lib/roles"
+import { ANALYSIS_PATH, CELLULAR_PATH, DISEASE_PATH, FOLLOWUP_PATH, GRADING_PATH, MATCHING_PATH, PLANNED_MODULES } from "@/lib/roles"
 import { AnalysisPage } from "@/pages/AnalysisPage"
 import { CellularPage } from "@/pages/CellularPage"
 import { ComingSoonPage } from "@/pages/ComingSoonPage"
 import { DiseasePage } from "@/pages/DiseasePage"
+import { FollowupPage } from "@/pages/FollowupPage"
 import { GradingPage } from "@/pages/GradingPage"
 import { LoginPage } from "@/pages/LoginPage"
+import { MatchingPage } from "@/pages/MatchingPage"
 import { NotFoundPage } from "@/pages/NotFoundPage"
 import { UnauthorizedPage } from "@/pages/UnauthorizedPage"
 import { AdminDashboard } from "@/pages/dashboards/AdminDashboard"
@@ -61,6 +63,13 @@ export const routes: RouteObject[] = [
                     {
                         element: <RoleGuard allow={["DOCTOR", "NURSE"]} permission="analysis:run" />,
                         children: [{ path: DISEASE_PATH, element: <DiseasePage /> }],
+                    },
+                    {
+                        element: <RoleGuard allow={["DOCTOR", "NURSE"]} permission="analysis:run" />,
+                        children: [
+                            { path: MATCHING_PATH, element: <MatchingPage /> },
+                            { path: FOLLOWUP_PATH, element: <FollowupPage /> },
+                        ],
                     },
                     ...PLANNED_MODULES.map(
                         (module): RouteObject => ({
