@@ -8,7 +8,10 @@ import lombok.Setter;
 import java.time.Instant;
 import java.util.UUID;
 
-/** An uploaded specular microscopy image. The bytes live in Supabase Storage at {@code bucket/objectPath}. */
+/**
+ * An uploaded specular microscopy image. The bytes live in Supabase Storage at {@code bucket/objectPath},
+ * encrypted (see {@link com.cornealai.backend.analysis.service.ImageService}).
+ */
 @Entity
 @Table(name = "analysis_images")
 @Getter
@@ -19,8 +22,12 @@ public class AnalysisImage {
     @Id
     private UUID id;
 
+    /** The donor case's id as text (never the tissue ID); same value as {@link #donorCaseId}. */
     @Column(name = "case_id", nullable = false, length = 100)
     private String caseId;
+
+    @Column(name = "donor_case_id")
+    private UUID donorCaseId;
 
     @Column(nullable = false, length = 100)
     private String bucket;
@@ -34,8 +41,13 @@ public class AnalysisImage {
     @Column(name = "size_bytes", nullable = false)
     private long sizeBytes;
 
-    @Column(nullable = false, length = 64)
+    /** SHA-256 of the plaintext; only for images stored before encryption (null once encrypted). */
+    @Column(length = 64)
     private String sha256;
+
+    /** True when the stored object is FieldCipher ciphertext; false only for images stored before encryption. */
+    @Column(nullable = false)
+    private boolean encrypted;
 
     @Column(nullable = false)
     private int width;

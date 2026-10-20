@@ -6,6 +6,11 @@ import com.cornealai.backend.analysis.entity.AnalysisImage;
 import com.cornealai.backend.analysis.image.ImageInspector;
 import com.cornealai.backend.analysis.repository.AnalysisImageRepository;
 import com.cornealai.backend.analysis.storage.ImageStorage;
+import com.cornealai.backend.cases.TissueNumber;
+import com.cornealai.backend.cases.entity.DonorCase;
+import com.cornealai.backend.cases.service.DonorCaseService;
+import com.cornealai.backend.common.crypto.CryptoException;
+import com.cornealai.backend.common.crypto.FieldCipher;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.http.HttpStatus;
@@ -16,46 +21,66 @@ import java.security.NoSuchAlgorithmException;
 import java.util.HexFormat;
 import java.util.UUID;
 
-/** Validates and stores uploaded images. Storage paths are generated here, never taken from clients. */
+/**
+ * Validates, encrypts and stores uploaded images, and reads them back verified. Storage paths are
+ * generated here, never taken from clients, and contain only the image id (no case id or format).
+ *
+ * <p>Images are encrypted with {@link FieldCipher} for {@link #CONTENT_FIELD} and the image id; the
+ * GCM tag is the integrity check, so a changed object, or another image's object, fails to read.
+ */
 @Service
 public class ImageService {
 
+    /** Field name bound into every encrypted image. */
+    public static final String CONTENT_FIELD = "analysis_images.content";
+    static final String STORED_CONTENT_TYPE = "application/octet-stream";
+
     private static final Logger log = LoggerFactory.getLogger(ImageService.class);
-    private static final int MAX_CASE_ID_LENGTH = 100;
 
     private final ImageInspector inspector;
     private final ImageStorage storage;
     private final AnalysisImageRepository images;
+    private final FieldCipher cipher;
+    private final DonorCaseService donorCases;
 
-    public ImageService(ImageInspector inspector, ImageStorage storage, AnalysisImageRepository images) {
+    public ImageService(ImageInspector inspector, ImageStorage storage, AnalysisImageRepository images,
+                        FieldCipher cipher, DonorCaseService donorCases) {
         this.inspector = inspector;
         this.storage = storage;
         this.images = images;
+        this.cipher = cipher;
+        this.donorCases = donorCases;
     }
 
-    public ImageUploadResponse upload(String caseId, byte[] data, Long userId) {
-        String cleanCaseId = normalizeCaseId(caseId);
+    /**
+     * Stores an image for the donor case with this tissue ID (created on first use). The image record
+     * refers to the case by its UUID; the tissue ID itself is only returned to the uploader.
+     */
+    public ImageUploadResponse upload(String tissueId, byte[] data, Long userId) {
+        TissueNumber tissue = TissueNumber.parse(tissueId);
         ImageInspector.InspectedImage inspected = inspector.inspect(data);
 
         UUID id = UUID.randomUUID();
-        String objectPath = folderFor(cleanCaseId) + "/" + id + "." + inspected.extension();
-        storage.store(objectPath, data, inspected.contentType());
+        String objectPath = objectPathFor(id);
+        storage.store(objectPath, cipher.encryptBytes(data, CONTENT_FIELD, id), STORED_CONTENT_TYPE);
 
-        AnalysisImage image = new AnalysisImage();
-        image.setId(id);
-        image.setCaseId(cleanCaseId);
-        image.setBucket(storage.bucket());
-        image.setObjectPath(objectPath);
-        image.setContentType(inspected.contentType());
-        image.setSizeBytes(data.length);
-        image.setSha256(sha256(data));
-        image.setWidth(inspected.width());
-        image.setHeight(inspected.height());
-        image.setUploadedBy(userId);
         try {
+            DonorCase donorCase = donorCases.findOrCreate(tissue, userId);
+            AnalysisImage image = new AnalysisImage();
+            image.setId(id);
+            image.setCaseId(donorCase.getId().toString());
+            image.setDonorCaseId(donorCase.getId());
+            image.setBucket(storage.bucket());
+            image.setObjectPath(objectPath);
+            image.setContentType(inspected.contentType());
+            image.setSizeBytes(data.length);
+            image.setEncrypted(true);
+            image.setWidth(inspected.width());
+            image.setHeight(inspected.height());
+            image.setUploadedBy(userId);
             images.saveAndFlush(image);
         } catch (RuntimeException e) {
-            // Do not leave an orphaned object if the record could not be saved.
+            // Do not leave an orphaned object if the case or the record could not be saved.
             try {
                 storage.delete(objectPath);
             } catch (RuntimeException cleanup) {
@@ -64,23 +89,35 @@ public class ImageService {
             throw e;
         }
 
-        return new ImageUploadResponse(id, cleanCaseId, inspected.contentType(), data.length,
+        return new ImageUploadResponse(id, tissue.value(), inspected.contentType(), data.length,
                 inspected.width(), inspected.height());
     }
 
-    static String normalizeCaseId(String caseId) {
-        String trimmed = caseId == null ? "" : caseId.trim();
-        if (trimmed.isEmpty() || trimmed.length() > MAX_CASE_ID_LENGTH) {
-            throw new AnalysisRejectedException(HttpStatus.BAD_REQUEST, "INVALID_REQUEST", "caseId",
-                    "Enter a case ID of at most " + MAX_CASE_ID_LENGTH + " characters.");
+    /**
+     * The image's original bytes, read from storage and verified: decrypted (which authenticates them)
+     * or, for an image stored before encryption, checked against its SHA-256.
+     */
+    public byte[] readVerified(AnalysisImage image) {
+        byte[] stored = storage.read(image.getObjectPath());
+        if (stored != null) {
+            if (!image.isEncrypted()) {
+                if (image.getSha256() != null && sha256(stored).equals(image.getSha256())) {
+                    return stored;
+                }
+            } else {
+                try {
+                    return cipher.decryptBytes(stored, CONTENT_FIELD, image.getId());
+                } catch (CryptoException e) {
+                    log.warn("Stored image {} failed decryption: {}", image.getId(), e.getMessage());
+                }
+            }
         }
-        return trimmed;
+        throw new AnalysisRejectedException(HttpStatus.BAD_GATEWAY, "IMAGE_STORAGE_ACCESS_FAILED", null,
+                "The stored image could not be verified. Upload it again.");
     }
 
-    /** A storage-safe folder name derived from the case id (letters, digits, dot, dash, underscore). */
-    static String folderFor(String caseId) {
-        String folder = caseId.replaceAll("[^A-Za-z0-9._-]", "_");
-        return folder.matches("\\.+") ? "_" : folder;
+    static String objectPathFor(UUID imageId) {
+        return "images/" + imageId;
     }
 
     static String sha256(byte[] data) {

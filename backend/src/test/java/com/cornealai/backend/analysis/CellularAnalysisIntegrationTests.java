@@ -63,10 +63,10 @@ class CellularAnalysisIntegrationTests extends IntegrationTestSupport {
 
     @Test
     void analysisSendsStoredBytesAndRecordsTheNumbersWithoutImages() throws Exception {
-        UUID imageId = uploadedImage(doctor, "CASE-1");
-        when(mlServiceClient.analyzeCellular(eq("CASE-1"), any(), anyString())).thenReturn(completed(true));
+        UUID imageId = uploadedImage(doctor, "12656R");
+        when(mlServiceClient.analyzeCellular(anyString(), any(), anyString())).thenReturn(completed(true));
 
-        analyze(doctor, "CASE-1", imageId)
+        analyze(doctor, "12656R", imageId)
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.analysisId").isNotEmpty())
                 .andExpect(jsonPath("$.biomarkers.cellCount").value(1421))
@@ -75,9 +75,13 @@ class CellularAnalysisIntegrationTests extends IntegrationTestSupport {
                 .andExpect(jsonPath("$.reliability.yellow").value(64))
                 .andExpect(jsonPath("$.images.overlayJpeg").value("/9j/overlay"));
 
-        verify(mlServiceClient).analyzeCellular(eq("CASE-1"), eq(stored), anyString());
+        verify(mlServiceClient).analyzeCellular(anyString(), eq(image()), anyString());  // decrypted, as uploaded
         CellularAnalysisRun run = runs.findByImageId(imageId).getFirst();
         assertThat(run.getStatus()).isEqualTo("completed");
+        // Linked to the donor case by UUID; the tissue ID is not stored in the run.
+        assertThat(run.getDonorCaseId()).isNotNull();
+        assertThat(run.getCaseId()).isEqualTo(run.getDonorCaseId().toString());
+        assertThat(run.getResultJson()).doesNotContain("12656R");
         assertThat(run.getCellCount()).isEqualTo(1421);
         assertThat(run.getEcd()).isEqualTo(2824.48);
         assertThat(run.getCv()).isEqualTo(27.52);
@@ -89,10 +93,10 @@ class CellularAnalysisIntegrationTests extends IntegrationTestSupport {
 
     @Test
     void notReliableResultIsStillReturnedAndRecorded() throws Exception {
-        UUID imageId = uploadedImage(doctor, "CASE-1");
+        UUID imageId = uploadedImage(doctor, "12656R");
         when(mlServiceClient.analyzeCellular(anyString(), any(), anyString())).thenReturn(completed(false));
 
-        analyze(doctor, "CASE-1", imageId)
+        analyze(doctor, "12656R", imageId)
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.reliable").value(false))
                 .andExpect(jsonPath("$.qualityFlags[0].code").value("too_few_cells"));
@@ -101,12 +105,12 @@ class CellularAnalysisIntegrationTests extends IntegrationTestSupport {
 
     @Test
     void mlServiceRejectionIsRecordedAndReturnedWithItsCode() throws Exception {
-        UUID imageId = uploadedImage(doctor, "CASE-1");
+        UUID imageId = uploadedImage(doctor, "12656R");
         when(mlServiceClient.analyzeCellular(anyString(), any(), anyString()))
                 .thenThrow(new AnalysisRejectedException(HttpStatus.UNPROCESSABLE_CONTENT, "INVALID_IMAGE_DOMAIN", "image",
                         "Upload a specular microscopy image showing corneal endothelial cells."));
 
-        analyze(doctor, "CASE-1", imageId)
+        analyze(doctor, "12656R", imageId)
                 .andExpect(status().isUnprocessableContent())
                 .andExpect(jsonPath("$.code").value("INVALID_IMAGE_DOMAIN"));
         CellularAnalysisRun run = runs.findByImageId(imageId).getFirst();
@@ -117,12 +121,12 @@ class CellularAnalysisIntegrationTests extends IntegrationTestSupport {
 
     @Test
     void responseWithoutBiomarkersIsRejected() throws Exception {
-        UUID imageId = uploadedImage(doctor, "CASE-1");
-        CellularAnalyzeResponse empty = new CellularAnalyzeResponse(null, "CASE-1", "completed", null, null, null,
+        UUID imageId = uploadedImage(doctor, "12656R");
+        CellularAnalyzeResponse empty = new CellularAnalyzeResponse(null, "12656R", "completed", null, null, null,
                 null, null, null, null, null, null, null, null, null, null, null);
         when(mlServiceClient.analyzeCellular(anyString(), any(), anyString())).thenReturn(empty);
 
-        analyze(doctor, "CASE-1", imageId)
+        analyze(doctor, "12656R", imageId)
                 .andExpect(status().isBadGateway())
                 .andExpect(jsonPath("$.code").value("MODEL_INFERENCE_FAILED"));
         assertThat(runs.findByImageId(imageId).getFirst().getStatus()).isEqualTo("rejected");
@@ -130,10 +134,10 @@ class CellularAnalysisIntegrationTests extends IntegrationTestSupport {
 
     @Test
     void onlyTheUploaderMayAnalyseAnImage() throws Exception {
-        UUID imageId = uploadedImage(doctor, "CASE-1");
+        UUID imageId = uploadedImage(doctor, "12656R");
         AppUser other = createUser("dr.other.cellular", RoleName.DOCTOR);
 
-        analyze(other, "CASE-1", imageId)
+        analyze(other, "12656R", imageId)
                 .andExpect(status().isForbidden())
                 .andExpect(jsonPath("$.code").value("TISSUE_ACCESS_DENIED"));
         verifyNoInteractions(mlServiceClient);
@@ -141,8 +145,8 @@ class CellularAnalysisIntegrationTests extends IntegrationTestSupport {
 
     @Test
     void imageOfAnotherCaseIsRefused() throws Exception {
-        UUID imageId = uploadedImage(doctor, "CASE-1");
-        analyze(doctor, "CASE-2", imageId)
+        UUID imageId = uploadedImage(doctor, "12656R");
+        analyze(doctor, "12657L", imageId)
                 .andExpect(status().isForbidden())
                 .andExpect(jsonPath("$.code").value("TISSUE_ACCESS_DENIED"));
         verifyNoInteractions(mlServiceClient);
@@ -151,7 +155,7 @@ class CellularAnalysisIntegrationTests extends IntegrationTestSupport {
     @Test
     void nonClinicalRoleCannotRunCellularAnalysis() throws Exception {
         AppUser support = createUser("support.cellular", RoleName.SUPPORT_STAFF);
-        analyze(support, "CASE-1", UUID.randomUUID()).andExpect(status().isForbidden());
+        analyze(support, "12656R", UUID.randomUUID()).andExpect(status().isForbidden());
         verifyNoInteractions(mlServiceClient);
     }
 
@@ -161,7 +165,7 @@ class CellularAnalysisIntegrationTests extends IntegrationTestSupport {
                 Map.of("<=4", 0.9, "5", 20.2, "6", 64.59, "7", 13.9, ">=8", 0.4), 1);
         List<QualityFlag> flags = reliable ? List.of()
                 : List.of(new QualityFlag("error", "too_few_cells", "only 12 complete cells (< 30): biomarkers not reliable"));
-        return new CellularAnalyzeResponse(null, "CASE-1", "completed", "Research tool for a specialist.",
+        return new CellularAnalyzeResponse(null, "12656R", "completed", "Research tool for a specialist.",
                 new ImageValidation("VALID_CORNEAL_IMAGE", true, 1296, 972, "JPEG"),
                 "roi_efficientnet_b0_stardist_onnx_v1", 0.796, true, bm,
                 new CellularRoi("cnn", 0.72, 0.78, 0.78), flags, reliable,

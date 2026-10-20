@@ -37,7 +37,7 @@ class RoleBasedAccessIntegrationTests extends IntegrationTestSupport {
 
     /** For requests refused before the image is looked up; the id does not exist. */
     private static final String ANALYZE_BODY = """
-            {"caseId":"CASE-1","imageId":"%s","clinicalFeatures":{}}
+            {"caseId":"12656R","imageId":"%s","clinicalFeatures":{}}
             """.formatted(UUID.randomUUID());
 
     @MockitoBean
@@ -49,10 +49,13 @@ class RoleBasedAccessIntegrationTests extends IntegrationTestSupport {
     @Autowired
     private AnalysisImageRepository imageRepository;
 
+    @Autowired
+    private com.cornealai.backend.cases.service.DonorCaseService donorCases;
+
     @BeforeEach
     void stubMlService() {
         when(mlServiceClient.analyze(any(), any(), any(), any()))
-                .thenReturn(new AnalyzeResponse(null, "CASE-1", "partial", null, null,
+                .thenReturn(new AnalyzeResponse(null, "12656R", "partial", null, null,
                         new GradingResult("completed", null, "A", "hybrid_random_forest_24_resnet50", null, null, null,
                                 null, false, "Grade from the 24-feature model."),
                         null, null));
@@ -61,11 +64,13 @@ class RoleBasedAccessIntegrationTests extends IntegrationTestSupport {
 
     /** Stores an image record owned by {@code owner} and returns an analysis body referencing it. */
     private String analyzeBodyFor(AppUser owner) throws Exception {
+        var donorCase = donorCases.findOrCreate(com.cornealai.backend.cases.TissueNumber.parse("12656R"), owner.getId());
         AnalysisImage image = new AnalysisImage();
         image.setId(UUID.randomUUID());
-        image.setCaseId("CASE-1");
+        image.setCaseId(donorCase.getId().toString());
+        image.setDonorCaseId(donorCase.getId());
         image.setBucket("test-bucket");
-        image.setObjectPath("CASE-1/" + image.getId() + ".jpg");
+        image.setObjectPath("legacy/" + image.getId() + ".jpg");
         image.setContentType("image/jpeg");
         image.setSizeBytes(IMAGE_BYTES.length);
         image.setSha256(HexFormat.of().formatHex(MessageDigest.getInstance("SHA-256").digest(IMAGE_BYTES)));
@@ -74,7 +79,7 @@ class RoleBasedAccessIntegrationTests extends IntegrationTestSupport {
         image.setUploadedBy(owner.getId());
         imageRepository.saveAndFlush(image);
         return """
-                {"caseId":"CASE-1","imageId":"%s","clinicalFeatures":{}}
+                {"caseId":"12656R","imageId":"%s","clinicalFeatures":{}}
                 """.formatted(image.getId());
     }
 
@@ -263,7 +268,7 @@ class RoleBasedAccessIntegrationTests extends IntegrationTestSupport {
         mockMvc.perform(post("/api/analysis").header(HttpHeaders.AUTHORIZATION, bearer(doctor))
                         .contentType(MediaType.APPLICATION_JSON).content(analyzeBodyFor(doctor)))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.caseId").value("CASE-1"));
+                .andExpect(jsonPath("$.caseId").value("12656R"));
     }
 
     @Test

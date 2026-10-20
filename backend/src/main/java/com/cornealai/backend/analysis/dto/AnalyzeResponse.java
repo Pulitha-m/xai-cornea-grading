@@ -17,6 +17,10 @@ public record AnalyzeResponse(
         RecommendationResult recommendation
 ) {
 
+    public AnalyzeResponse withCaseId(String id) {
+        return new AnalyzeResponse(analysisId, id, status, imageValidation, cellular, grading, disease, recommendation);
+    }
+
     public AnalyzeResponse withAnalysisId(UUID id) {
         return new AnalyzeResponse(id, caseId, status, imageValidation, cellular, grading, disease, recommendation);
     }

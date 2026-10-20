@@ -7,6 +7,11 @@ spring:
     password: ""
 
 app:
+  crypto:
+    # Test-only keys; never used outside the test profile.
+    data-key-id: test1
+    data-key: dGVzdC1vbmx5LWRhdGEta2V5LTMyLWJ5dGVzLWxvbmc=
+    blind-index-key: dGVzdC1vbmx5LWJsaW5kLWluZGV4LWtleS0zMmJ5dGU=
   security:
     jwt:
       # Test-only key; never used outside the test profile.

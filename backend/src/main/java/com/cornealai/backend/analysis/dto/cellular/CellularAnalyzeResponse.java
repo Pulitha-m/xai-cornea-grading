@@ -29,6 +29,12 @@ public record CellularAnalyzeResponse(
         Double seconds
 ) {
 
+    public CellularAnalyzeResponse withCaseId(String id) {
+        return new CellularAnalyzeResponse(analysisId, id, status, message, imageValidation, method, umPerPx,
+                validatedImageSize, biomarkers, roi, qualityFlags, reliable, uncertainty, evidence, reliability,
+                images, seconds);
+    }
+
     public CellularAnalyzeResponse withAnalysisId(UUID id) {
         return new CellularAnalyzeResponse(id, caseId, status, message, imageValidation, method, umPerPx,
                 validatedImageSize, biomarkers, roi, qualityFlags, reliable, uncertainty, evidence, reliability,

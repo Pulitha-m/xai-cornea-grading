@@ -69,19 +69,23 @@ class GradingAnalysisIntegrationTests extends IntegrationTestSupport {
 
     @Test
     void gradingSendsStoredBytesAndRecordsTheRun() throws Exception {
-        UUID imageId = uploadedImage(doctor, "CASE-1");
-        when(mlServiceClient.analyzeGrading(eq("CASE-1"), anyString(), any(), anyString())).thenReturn(completed());
+        UUID imageId = uploadedImage(doctor, "12656R");
+        when(mlServiceClient.analyzeGrading(anyString(), anyString(), any(), anyString())).thenReturn(completed());
 
-        analyze(doctor, "CASE-1", imageId)
+        analyze(doctor, "12656R", imageId)
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.analysisId").isNotEmpty())
                 .andExpect(jsonPath("$.grade").value("A"))
                 .andExpect(jsonPath("$.ecdReference.grade").value("A"))
                 .andExpect(jsonPath("$.explanation.imageMap.supportingPng").value("iVBORw0KGgo="));
 
-        verify(mlServiceClient).analyzeGrading(eq("CASE-1"), contains("\"Stroma_Has_Scar\":null"), eq(stored), anyString());
+        verify(mlServiceClient).analyzeGrading(anyString(), contains("\"Stroma_Has_Scar\":null"), eq(image()), anyString());  // decrypted, as uploaded
         GradingAnalysisRun run = runs.findByImageId(imageId).getFirst();
         assertThat(run.getStatus()).isEqualTo("completed");
+        // Linked to the donor case by UUID; the tissue ID is not stored in the run.
+        assertThat(run.getDonorCaseId()).isNotNull();
+        assertThat(run.getCaseId()).isEqualTo(run.getDonorCaseId().toString());
+        assertThat(run.getResultJson()).doesNotContain("12656R");
         assertThat(run.getGrade()).isEqualTo("A");
         assertThat(run.getEcd()).isEqualTo(2400.0);
         assertThat(run.getClinicalFeaturesJson()).contains("\"ECD_CD_cells_per_mm2\":2400");
@@ -91,12 +95,12 @@ class GradingAnalysisIntegrationTests extends IntegrationTestSupport {
 
     @Test
     void mlServiceRejectionIsRecordedAndReturnedWithItsCode() throws Exception {
-        UUID imageId = uploadedImage(doctor, "CASE-1");
+        UUID imageId = uploadedImage(doctor, "12656R");
         when(mlServiceClient.analyzeGrading(anyString(), anyString(), any(), anyString()))
                 .thenThrow(new AnalysisRejectedException(HttpStatus.UNPROCESSABLE_CONTENT, "INVALID_FEATURE_TYPE", "CV",
                         "CV must be a number (%).", Map.of("CV", "CV must be a number (%).")));
 
-        analyze(doctor, "CASE-1", imageId)
+        analyze(doctor, "12656R", imageId)
                 .andExpect(status().isUnprocessableContent())
                 .andExpect(jsonPath("$.code").value("INVALID_FEATURE_TYPE"))
                 .andExpect(jsonPath("$.fieldErrors.CV").value("CV must be a number (%)."));
@@ -108,22 +112,22 @@ class GradingAnalysisIntegrationTests extends IntegrationTestSupport {
 
     @Test
     void responseWithoutAGradeIsRejected() throws Exception {
-        UUID imageId = uploadedImage(doctor, "CASE-1");
-        GradingAnalyzeResponse noGrade = new GradingAnalyzeResponse(null, "CASE-1", "completed", null, null, null,
+        UUID imageId = uploadedImage(doctor, "12656R");
+        GradingAnalyzeResponse noGrade = new GradingAnalyzeResponse(null, "12656R", "completed", null, null, null,
                 null, null, null, null, null, null, null, null);
         when(mlServiceClient.analyzeGrading(anyString(), anyString(), any(), anyString())).thenReturn(noGrade);
 
-        analyze(doctor, "CASE-1", imageId)
+        analyze(doctor, "12656R", imageId)
                 .andExpect(status().isBadGateway())
                 .andExpect(jsonPath("$.code").value("MODEL_INFERENCE_FAILED"));
     }
 
     @Test
     void onlyTheUploaderMayGradeAnImage() throws Exception {
-        UUID imageId = uploadedImage(doctor, "CASE-1");
+        UUID imageId = uploadedImage(doctor, "12656R");
         AppUser other = createUser("dr.other.grading", RoleName.DOCTOR);
 
-        analyze(other, "CASE-1", imageId)
+        analyze(other, "12656R", imageId)
                 .andExpect(status().isForbidden())
                 .andExpect(jsonPath("$.code").value("TISSUE_ACCESS_DENIED"));
         verifyNoInteractions(mlServiceClient);
@@ -132,14 +136,14 @@ class GradingAnalysisIntegrationTests extends IntegrationTestSupport {
     @Test
     void nonClinicalRoleCannotRunGrading() throws Exception {
         AppUser support = createUser("support.grading", RoleName.SUPPORT_STAFF);
-        analyze(support, "CASE-1", UUID.randomUUID()).andExpect(status().isForbidden());
+        analyze(support, "12656R", UUID.randomUUID()).andExpect(status().isForbidden());
         verifyNoInteractions(mlServiceClient);
     }
 
     private static GradingAnalyzeResponse completed() {
         EcdReference reference = new EcdReference("completed", "A", "ecd_threshold_tree", 2400.0,
                 new EcdBand(2232.0, 2497.0), Map.of("A", 0.9, "B", 0.1), 94, false, "Grade based on ECD only.");
-        return new GradingAnalyzeResponse(null, "CASE-1", "completed", null, "A", "hybrid_random_forest_24_resnet50",
+        return new GradingAnalyzeResponse(null, "12656R", "completed", null, "A", "hybrid_random_forest_24_resnet50",
                 Map.of("A+", 0.1, "A", 0.7, "B", 0.2), Map.of("ECD_CD_cells_per_mm2", 2400.0),
                 List.of("Stroma_Has_Scar"), List.of(), reference, false, "Specialist confirmation required.",
                 new GradingExplanation("tree_shap_path_dependent", "A", 0.35, 0.7,

@@ -31,6 +31,11 @@ public record GradingAnalyzeResponse(
         GradingExplanation explanation
 ) {
 
+    public GradingAnalyzeResponse withCaseId(String id) {
+        return new GradingAnalyzeResponse(analysisId, id, status, imageValidation, grade, method, modelProbabilities,
+                featuresUsed, featuresNotRecorded, warnings, ecdReference, reviewRequired, message, explanation);
+    }
+
     public GradingAnalyzeResponse withAnalysisId(UUID id) {
         return new GradingAnalyzeResponse(id, caseId, status, imageValidation, grade, method, modelProbabilities,
                 featuresUsed, featuresNotRecorded, warnings, ecdReference, reviewRequired, message, explanation);

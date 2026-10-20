@@ -50,6 +50,15 @@ app:
       service-key: ${SUPABASE_SERVICE_ROLE_KEY:}
       # Must be a private bucket; the backend refuses a public one.
       bucket: ${SUPABASE_STORAGE_BUCKET:specular-images}
+  crypto:
+    # Field-level encryption of sensitive data (AES-256-GCM). Server-only secrets: never commit or log them.
+    # Generate each with: openssl rand -base64 32
+    data-key-id: ${DATA_ENCRYPTION_KEY_ID:k1}
+    data-key: ${DATA_ENCRYPTION_KEY}
+    # Keys replaced by rotation, still needed to decrypt older values:
+    # APP_CRYPTO_RETIREDDATAKEYS_<id>=<base64 key>
+    # Separate from the data key; used for exact-match lookups (blind indexes).
+    blind-index-key: ${BLIND_INDEX_KEY}
   security:
     jwt:
       # Base64-encoded HMAC key, at least 256 bits. Generate with: openssl rand -base64 48
