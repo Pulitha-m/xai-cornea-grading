@@ -15,6 +15,7 @@ Part B (post-transplant follow-up; simulated cohort until real follow-up data ar
     run_risk           P5: Cox, gradient-boosted Cox, DeepSurv per endpoint, calibration, test once
     run_followup_explain  P6: SHAP reasons and counterfactuals for trajectory and risk
     run_followup       P7: alert level, next visit (3/6/12 months) and review prompts, outcome check
+    run_followup_robustness  do the P4 / P5 conclusions hold under other simulation assumptions?
 """
 import json
 
@@ -476,6 +477,37 @@ def _write_baselines_md(path: Path, r: dict) -> None:
     md += ["", "Times for risk are months after the 12-month visit. AUC is the time-dependent (IPCW) AUC; "
            "Brier is the IPCW Brier score (lower is better). These are the scores P4 and P5 must beat."]
     path.write_text("\n".join(md) + "\n", encoding="utf-8")
+
+
+def run_followup_robustness(cfg: dict, repeats: int = 2) -> dict:
+    """Do the P4 / P5 conclusions hold when the simulation assumptions change?"""
+    from recommendation.evaluation import robustness
+
+    out = Path(cfg["paths"]["outputs"])
+    tj, rk = out / "trajectory" / "trajectory_results.json", out / "risk" / "risk_results.json"
+    gbm = json.loads(tj.read_text())["tuning"]["selected"] if tj.exists() else {"num_leaves": 4, "n_estimators": 200}
+    pen = json.loads(rk.read_text())["settings"]["cox_clinical_penalty"] if rk.exists() else 10.0
+    res = robustness.run(gbm, pen, repeats=repeats)
+    d = out / "robustness"
+    d.mkdir(parents=True, exist_ok=True)
+    (d / "robustness_results.json").write_text(json.dumps(res, indent=2), encoding="utf-8")
+    df = pd.DataFrame(res["scenarios"]).T
+    md = ["# Robustness of the post-transplant conclusions", "",
+          "Each scenario simulates a new cohort under different assumptions and repeats the core comparisons "
+          f"(repeated CV, settings from P4 / P5: {res['settings']}).", "",
+          "| Scenario | grafts | failures | MAE baseline | MAE gradient boosting | gain | Cox C (failure) | DeepSurv C (failure) "
+          "| Cox C (low ECD) | DeepSurv C (low ECD) | literature patterns |", "|---" * 11 + "|"]
+    for name, r in res["scenarios"].items():
+        md.append(f"| {name} | {r['grafts']} | {r['failures']} | {r['trajectory_mae_baseline']:.0f} | "
+                  f"{r['trajectory_mae_gbm']:.0f} | {r['gbm_gain_pct']:.0f}% | {r['graft_failure_cox_c_index']:.3f} | "
+                  f"{r['graft_failure_deepsurv_c_index']:.3f} | {r['low_ecd_cox_c_index']:.3f} | "
+                  f"{r['low_ecd_deepsurv_c_index']:.3f} | {r['literature_patterns_met']} |")
+    md += ["", f"Gradient boosting beats the best baseline in {res['gbm_beats_baseline_in']} scenarios "
+           f"(gain {res['gbm_gain_pct_range'][0]:.0f}-{res['gbm_gain_pct_range'][1]:.0f}%). "
+           f"The Cox model is as good as DeepSurv (within 0.01 C-index or better) in {res['cox_as_good_as_deepsurv_in']}."]
+    (d / "robustness_summary.md").write_text("\n".join(md) + "\n", encoding="utf-8")
+    res["table"] = df
+    return res
 
 
 def run_trajectory(cfg: dict, with_curve: bool = True) -> dict:
