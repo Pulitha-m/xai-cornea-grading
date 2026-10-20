@@ -17,6 +17,7 @@ From ml/:
     uv run python -m recommendation.main followup-baselines  # P3: trajectory and risk baselines
     uv run python -m recommendation.main trajectory     # P4: GBM / LSTM vs baselines, learning curve
     uv run python -m recommendation.main risk           # P5: Cox / boosted Cox / DeepSurv, calibration
+    uv run python -m recommendation.main followup-explain  # P6: SHAP reasons and counterfactuals
 """
 import argparse
 
@@ -39,6 +40,7 @@ TASKS = {
     "followup-eda": pipeline.run_followup_eda,
     "followup-data": pipeline.run_followup_dataset,
     "followup-baselines": pipeline.run_followup_baselines,
+    "followup-explain": pipeline.run_followup_explain,
     "trajectory": pipeline.run_trajectory,
     "risk": pipeline.run_risk,
     "followup": pipeline.run_followup,
@@ -150,6 +152,8 @@ def main() -> None:
         for line in log:
             print(" OK", line)
         print(f"\nReport: {path}")
+    elif a.task == "followup-explain":
+        _print_followup_explain(pipeline.run_followup_explain(cfg), cfg)
     elif a.task == "risk":
         _print_risk(pipeline.run_risk(cfg), cfg)
     elif a.task == "trajectory":
@@ -219,6 +223,36 @@ def _print_explain(res: dict, cfg: dict) -> None:
                   f"{c['Cand_Days_In_Storage']} d in storage: {c['Why']}{tag}")
     out = f"{cfg['paths']['outputs']}/explain"
     print(f"\nSaved: {out}/shap_summary.md, {out}/shap_global_reasons.png, {out}/explanations.xlsx")
+
+
+def _print_followup_explain(res: dict, cfg: dict) -> None:
+    print(f"\nData source: {res['source']}")
+    print("\n1. Sanity checks:")
+    for c in res["checks"]:
+        print(f"   {'ok  ' if c['ok'] else 'FAIL'} {c['check']:<58} {c['detail']}")
+    print("\n2. What drives the predictions (share of mean |SHAP|):")
+    for name, vals in res["global_importance"].items():
+        s = pd.Series(vals)
+        s = (s / s.sum() * 100).sort_values(ascending=False)
+        print(f"   {name:<24} " + ", ".join(f"{k} {v:.0f}%" for k, v in s.items() if v >= 1))
+    print("\n3. Example test grafts:")
+    for e in res["examples"]:
+        print(f"\n   {e['graft']} ({e['procedure']}, 12-month ECD {e['ECD_12m']:.0f})")
+        print(f"     predicted 60-month ECD {e['predicted_ECD_60m']}: {e['why_trajectory']}")
+        if e["trajectory_counterfactual"]:
+            print(f"       {e['trajectory_counterfactual']}")
+        for ep in ("graft_failure", "low_ecd"):
+            d = e[ep]
+            if "note" in d:
+                print(f"     {ep}: {d['note']}")
+                continue
+            print(f"     {ep} risk {d['risk_24m']:.0%}: {d['why']}")
+            if d["counterfactual"]:
+                print(f"       {d['counterfactual']}")
+    out = f"{cfg['paths']['outputs']}/followup_explain"
+    print(f"\nAll checks pass: {res['all_checks_pass']}")
+    print(f"Saved: {out}/followup_explain_summary.md, {out}/followup_explanations.json, "
+          f"{out}/followup_reason_importance.png")
 
 
 def _print_risk(res: dict, cfg: dict) -> None:

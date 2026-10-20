@@ -13,7 +13,8 @@ Part B (post-transplant follow-up; simulated cohort until real follow-up data ar
     run_followup_baselines  P3: trajectory baselines (MAE/RMSE) and risk baselines (C-index, AUC, Brier)
     run_trajectory     P4: GBM and LSTM vs baselines, learning curve, test once, save the chosen model
     run_risk           P5: Cox, gradient-boosted Cox, DeepSurv per endpoint, calibration, test once
-    run_followup       planned (P6-P7)
+    run_followup_explain  P6: SHAP reasons and counterfactuals for trajectory and risk
+    run_followup       planned (P7)
 """
 import json
 from pathlib import Path
@@ -612,6 +613,75 @@ def _write_risk_md(path: Path, r: dict, figs: list) -> None:
                for c in e["calibration_24m"]]
         md.append("")
     md += ["Times are months after the 12-month visit. Figures: " + ", ".join(figs)]
+    path.write_text("\n".join(md) + "\n", encoding="utf-8")
+
+
+def run_followup_explain(cfg: dict) -> dict:
+    """P6: SHAP reasons and descriptive counterfactuals for the chosen trajectory and risk models."""
+    import joblib
+
+    from recommendation.data_prep.followup_dataset import load
+    from recommendation.explain import followup_explain
+
+    paths = cfg["paths"]
+    models = Path(paths["models"])
+    table, _ = load(paths["followup_dataset"], models / "followup_preprocessor.json")
+    res = followup_explain.run(table, joblib.load(models / "followup_trajectory.joblib"),
+                               joblib.load(models / "followup_risk.joblib"))
+    res["source"] = str(table["data_source"].iloc[0])
+    out = Path(paths["outputs"]) / "followup_explain"
+    out.mkdir(parents=True, exist_ok=True)
+    (out / "followup_explanations.json").write_text(json.dumps(res, indent=2, default=str), encoding="utf-8")
+    figs = [_followup_importance_figure(res, out)]
+    _write_followup_explain_md(out / "followup_explain_summary.md", res, figs)
+    return res
+
+
+def _followup_importance_figure(res: dict, out: Path) -> str:
+    import matplotlib.pyplot as plt
+
+    from recommendation.data_prep.eda import SURFACE, _save, _style
+
+    imp = res["global_importance"]
+    fig, axes = plt.subplots(1, len(imp), figsize=(12, 3.8), facecolor=SURFACE)
+    for ax, (name, vals) in zip(axes, imp.items()):
+        s = pd.Series(vals).sort_values()
+        s = s[s > 0]
+        ax.barh(s.index, s.values / s.sum() * 100, color="#2a78d6")
+        _style(ax, name.replace("_", " "), "share of explanation (%)")
+        ax.grid(axis="x", color="#e1e0d9")
+    fig.text(0.01, 0.005, f"Data source: {res['source']}; mean |SHAP| per reason", fontsize=7, color="#898781")
+    return _save(fig, out, "followup_reason_importance.png")
+
+
+def _write_followup_explain_md(path: Path, r: dict, figs: list) -> None:
+    md = ["# P6 Explanations (post-transplant models)", "", f"Data source: {r['source']}. Trajectory model: "
+          f"{r['trajectory_model']}; risk models: {r['risk_models']}.", "",
+          "## Sanity checks", "", "| Check | Result | Detail |", "|---|---|---|"]
+    md += [f"| {c['check']} | {'pass' if c['ok'] else '**FAIL**'} | {c['detail']} |" for c in r["checks"]]
+    md += ["", "## What drives the predictions (share of mean |SHAP|)", ""]
+    for name, vals in r["global_importance"].items():
+        s = pd.Series(vals)
+        s = (s / s.sum() * 100).sort_values(ascending=False)
+        md.append(f"- **{name.replace('_', ' ')}**: " + ", ".join(f"{k} {v:.0f}%" for k, v in s.items() if v >= 1))
+    md += ["", "## Example test grafts", ""]
+    for e in r["examples"]:
+        md += [f"### {e['graft']} ({e['procedure']}, 12-month ECD {e['ECD_12m']:.0f})", "",
+               f"- Predicted 60-month ECD {e['predicted_ECD_60m']}: {e['why_trajectory']}"]
+        if e["trajectory_counterfactual"]:
+            md.append(f"  - {e['trajectory_counterfactual']}")
+        for ep in ("graft_failure", "low_ecd"):
+            d = e[ep]
+            if "note" in d:
+                md.append(f"- {ep.replace('_', ' ')}: {d['note']}")
+                continue
+            md.append(f"- {ep.replace('_', ' ')} risk by 24 months after the 12-month visit {d['risk_24m']:.0%}: {d['why']}")
+            if d["counterfactual"]:
+                md.append(f"  - {d['counterfactual']}")
+        md.append("")
+    md += ["Counterfactuals are descriptive (they explain the model); the 12-month ECD is a measurement, "
+           "not a treatment choice. Risk percentages come from a model whose calibration is not yet "
+           "corrected (see P5).", "", "Figures: " + ", ".join(figs)]
     path.write_text("\n".join(md) + "\n", encoding="utf-8")
 
 

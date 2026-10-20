@@ -45,6 +45,16 @@ ID_COLS = ["graft_id", "data_source", "split"]
 
 
 # ---------------------------------------------------------------- 1-3 landmark table
+def add_derived(t: pd.DataFrame) -> pd.DataFrame:
+    """Inputs computed from the visit values (in place): cell loss by 12 months and the
+    early log-ECD slope. Recomputed whenever a visit value changes (e.g. counterfactuals)."""
+    t["loss_12m"] = 1 - t["ECD_12m"] / t["baseline_ECD"]
+    first = t["ECD_3m"].fillna(t["ECD_6m"])
+    first_month = np.where(t["ECD_3m"].notna(), 3, 6)
+    t["log_ecd_slope_3_12"] = (np.log(t["ECD_12m"]) - np.log(first)) / ((LANDMARK - first_month) / 12)
+    return t
+
+
 def landmark_table(grafts: pd.DataFrame, visits: pd.DataFrame) -> pd.DataFrame:
     """One row per graft eligible at the 12-month landmark: inputs + targets (unscaled)."""
     seen_12 = set(visits.loc[visits["months_after_surgery"] == LANDMARK, "graft_id"])
@@ -57,10 +67,7 @@ def landmark_table(grafts: pd.DataFrame, visits: pd.DataFrame) -> pd.DataFrame:
     for m in INPUT_MONTHS:
         for k in ("ECD", "CV", "HEX"):
             t[f"{k}_{m}m"] = wide[(k, m)].reindex(t.index) if (k, m) in wide.columns else np.nan
-    t["loss_12m"] = 1 - t["ECD_12m"] / t["baseline_ECD"]
-    first = t["ECD_3m"].fillna(t["ECD_6m"])
-    first_month = np.where(t["ECD_3m"].notna(), 3, 6)
-    t["log_ecd_slope_3_12"] = (np.log(t["ECD_12m"]) - np.log(first)) / ((LANDMARK - first_month) / 12)
+    add_derived(t)
     rej = g.set_index("graft_id")
     t["rejection_by_12m"] = (rej["rejection_episode"].astype(bool) & (rej["rejection_month"] <= LANDMARK)).astype(float)
 
