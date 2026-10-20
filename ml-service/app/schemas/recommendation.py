@@ -79,3 +79,72 @@ class MatchResponse(BaseModel):
     model: str = "mcda-baseline-v1"
     model_summary: dict[str, float | str] | None = None
     disclaimer: str = "Decision support only. The final allocation decision rests with the clinician."
+
+
+# ---------------------------------------------------------------- post-transplant follow-up (12-month visit)
+class FollowupVisit(BaseModel):
+    """Specular microscopy at one follow-up visit."""
+    ecd: float = Field(..., gt=0, le=5000, description="Endothelial cell density, cells/mm2")
+    cv: float = Field(..., ge=0, le=100, description="Coefficient of variation of cell area, %")
+    hex: float = Field(..., ge=0, le=100, description="Hexagonality, %")
+
+
+class FollowupRequest(BaseModel):
+    graft_id: str = Field(..., description="Study code for the graft, e.g. G0012")
+    procedure: Literal["PK", "DSEK", "DMEK"]
+    indication: str = Field(..., description="e.g. Fuchs/Endothelial, Bullous keratopathy, Failed/Re-graft, Other")
+    donor_age: float = Field(..., ge=0, le=100)
+    baseline_ecd: float = Field(..., gt=0, le=5000, description="Donor ECD before surgery")
+    baseline_cv: float = Field(..., ge=0, le=100)
+    baseline_hex: float = Field(..., ge=0, le=100)
+    visit_3m: FollowupVisit | None = Field(None, description="May be missing (missed visit)")
+    visit_6m: FollowupVisit
+    visit_12m: FollowupVisit
+    rejection_by_12m: bool = Field(False, description="Any rejection episode in the first 12 months")
+
+
+class PredictedEcd(BaseModel):
+    months: int
+    ecd: int
+    low: int
+    high: int
+
+
+class RiskEstimate(BaseModel):
+    outcome: Literal["graft_failure", "low_ecd"]
+    within_months: int = Field(..., description="Months after this (12-month) visit")
+    probability: float
+
+
+class TrajectoryReason(BaseModel):
+    reason: str
+    effect_pct: float = Field(..., description="% change this reason makes to the predicted 60-month ECD")
+
+
+class RiskReason(BaseModel):
+    reason: str
+    hazard_ratio: float = Field(..., description="> 1 raises the risk compared with the average graft")
+
+
+class FollowupReasons(BaseModel):
+    trajectory: list[TrajectoryReason]
+    graft_failure: list[RiskReason]
+    low_ecd: list[RiskReason]
+
+
+class FollowupResponse(BaseModel):
+    graft_id: str
+    alert: Literal["green", "amber", "red"]
+    next_visit_months: int
+    rules_fired: list[str]
+    actions: list[str] = Field(..., description="Review prompts, not treatment instructions")
+    predicted_ecd: list[PredictedEcd]
+    band_level: str
+    risk: list[RiskEstimate]
+    reasons: FollowupReasons
+    counterfactuals: list[str] = Field(..., description="Descriptive: what would change the risk")
+    model: str
+    model_version: str
+    rules_version: str | None
+    data_source: str
+    disclaimer: str

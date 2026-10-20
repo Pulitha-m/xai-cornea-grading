@@ -60,6 +60,9 @@ ml-service/models/*
 # Recommendation matching ranker: logistic coefficients and aggregate scaling only (no tissue-level data).
 # Regenerate with: cd ml; uv run python -m recommendation.main export
 !ml-service/models/recommendation_ranker.json
+# Recommendation follow-up model (12-month visit): tree / Cox parameters and aggregate statistics only.
+# Regenerate with: cd ml; uv run python -m recommendation.main followup-export
+!ml-service/models/recommendation_followup.json
 !ml-service/models/domain_validator/
 ml-service/models/domain_validator/*
 !ml-service/models/domain_validator/*.json

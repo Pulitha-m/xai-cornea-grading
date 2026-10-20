@@ -19,6 +19,7 @@ From ml/:
     uv run python -m recommendation.main risk           # P5: Cox / boosted Cox / DeepSurv, calibration
     uv run python -m recommendation.main followup-explain  # P6: SHAP reasons and counterfactuals
     uv run python -m recommendation.main followup       # P7: alert, next visit, review prompts
+    uv run python -m recommendation.main followup-export  # P8: follow-up models -> ml-service JSON
 """
 import argparse
 
@@ -42,6 +43,7 @@ TASKS = {
     "followup-data": pipeline.run_followup_dataset,
     "followup-baselines": pipeline.run_followup_baselines,
     "followup-explain": pipeline.run_followup_explain,
+    "followup-export": None,
     "trajectory": pipeline.run_trajectory,
     "risk": pipeline.run_risk,
     "followup": pipeline.run_followup,
@@ -153,6 +155,24 @@ def main() -> None:
         for line in log:
             print(" OK", line)
         print(f"\nReport: {path}")
+    elif a.task == "followup-export":
+        from pathlib import Path
+
+        from recommendation.data_prep.followup_dataset import load
+        from recommendation.followup.export import export_followup
+
+        repo_root = Path(__file__).resolve().parents[2]
+        out = Path(a.out) if a.out else repo_root / "ml-service" / "models" / "recommendation_followup.json"
+        models = Path(cfg["paths"]["models"])
+        table, _ = load(cfg["paths"]["followup_dataset"], models / "followup_preprocessor.json")
+        b = export_followup(models, table, out, cfg["followup"].get("alerts"), Path(cfg["paths"]["outputs"]))
+        print(f"\nExported {b['name']} ({b['version']}, data source: {b['data_source']})")
+        print(f"  trajectory: {b['trajectory']['name']}, {len(b['trajectory']['trees'])} trees, "
+              f"{len(b['trajectory']['features'])} inputs")
+        for ep, r in b["risk"].items():
+            print(f"  risk {ep}: {r['name']}, {len(r['features'])} inputs, recalibrated at {sorted(r['maps'])} months")
+        print(f"  rules: {b['rules'].get('version')}; summary: {b['summary']}")
+        print(f"Saved: {out} ({out.stat().st_size / 1024:.0f} KB)")
     elif a.task == "followup":
         _print_followup(pipeline.run_followup(cfg), cfg)
     elif a.task == "followup-explain":
