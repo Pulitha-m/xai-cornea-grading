@@ -3,7 +3,17 @@ import { HomeRedirect } from "@/components/auth/HomeRedirect"
 import { ProtectedRoute } from "@/components/auth/ProtectedRoute"
 import { RoleGuard } from "@/components/auth/RoleGuard"
 import { AppLayout } from "@/components/layout/AppLayout"
-import { ANALYSIS_PATH, AUDIT_PATH, CASES_PATH, CELLULAR_PATH, DISEASE_PATH, GRADING_PATH, PLANNED_MODULES } from "@/lib/roles"
+import {
+    ANALYSIS_PATH,
+    AUDIT_PATH,
+    CASES_PATH,
+    CELLULAR_PATH,
+    DISEASE_PATH,
+    FOLLOWUP_PATH,
+    GRADING_PATH,
+    MATCHING_PATH,
+    PLANNED_MODULES,
+} from "@/lib/roles"
 import { AnalysisPage } from "@/pages/AnalysisPage"
 import { AuditLogPage } from "@/pages/AuditLogPage"
 import { CaseWorkspacePage } from "@/pages/CaseWorkspacePage"

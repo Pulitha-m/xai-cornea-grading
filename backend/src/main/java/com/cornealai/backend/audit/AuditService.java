@@ -32,6 +32,9 @@ public class AuditService {
     public static final String SIGNOFF_VIEW = "SIGNOFF_VIEW";
     public static final String CANDIDATES_EXPORT = "CANDIDATES_EXPORT";
     public static final String CASES_IMPORT = "CASES_IMPORT";
+    public static final String GRAFT_ALLOCATE = "GRAFT_ALLOCATE";
+    public static final String GRAFT_UPDATE = "GRAFT_UPDATE";
+    public static final String FOLLOWUP_RUN = "FOLLOWUP_RUN";
 
     private static final int MAX_LIMIT = 500;
 

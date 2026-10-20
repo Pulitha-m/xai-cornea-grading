@@ -39,6 +39,7 @@ public class RecommendationAnalysisService {
 
     public MatchResponse match(MatchRequest request, Long userId) {
         RecommendationAnalysisRun run = newRun(RecommendationAnalysisRun.MATCH, request.request().requestId(), userId);
+        run.setInputsJson(objectMapper.writeValueAsString(request));
         return record(run, () -> {
             MatchResponse result = mlServiceClient.recommendMatch(request);
             if (result == null || result.ranked() == null) {
@@ -53,6 +54,7 @@ public class RecommendationAnalysisService {
 
     public FollowupResponse followup(FollowupRequest request, Long userId) {
         RecommendationAnalysisRun run = newRun(RecommendationAnalysisRun.FOLLOWUP, request.graftId(), userId);
+        run.setInputsJson(objectMapper.writeValueAsString(request));
         return record(run, () -> {
             FollowupResponse result = mlServiceClient.recommendFollowup(request);
             if (result == null || result.alert() == null || result.nextVisitMonths() == null) {
@@ -85,6 +87,15 @@ public class RecommendationAnalysisService {
             run.setStatus("rejected");
             run.setErrorCode(e.getCode());
             runs.save(run);
+            throw e;
+        } catch (RuntimeException e) {
+            run.setStatus("failed");
+            run.setErrorCode("INTERNAL_ERROR");
+            try {
+                runs.save(run);
+            } catch (RuntimeException ignored) {
+                // The database itself failed; the original error is what matters.
+            }
             throw e;
         }
     }

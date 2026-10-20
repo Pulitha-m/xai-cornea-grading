@@ -63,6 +63,10 @@ public class RecommendationAnalysisRun {
     @Column(name = "result_json", columnDefinition = "TEXT")
     private String resultJson;
 
+    /** The request the run was given (JSON). */
+    @Column(name = "inputs_json", columnDefinition = "TEXT")
+    private String inputsJson;
+
     @Column(name = "created_at", nullable = false, updatable = false)
     private Instant createdAt;
 

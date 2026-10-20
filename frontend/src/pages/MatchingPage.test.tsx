@@ -4,6 +4,10 @@ import { beforeEach, describe, expect, it, vi } from "vitest"
 import { recommendMatch, type MatchResponse } from "@/api/recommendation"
 import { makeAuth, makeUser, renderApp } from "@/test/auth-test-utils"
 
+vi.mock(import("@/api/cases"), async (importOriginal) => ({
+    ...(await importOriginal()),
+    listCandidates: vi.fn().mockResolvedValue([]),
+}))
 vi.mock(import("@/api/recommendation"), async (importOriginal) => ({
     ...(await importOriginal()),
     recommendMatch: vi.fn(),
@@ -44,6 +48,7 @@ beforeEach(() => {
 describe("MatchingPage", () => {
     it("is in the navigation for clinical roles and is no longer 'coming soon'", async () => {
         renderApp("/recipients", makeAuth({ user: makeUser("DOCTOR") }))
+        await userEvent.setup().click(await screen.findByRole("radio", { name: "Enter corneas by hand" }))
         expect(await screen.findByRole("link", { name: /Recipients & matching/ })).toHaveAttribute("href", "/recipients")
         expect(screen.getByRole("heading", { name: "Recipients & matching", level: 1 })).toBeInTheDocument()
     })
@@ -57,6 +62,7 @@ describe("MatchingPage", () => {
     it("sends the request and corneas and shows the ranking, reasons and exclusions", async () => {
         vi.mocked(recommendMatch).mockResolvedValue(RANKED)
         renderApp("/recipients", makeAuth({ user: makeUser("DOCTOR") }))
+        await userEvent.setup().click(await screen.findByRole("radio", { name: "Enter corneas by hand" }))
         const user = userEvent.setup()
 
         await user.type(await screen.findByLabelText("Request ID"), "Q0001")
@@ -89,6 +95,7 @@ describe("MatchingPage", () => {
             modelSummary: { evaluation: "10x 5-fold grouped CV over 186 requests", ml_top3: 0.43, mcda_top3: 0.387 },
         })
         renderApp("/recipients", makeAuth({ user: makeUser("DOCTOR") }))
+        await userEvent.setup().click(await screen.findByRole("radio", { name: "Enter corneas by hand" }))
         const user = userEvent.setup()
         await user.type(await screen.findByLabelText("Request ID"), "Q0001")
         await fillRow(user, 1, "R0001", "Yes")
@@ -112,6 +119,7 @@ describe("MatchingPage", () => {
             ranked: [{ ...RANKED.ranked[0], mcdaRank: 2 }, { ...RANKED.ranked[1], mcdaRank: 1 }],
         })
         renderApp("/recipients", makeAuth({ user: makeUser("DOCTOR") }))
+        await userEvent.setup().click(await screen.findByRole("radio", { name: "Enter corneas by hand" }))
         const user = userEvent.setup()
         await user.type(await screen.findByLabelText("Request ID"), "Q0001")
         await fillRow(user, 1, "R0001", "Yes")
@@ -131,6 +139,7 @@ describe("MatchingPage", () => {
     it("does not flag rows where both methods agree", async () => {
         vi.mocked(recommendMatch).mockResolvedValue(RANKED)
         renderApp("/recipients", makeAuth({ user: makeUser("DOCTOR") }))
+        await userEvent.setup().click(await screen.findByRole("radio", { name: "Enter corneas by hand" }))
         const user = userEvent.setup()
         await user.type(await screen.findByLabelText("Request ID"), "Q0001")
         await fillRow(user, 1, "R0001", "Yes")
@@ -143,6 +152,7 @@ describe("MatchingPage", () => {
 
     it("requires a request ID and a tissue ID on every row", async () => {
         renderApp("/recipients", makeAuth({ user: makeUser("DOCTOR") }))
+        await userEvent.setup().click(await screen.findByRole("radio", { name: "Enter corneas by hand" }))
         const user = userEvent.setup()
         await user.click(await screen.findByRole("button", { name: "Rank corneas" }))
 

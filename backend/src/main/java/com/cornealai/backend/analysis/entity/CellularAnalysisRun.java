@@ -67,6 +67,6 @@ public class CellularAnalysisRun {
 
     @PrePersist
     void onCreate() {
-        createdAt = Instant.now();
+        createdAt = Instant.now().truncatedTo(java.time.temporal.ChronoUnit.MICROS);  // as stored, so paging cursors match
     }
 }

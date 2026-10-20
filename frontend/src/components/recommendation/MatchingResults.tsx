@@ -1,4 +1,4 @@
-import { Fragment, useState } from "react"
+import { Fragment, useState, type ReactNode } from "react"
 import type { MatchResponse, RankedCandidate } from "@/api/recommendation"
 import { alertWarning, tableCell, tableHead, tableHeaderCell, tableRow } from "@/lib/styles"
 import { Card } from "@/components/dashboard/PageHeader"
@@ -6,7 +6,9 @@ import { StatusBadge } from "@/components/ui/status-badge"
 import { DivergingBars, ScoreBars } from "@/components/recommendation/charts"
 
 /** Ranked corneas with the reasons for their order, and the corneas that were excluded. */
-export function MatchingResults({ result }: { result: MatchResponse }) {
+// labelFor shows a record ID as something readable, e.g. a case UUID as its tissue ID with a link.
+export function MatchingResults({ result, labelFor }: { result: MatchResponse; labelFor?: (recordId: string) => ReactNode }) {
+    const label = (recordId: string) => labelFor?.(recordId) ?? recordId
     const ml = result.methodUsed === "ml"
     const [open, setOpen] = useState<string | null>(null)
     const columns = 6
@@ -44,7 +46,7 @@ export function MatchingResults({ result }: { result: MatchResponse }) {
                                     <tr className={tableRow}>
                                         <td className={`${tableCell} font-semibold tabular-nums`}>#{c.rank}</td>
                                         <td className={tableCell}>
-                                            <div className="font-medium">{c.recordId}</div>
+                                            <div className="font-medium">{label(c.recordId)}</div>
                                             <div className="mt-1 flex flex-wrap gap-1">
                                                 {c.flags.map((f) => <StatusBadge key={f} tone="warning">{f}</StatusBadge>)}
                                                 {ml && c.mcdaRank !== null && c.mcdaRank !== c.rank && (
@@ -88,7 +90,7 @@ export function MatchingResults({ result }: { result: MatchResponse }) {
                     <ul className="space-y-2 text-sm">
                         {result.excluded.map((e) => (
                             <li key={e.recordId} className="flex flex-wrap items-center gap-2">
-                                <span className="font-medium">{e.recordId}</span>
+                                <span className="font-medium">{label(e.recordId)}</span>
                                 <StatusBadge tone="danger">{e.reason.charAt(0).toUpperCase() + e.reason.slice(1)}</StatusBadge>
                             </li>
                         ))}

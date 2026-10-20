@@ -13,6 +13,7 @@ import com.cornealai.backend.cases.repository.CaseAnalysisRepository;
 import com.cornealai.backend.cases.repository.CaseSignoffRepository;
 import com.cornealai.backend.cases.repository.DonorCaseRepository;
 import com.cornealai.backend.common.crypto.FieldCipher;
+import com.cornealai.backend.transplant.GraftRepository;
 import com.cornealai.backend.user.entity.AppUser;
 import com.cornealai.backend.user.repository.AppUserRepository;
 import org.springframework.http.HttpStatus;
@@ -45,11 +46,13 @@ public class SignoffService {
     private final AppUserRepository users;
     private final FieldCipher cipher;
     private final AuditService audit;
+    private final GraftRepository grafts;
     private final ObjectMapper objectMapper;
 
     public SignoffService(DonorCaseService donorCases, DonorCaseRepository cases, CaseSignoffRepository signoffs,
                           CaseAnalysisRepository analyses, AppUserRepository users, FieldCipher cipher,
-                          AuditService audit, ObjectMapper objectMapper) {
+                          AuditService audit, GraftRepository grafts, ObjectMapper objectMapper) {
+        this.grafts = grafts;
         this.donorCases = donorCases;
         this.cases = cases;
         this.signoffs = signoffs;
@@ -148,12 +151,28 @@ public class SignoffService {
     // ---------------------------------------------------------------- candidates
 
     /**
-     * Signed-off corneas as recommendation candidates, newest sign-off per case, in the recommendation
-     * module's MatchCandidate fields (confirmed values only).
+     * Days a cornea can be stored (Eusol-C), as in the recommendation module's matching dataset
+     * (ml/recommendation/config.yaml, matching.storage_days). Older corneas are no longer in stock.
+     */
+    public static final int STORAGE_DAYS = 14;
+
+    /** The candidates in stock, and how many signed-off corneas were left out (allocated or past storage). */
+    public record CandidateSet(List<MatchCandidateView> inStock, int notInStock) {
+    }
+
+    /**
+     * Signed-off corneas in stock as recommendation candidates, newest sign-off per case, in the
+     * recommendation module's MatchCandidate fields (confirmed values only). Corneas already allocated to
+     * a recipient, or stored longer than {@link #STORAGE_DAYS}, are left out.
      */
     public List<MatchCandidateView> candidates(Long userId) {
+        return candidateSet(userId).inStock();
+    }
+
+    public CandidateSet candidateSet(Long userId) {
         Set<UUID> seen = new HashSet<>();
         List<MatchCandidateView> out = new ArrayList<>();
+        int notInStock = 0;
         for (CaseSignoff s : signoffs.findAllByOrderByCreatedAtDesc()) {
             if (!seen.add(s.getDonorCaseId())) {
                 continue;
@@ -161,6 +180,10 @@ public class SignoffService {
             DonorCase c = donorCases.require(s.getDonorCaseId());
             Double days = c.getPreservationDate() == null ? null
                     : (double) ChronoUnit.DAYS.between(c.getPreservationDate(), LocalDate.now());
+            if (grafts.existsByDonorCaseId(c.getId()) || (days != null && days > STORAGE_DAYS)) {
+                notInStock++;
+                continue;
+            }
             String serology = c.getSerologyClear() == null ? "Unknown" : c.getSerologyClear() ? "Yes" : "No";
             out.add(new MatchCandidateView(c.getId().toString(), donorCases.tissueNumberOf(c).value(),
                     s.getConfirmedGrade(), s.getEcd(), s.getCv(), s.getHexPercent(),
@@ -168,7 +191,7 @@ public class SignoffService {
                     c.getDeathToPreservationHours(), days, serology, s.getDiseaseFinding()));
         }
         audit.record(userId, AuditService.CANDIDATES_EXPORT, null, null, out.size() + " candidates");
-        return out;
+        return new CandidateSet(out, notInStock);
     }
 
     // ---------------------------------------------------------------- helpers

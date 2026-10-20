@@ -9,6 +9,7 @@ import { CaseHistory } from "@/components/cases/CaseHistory"
 import { CaseImages } from "@/components/cases/CaseImages"
 import { SerologyCard } from "@/components/cases/SerologyCard"
 import { SignoffPanel } from "@/components/cases/SignoffPanel"
+import { CaseTransplantTab } from "@/components/transplant/CaseTransplantTab"
 import { PageHeader } from "@/components/dashboard/PageHeader"
 import { Spinner } from "@/components/ui/spinner"
 import { StatusBadge } from "@/components/ui/status-badge"
@@ -23,6 +24,7 @@ const TABS = [
     { id: "analyse", label: "Analyse" },
     { id: "history", label: "History" },
     { id: "signoff", label: "Sign-off" },
+    { id: "transplant", label: "Transplant" },
 ] as const
 type Tab = (typeof TABS)[number]["id"]
 
@@ -100,6 +102,7 @@ export function CaseWorkspacePage() {
                 {tab === "analyse" && (images.isPending ? <Spinner /> : <CaseAnalysisPanel donorCase={c} images={imageList} />)}
                 {tab === "history" && <CaseHistory caseId={c.id} images={imageList} />}
                 {tab === "signoff" && <SignoffPanel donorCase={c} />}
+                {tab === "transplant" && <CaseTransplantTab caseId={c.id} signedOff={c.latestSignoff !== null} />}
             </div>
         </>
     )
