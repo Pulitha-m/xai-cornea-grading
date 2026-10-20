@@ -14,9 +14,11 @@ Part B (post-transplant follow-up; simulated cohort until real follow-up data ar
     run_trajectory     P4: GBM and LSTM vs baselines, learning curve, test once, save the chosen model
     run_risk           P5: Cox, gradient-boosted Cox, DeepSurv per endpoint, calibration, test once
     run_followup_explain  P6: SHAP reasons and counterfactuals for trajectory and risk
-    run_followup       planned (P7)
+    run_followup       P7: alert level, next visit (3/6/12 months) and review prompts, outcome check
 """
 import json
+
+import numpy as np
 from pathlib import Path
 
 import pandas as pd
@@ -611,6 +613,11 @@ def _write_risk_md(path: Path, r: dict, figs: list) -> None:
         md += ["", "Calibration at 24 months (out-of-fold):", "", "| Group | n | predicted | observed |", "|---|---|---|---|"]
         md += [f"| {c['group']} | {c['n']} | {c['predicted_risk']:.3f} | {c['observed_risk']:.3f} |"
                for c in e["calibration_24m"]]
+        rc = e["recalibration"]
+        md += ["", f"Calibration slope {rc['slope']:.2f}. Isotonic recalibration; mean gap between predicted and "
+               "observed 24-month risk:", "",
+               "| Data | before | after |", "|---|---|---|"]
+        md += [f"| {w} | {rc[w]['gap_before']:.3f} | {rc[w]['gap_after']:.3f} |" for w in ("test", "external_simulated_cohort")]
         md.append("")
     md += ["Times are months after the 12-month visit. Figures: " + ", ".join(figs)]
     path.write_text("\n".join(md) + "\n", encoding="utf-8")
@@ -685,5 +692,83 @@ def _write_followup_explain_md(path: Path, r: dict, figs: list) -> None:
     path.write_text("\n".join(md) + "\n", encoding="utf-8")
 
 
-def run_followup(cfg: dict):
-    raise NotImplementedError("Needs trajectory/risk outputs and clinician follow-up decisions.")
+def run_followup(cfg: dict) -> dict:
+    """P7: alert level, next-visit interval and review prompts at the 12-month visit, with an
+    outcome check on the test grafts and on a separate simulated cohort."""
+    import joblib
+
+    from recommendation.data_prep.followup_dataset import landmark_table, load
+    from recommendation.data_prep.followup_simulator import simulate
+    from recommendation.explain import followup_explain as fx
+    from recommendation.followup import recommend as R
+
+    paths = cfg["paths"]
+    models = Path(paths["models"])
+    table, _ = load(paths["followup_dataset"], models / "followup_preprocessor.json")
+    traj, risk = joblib.load(models / "followup_trajectory.joblib"), joblib.load(models / "followup_risk.joblib")
+    rules = cfg["followup"].get("alerts", R.DEFAULT_RULES)
+    source = str(table["data_source"].iloc[0])
+
+    test = table[table["split"] == "test"]
+    g, v = simulate(3000, seed=303)            # fresh cohort, not used for any fitting or calibration
+    ext = landmark_table(g, v)
+    evaluation = {}
+    for where, rows in (("test", test), ("external_simulated_cohort", ext)):
+        rec = R.recommend(rows, traj, risk, rules)
+        out = R.outcomes_by_alert(rec, rows)
+        evaluation[where] = {"by_alert": out.to_dict(orient="records"), "visits": R.visit_burden(rec),
+                             "safety": R.safety(out)}
+
+    rec_test = R.recommend(test, traj, risk, rules)
+    contrib = fx.risk_contributions(risk["models"]["graft_failure"], test, table)["reasons"]
+    examples = []
+    for level in ("red", "amber", "green"):
+        ids = rec_test.index[rec_test["alert"] == level][:1]
+        for i in ids:
+            r = rec_test.loc[i]
+            top = contrib.loc[i].reindex(contrib.loc[i].abs().sort_values(ascending=False).index)[:2]
+            examples.append({"graft": str(r["graft_id"]), "alert": level, "next_visit_months": int(r["next_visit_months"]),
+                             "ecd_12m": float(r["ecd_12m"]),
+                             "predicted_ecd": {h: [round(r[f"ecd_{h}m_low"]), round(r[f"ecd_{h}m"]),
+                                                   round(r[f"ecd_{h}m_high"])] for h in (24, 36, 60)},
+                             "failure_risk_24m": round(float(r["failure_risk_24m"]), 3),
+                             "low_ecd_risk_24m": round(float(r["low_ecd_risk_24m"]), 3),
+                             "rules_fired": list(r["rules_fired"]), "actions": list(r["actions"]),
+                             "model_reasons": "; ".join(f"{k} (hazard x{np.exp(val):.2f})" for k, val in top.items()
+                                                        if abs(val) > 0.01)})
+    res = {"source": source, "rules": rules, "evaluation": evaluation, "examples": examples,
+           "alert_counts_test": rec_test["alert"].value_counts().to_dict(), "disclaimer": R.DISCLAIMER}
+    out_dir = Path(paths["outputs"]) / "followup"
+    out_dir.mkdir(parents=True, exist_ok=True)
+    (out_dir / "followup_recommendations.json").write_text(json.dumps(res, indent=2, default=str), encoding="utf-8")
+    _write_followup_md(out_dir / "followup_summary.md", res)
+    return res
+
+
+def _write_followup_md(path: Path, r: dict) -> None:
+    md = ["# P7 Follow-up recommendation (12-month visit)", "", f"Data source: {r['source']}. Rules version "
+          f"{r['rules'].get('version')} (placeholder thresholds until agreed with clinicians).", "",
+          "Alert -> next visit: " + ", ".join(f"{k} {v} months" for k, v in r["rules"]["interval_months"].items()), ""]
+    for where, e in r["evaluation"].items():
+        md += [f"## What happened next: {where.replace('_', ' ')}", "",
+               "| Alert | grafts | share | failed within 12 m | failed within 24 m | low ECD within 24 m |",
+               "|---|---|---|---|---|---|"]
+        md += [f"| {o['alert']} | {o['grafts']} | {o['share']:.0%} | {o['failed_within_12m']} | "
+               f"{o['failed_within_24m']} | {o['low_ecd_within_24m']} |" for o in e["by_alert"]]
+        s, vb = e["safety"], e["visits"]
+        md += ["", f"Missed deterioration: {s['green_failed_within_12m']} of {s['green_grafts']} green grafts failed "
+               f"within 12 months. Visits per graft in the next year: {vb['recommended_visits_per_graft_year']:.2f} "
+               f"recommended vs {vb['fixed_visits_per_graft_year']:.2f} on a fixed "
+               f"{vb['fixed_schedule_months']}-monthly schedule.", ""]
+    md += ["## Example test grafts", ""]
+    for x in r["examples"]:
+        md += [f"### {x['graft']}: {x['alert'].upper()}, next visit in {x['next_visit_months']} months", "",
+               f"- 12-month ECD {x['ecd_12m']:.0f}; predicted ECD (80% band): " + "; ".join(
+                   f"{h} m {v[1]} ({v[0]}-{v[2]})" for h, v in x["predicted_ecd"].items()),
+               f"- Risk by 24 months after this visit: failure {x['failure_risk_24m']:.0%}, "
+               f"ECD < 1000 {x['low_ecd_risk_24m']:.0%}",
+               f"- Why: {', '.join(x['rules_fired']) or 'no alert rule fired'}"
+               + (f"; model reasons: {x['model_reasons']}" if x["model_reasons"] else ""),
+               "- Suggested: " + "; ".join(x["actions"]), ""]
+    md.append(r["disclaimer"])
+    path.write_text("\n".join(md) + "\n", encoding="utf-8")

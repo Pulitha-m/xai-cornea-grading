@@ -83,7 +83,9 @@ def score_risk(model_factory, train: pd.DataFrame, test: pd.DataFrame, endpoint:
     pre = FollowupPreprocessor().fit(train)
     cols = features or pre.feature_names
     Xtr, Xte = pre.transform(train)[cols].to_numpy(), pre.transform(test)[cols].to_numpy()
-    model = model_factory().fit(Xtr, train[tcol], train[ecol].astype(bool))
+    model = model_factory()
+    model.features = list(cols)                     # lets models apply clinical sign constraints
+    model.fit(Xtr, train[tcol], train[ecol].astype(bool))
     t, e = test[tcol].to_numpy(), test[ecol].astype(bool).to_numpy()
     risk = model.predict_risk(Xte)
     g = censoring_km(train[tcol], train[ecol].astype(bool))

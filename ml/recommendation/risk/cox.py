@@ -3,11 +3,18 @@
 Small, dependency-free version (numpy + scipy) so the same code runs in research and,
 later, in the ML service. Ties are handled with Breslow's method. Inputs are expected
 to be already scaled (FollowupPreprocessor), so one penalty strength fits all features.
+
+Clinical sign constraints: inputs listed in RISK_INCREASING (e.g. a rejection episode)
+are known to raise the hazard; their coefficients are bounded at >= 0 when the input
+names are known (set ``features`` before fit). This stops a handful of cases from
+producing a clinically impossible "protective" effect.
 """
 from dataclasses import dataclass, field
 
 import numpy as np
 from scipy.optimize import minimize
+
+RISK_INCREASING = ("rejection_by_12m",)
 
 
 @dataclass
@@ -38,7 +45,10 @@ class CoxPH:
             grad = (Xs[es] - cum_wx[last][es] / cum_w[last][es, None]).sum(axis=0)
             return -ll + 0.5 * lam * beta @ beta, -grad + lam * beta
 
-        res = minimize(nll, np.zeros(X.shape[1]), jac=True, method="L-BFGS-B")
+        bounds = None
+        if len(self.features) == X.shape[1]:
+            bounds = [(0, None) if f in RISK_INCREASING else (None, None) for f in self.features]
+        res = minimize(nll, np.zeros(X.shape[1]), jac=True, method="L-BFGS-B", bounds=bounds)
         self.coef = res.x
         # Breslow baseline cumulative hazard
         risk = np.exp(X @ self.coef)

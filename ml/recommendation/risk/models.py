@@ -69,7 +69,13 @@ class GradientBoostedCox:
         def objective(y_true, y_pred):
             return _cox_grad_hess(y_pred, np.abs(y_true), y_true > 0)
 
-        self.model = LGBMRegressor(objective=objective, **self.params).fit(np.asarray(X, float), y)
+        from recommendation.risk.cox import RISK_INCREASING
+
+        params = dict(self.params)
+        names = getattr(self, "features", [])
+        if len(names) == np.asarray(X).shape[1]:
+            params["monotone_constraints"] = [1 if f in RISK_INCREASING else 0 for f in names]
+        self.model = LGBMRegressor(objective=objective, **params).fit(np.asarray(X, float), y)
         self.base_times, self.base_cumhaz = breslow(t, e, self.predict_risk(X))
         return self
 

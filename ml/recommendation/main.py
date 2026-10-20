@@ -18,6 +18,7 @@ From ml/:
     uv run python -m recommendation.main trajectory     # P4: GBM / LSTM vs baselines, learning curve
     uv run python -m recommendation.main risk           # P5: Cox / boosted Cox / DeepSurv, calibration
     uv run python -m recommendation.main followup-explain  # P6: SHAP reasons and counterfactuals
+    uv run python -m recommendation.main followup       # P7: alert, next visit, review prompts
 """
 import argparse
 
@@ -152,6 +153,8 @@ def main() -> None:
         for line in log:
             print(" OK", line)
         print(f"\nReport: {path}")
+    elif a.task == "followup":
+        _print_followup(pipeline.run_followup(cfg), cfg)
     elif a.task == "followup-explain":
         _print_followup_explain(pipeline.run_followup_explain(cfg), cfg)
     elif a.task == "risk":
@@ -225,6 +228,30 @@ def _print_explain(res: dict, cfg: dict) -> None:
     print(f"\nSaved: {out}/shap_summary.md, {out}/shap_global_reasons.png, {out}/explanations.xlsx")
 
 
+def _print_followup(res: dict, cfg: dict) -> None:
+    print(f"\nData source: {res['source']}. Rules {res['rules'].get('version')} (placeholder thresholds)")
+    for where, e in res["evaluation"].items():
+        print(f"\n== What happened next, {where.replace('_', ' ')}:")
+        print(pd.DataFrame(e["by_alert"]).set_index("alert").to_string(formatters={"share": "{:.0%}".format}))
+        s, vb = e["safety"], e["visits"]
+        print(f"   missed deterioration: {s['green_failed_within_12m']} of {s['green_grafts']} green grafts failed within 12 months")
+        print(f"   visits per graft next year: {vb['recommended_visits_per_graft_year']:.2f} recommended vs "
+              f"{vb['fixed_visits_per_graft_year']:.2f} fixed {vb['fixed_schedule_months']}-monthly")
+    print("\n== Example test grafts")
+    for x in res["examples"]:
+        print(f"\n   {x['graft']}: {x['alert'].upper()}, next visit in {x['next_visit_months']} months "
+              f"(12-month ECD {x['ecd_12m']:.0f})")
+        print("     predicted ECD (80% band): " + "; ".join(f"{h} m {v[1]} ({v[0]}-{v[2]})" for h, v in x["predicted_ecd"].items()))
+        print(f"     risk by 24 months: failure {x['failure_risk_24m']:.0%}, ECD<1000 {x['low_ecd_risk_24m']:.0%}")
+        print(f"     why: {', '.join(x['rules_fired']) or 'no alert rule fired'}")
+        if x["model_reasons"]:
+            print(f"     model reasons: {x['model_reasons']}")
+        print("     suggested: " + "; ".join(x["actions"]))
+    out = f"{cfg['paths']['outputs']}/followup"
+    print(f"\n{res['disclaimer']}")
+    print(f"Saved: {out}/followup_summary.md, {out}/followup_recommendations.json")
+
+
 def _print_followup_explain(res: dict, cfg: dict) -> None:
     print(f"\nData source: {res['source']}")
     print("\n1. Sanity checks:")
@@ -271,6 +298,14 @@ def _print_risk(res: dict, cfg: dict) -> None:
         cal = pd.DataFrame(e["calibration_24m"]).set_index("group")
         print("Calibration at 24 months (out-of-fold): predicted vs observed risk")
         print(cal[["n", "events", "predicted_risk", "observed_risk"]].to_string(float_format="{:.3f}".format))
+        rc = e["recalibration"]
+        print(f"Calibration slope {rc['slope']:.2f} (1 = well scaled). Isotonic recalibration, "
+              "mean gap predicted vs observed:")
+        for where in ("test", "external_simulated_cohort"):
+            print(f"   {where:<27} before {rc[where]['gap_before']:.3f}  after {rc[where]['gap_after']:.3f}")
+        after = pd.DataFrame(rc["external_simulated_cohort"]["after"]).set_index("group")
+        print("   external cohort after recalibration (predicted vs observed):")
+        print(after[["n", "predicted_risk", "observed_risk"]].to_string(float_format="{:.3f}".format))
     out = f"{cfg['paths']['outputs']}/risk"
     print(f"\nSaved: {out}/risk_summary.md, {out}/risk_results.json, {out}/calibration_24m.png")
     print(f"Models: {cfg['paths']['models']}/followup_risk.joblib")

@@ -34,3 +34,18 @@ followup:
   horizons: [24, 36, 60]      # ECD predicted at these months
   split: [0.70, 0.15, 0.15]   # train / validation / test, by graft
   seed: 42
+  # P7 follow-up alerts. PLACEHOLDER thresholds: agree them with NEBSL / corneal clinicians.
+  alerts:
+    version: placeholder-2026-10-20
+    red:                              # any one -> red, next visit in 3 months
+      failure_risk_12m: 0.20          # graft-failure risk within 12 months of this visit
+      ecd_12m_below: 750              # 12-month ECD (cells/mm2)
+      predicted_ecd_24m_below: 600    # predicted ECD at 24 months
+      # a rejection episode by 12 months is always red (clinical rule, not a threshold)
+    amber:                            # any one -> amber, next visit in 6 months
+      failure_risk_24m: 0.05
+      low_ecd_risk_24m: 0.30          # risk of ECD < 1000 within 24 months
+      ecd_60m_lower_band_below: 500   # lower end of the 80% band for 60-month ECD (1000 fired for 98% of
+                                      # training + validation grafts, so it could not separate anyone)
+      loss_12m_at_least: 0.40         # cell loss from donor by 12 months
+    interval_months: {green: 12, amber: 6, red: 3}

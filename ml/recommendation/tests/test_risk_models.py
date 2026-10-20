@@ -84,3 +84,32 @@ def test_final_model_carries_its_own_preprocessing():
     X = fitted["preprocessor"].transform(t.iloc[:5])[fitted["features"]].to_numpy()
     s = fitted["model"].predict_survival(X, 24)
     assert len(s) == 5 and ((0 <= s) & (s <= 1)).all()
+
+
+def test_rejection_coefficient_cannot_be_protective():
+    from recommendation.risk.cox import CoxPH
+
+    rng = np.random.default_rng(9)
+    x = rng.normal(size=(300, 2))
+    x[:, 1] = (rng.random(300) < 0.05).astype(float)          # rare rejection flag
+    t = rng.exponential(1 / np.exp(x[:, 0] - 1.5 * x[:, 1]))  # data suggest a protective effect
+    e = np.ones(300, bool)
+    free = CoxPH(penalty=0.01).fit(x, t, e)
+    bounded = CoxPH(penalty=0.01, features=["ECD_12m", "rejection_by_12m"]).fit(x, t, e)
+    assert free.coef[1] < 0 and bounded.coef[1] >= 0
+
+
+def test_isotonic_recalibration_keeps_ranking_and_moves_risk_towards_observed():
+    from recommendation.risk.cox import CoxPH
+
+    x, t, e = _xy(800, seed=4)
+    base = CoxPH(penalty=50.0).fit(x[:400], t[:400], e[:400])          # heavy shrinkage -> miscalibrated
+    oof = pd.DataFrame({"time": t[400:], "event": e[400:], "surv": base.predict_survival(x[400:], 10),
+                        "lp": base.predict_risk(x[400:])})
+    model = experiment.Recalibrated(base, experiment.risk_maps({10: oof}))
+    assert np.array_equal(np.argsort(model.predict_risk(x)), np.argsort(base.predict_risk(x)))
+    s_b, s_m = base.predict_survival(x[400:], 10), model.predict_survival(x[400:], 10)
+    assert ((0 <= s_m) & (s_m <= 1)).all()
+    assert np.all(np.diff((1 - s_m)[np.argsort(1 - s_b)]) >= -1e-12)    # monotone in the original risk
+    gap = lambda s: experiment.calibration_gap(experiment.calibration(oof.assign(surv=s)))  # noqa: E731
+    assert gap(s_m) <= gap(s_b)
