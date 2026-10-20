@@ -3,6 +3,8 @@ package com.cornealai.backend.cases.controller;
 import com.cornealai.backend.analysis.AnalysisRejectedException;
 import com.cornealai.backend.analysis.dto.ImageUploadResponse;
 import com.cornealai.backend.analysis.entity.AnalysisImage;
+import com.cornealai.backend.cases.importer.CaseImportFile;
+import com.cornealai.backend.cases.importer.CaseImportService;
 import com.cornealai.backend.cases.dto.CaseDtos.CaseAnalysisRequest;
 import com.cornealai.backend.cases.dto.CaseDtos.CaseAnalysisResponse;
 import com.cornealai.backend.cases.dto.CaseDtos.CaseDetails;
@@ -32,6 +34,7 @@ import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
 
 import java.io.IOException;
+import java.nio.charset.StandardCharsets;
 import java.time.Instant;
 import java.util.List;
 import java.util.UUID;
@@ -50,9 +53,11 @@ public class CaseController {
     private final CaseAnalysisService analyses;
     private final CaseHistoryService history;
     private final SignoffService signoffService;
+    private final CaseImportService importer;
 
     public CaseController(CaseService cases, CaseAnalysisService analyses, CaseHistoryService history,
-                          SignoffService signoffService) {
+                          SignoffService signoffService, CaseImportService importer) {
+        this.importer = importer;
         this.signoffService = signoffService;
         this.cases = cases;
         this.analyses = analyses;
@@ -144,6 +149,43 @@ public class CaseController {
                                     @RequestParam(required = false) Integer limit,
                                     @AuthenticationPrincipal AppUserDetails user) {
         return history.moduleRuns(module, tissueId, before, limit, user.getId());
+    }
+
+    // ---------------------------------------------------------------- bulk import
+
+    /** A CSV template with every column the import reads, and one example row. */
+    @GetMapping("/import/template")
+    public ResponseEntity<byte[]> importTemplate() {
+        return ResponseEntity.ok()
+                .contentType(MediaType.parseMediaType("text/csv; charset=UTF-8"))
+                .header("Content-Disposition", "attachment; filename=\"case-import-template.csv\"")
+                .body(CaseImportFile.templateCsv().getBytes(StandardCharsets.UTF_8));
+    }
+
+    /**
+     * Bulk import of cases from CSV or Excel (.xlsx). With {@code apply=false} (default) only checks the
+     * file and reports what each row would do. With {@code apply=true} imports it in one transaction, and
+     * only if no row has an error (422 with the report otherwise). {@code mode}: "create" skips existing
+     * tissue IDs, "update" also updates their details with the row's non-blank values.
+     */
+    @PostMapping(path = "/import", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+    public ResponseEntity<CaseImportService.ImportReport> importCases(@RequestPart("file") MultipartFile file,
+                                                                  @RequestParam(required = false) String mode,
+                                                                  @RequestParam(defaultValue = "false") boolean apply,
+                                                                  @AuthenticationPrincipal AppUserDetails user) {
+        byte[] data;
+        try {
+            data = file.getBytes();
+        } catch (IOException e) {
+            throw new AnalysisRejectedException(HttpStatus.BAD_REQUEST, "INVALID_IMPORT_FILE", "file",
+                    "The upload could not be read. Try again.");
+        }
+        CaseImportService.Mode importMode = CaseImportService.mode(mode);
+        if (!apply) {
+            return ResponseEntity.ok(importer.check(file.getOriginalFilename(), data, importMode));
+        }
+        CaseImportService.ImportReport report = importer.apply(file.getOriginalFilename(), data, importMode, user.getId());
+        return ResponseEntity.status(report.applied() ? HttpStatus.OK : HttpStatus.UNPROCESSABLE_CONTENT).body(report);
     }
 
     // ---------------------------------------------------------------- sign-off, serology, candidates

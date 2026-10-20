@@ -206,9 +206,9 @@ function sendUpload(path: string, form: FormData, { onProgress }: UploadOptions)
  * Binary download (e.g. a decrypted case image for display) with the same Bearer token and
  * 401 refresh-and-retry as {@link apiRequest}. The caller owns any object URL made from it.
  */
-export async function apiBlob(path: string): Promise<Blob> {
+export async function apiBlob(path: string, accept = "image/*"): Promise<Blob> {
     const fetchBlob = async () => {
-        const headers: Record<string, string> = { Accept: "image/*" }
+        const headers: Record<string, string> = { Accept: accept }
         if (accessToken) headers.Authorization = `Bearer ${accessToken}`
         try {
             return await fetch(`${API_BASE_URL}${path}`, { headers, credentials: "include" })

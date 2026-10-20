@@ -85,8 +85,14 @@ public class CaseService {
 
     /** Replaces the case details (absent = not recorded). Validated before anything is changed. */
     public CaseResponse updateDetails(UUID caseId, CaseDetails details, Long userId) {
+        CaseResponse response = toResponse(applyDetails(donorCases.require(caseId), details));
+        audit.record(userId, AuditService.CASE_UPDATE, "case", caseId, "details");
+        return response;
+    }
+
+    /** Sets and saves the case details; the slit-lamp findings are validated before anything changes. */
+    public DonorCase applyDetails(DonorCase donorCase, CaseDetails details) {
         String slitLampJson = objectMapper.writeValueAsString(SlitLampFindings.normalise(details.slitLamp()));
-        DonorCase donorCase = donorCases.require(caseId);
         donorCase.setDonorAgeYears(details.donorAgeYears());
         donorCase.setDeathToPreservationHours(details.deathToPreservationHours());
         donorCase.setPreservationDate(details.preservationDate());
@@ -97,9 +103,7 @@ public class CaseService {
         donorCase.setTotalCellCount(details.totalCellCount());
         donorCase.setTotalAreaUm2(details.totalAreaUm2());
         donorCase.setSlitLampJson(slitLampJson);
-        CaseResponse response = toResponse(cases.saveAndFlush(donorCase));
-        audit.record(userId, AuditService.CASE_UPDATE, "case", caseId, "details");
-        return response;
+        return cases.saveAndFlush(donorCase);
     }
 
     public ImageUploadResponse uploadImage(UUID caseId, byte[] data, Long userId) {
@@ -156,12 +160,16 @@ public class CaseService {
     }
 
     CaseResponse toResponse(DonorCase c) {
-        CaseDetails details = new CaseDetails(c.getDonorAgeYears(), c.getDeathToPreservationHours(),
-                c.getPreservationDate(), c.getEcd(), c.getCv(), c.getHexPercent(), c.getSd(), c.getTotalCellCount(),
-                c.getTotalAreaUm2(), slitLamp(c));
-        return new CaseResponse(c.getId(), donorCases.tissueNumberOf(c).value(), details,
+        return new CaseResponse(c.getId(), donorCases.tissueNumberOf(c).value(), detailsOf(c),
                 images.countByDonorCaseId(c.getId()), signoffs.latest(c.getId()).orElse(null), c.getCreatedAt(),
                 c.getUpdatedAt());
+    }
+
+    /** The case's current details. */
+    public CaseDetails detailsOf(DonorCase c) {
+        return new CaseDetails(c.getDonorAgeYears(), c.getDeathToPreservationHours(), c.getPreservationDate(),
+                c.getEcd(), c.getCv(), c.getHexPercent(), c.getSd(), c.getTotalCellCount(), c.getTotalAreaUm2(),
+                slitLamp(c));
     }
 
     private Map<String, Object> slitLamp(DonorCase c) {

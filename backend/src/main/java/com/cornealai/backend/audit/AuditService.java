@@ -31,6 +31,7 @@ public class AuditService {
     public static final String SIGNOFF_CREATE = "SIGNOFF_CREATE";
     public static final String SIGNOFF_VIEW = "SIGNOFF_VIEW";
     public static final String CANDIDATES_EXPORT = "CANDIDATES_EXPORT";
+    public static final String CASES_IMPORT = "CASES_IMPORT";
 
     private static final int MAX_LIMIT = 500;
 

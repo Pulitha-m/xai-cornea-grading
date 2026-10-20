@@ -255,3 +255,43 @@ export function listModuleRuns(
     if (options.limit) query.set("limit", String(options.limit))
     return apiRequest<ModuleRunPage>(`/api/cases/runs?${query}`)
 }
+
+export type ImportMode = "create" | "update"
+
+export interface ImportRow {
+    row: number
+    tissueId: string | null
+    /** "create", "update", "skip" or "error". */
+    action: "create" | "update" | "skip" | "error"
+    errors: string[]
+}
+
+export interface ImportReport {
+    applied: boolean
+    mode: ImportMode
+    rows: number
+    created: number
+    updated: number
+    skipped: number
+    withErrors: number
+    ignoredColumns: string[]
+    details: ImportRow[]
+}
+
+/** Checks a CSV or .xlsx file and reports what each row would do; changes nothing. */
+export function checkCaseImport(file: File, mode: ImportMode): Promise<ImportReport> {
+    const form = new FormData()
+    form.append("file", file)
+    return apiUpload<ImportReport>(`/api/cases/import?mode=${mode}&apply=false`, form)
+}
+
+/** Imports the file in one go; refused (422) if any row has an error. */
+export function applyCaseImport(file: File, mode: ImportMode): Promise<ImportReport> {
+    const form = new FormData()
+    form.append("file", file)
+    return apiUpload<ImportReport>(`/api/cases/import?mode=${mode}&apply=true`, form)
+}
+
+export function downloadImportTemplate(): Promise<Blob> {
+    return apiBlob("/api/cases/import/template", "text/csv")
+}

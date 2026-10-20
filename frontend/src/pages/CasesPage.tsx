@@ -4,6 +4,7 @@ import { ClipboardListIcon } from "lucide-react"
 import { Link, useNavigate } from "react-router-dom"
 import { openCase, recentCases } from "@/api/cases"
 import { CandidatesCard } from "@/components/cases/CandidatesCard"
+import { ImportCasesCard } from "@/components/cases/ImportCasesCard"
 import { Card, PageHeader } from "@/components/dashboard/PageHeader"
 import { EmptyState } from "@/components/ui/empty-state"
 import { Spinner } from "@/components/ui/spinner"
@@ -78,6 +79,8 @@ export function CasesPage() {
                     </form>
                     {shownError && <p id={errorId} role="alert" className={`mt-3 ${alertError}`}>{shownError}</p>}
                 </Card>
+
+                <ImportCasesCard />
 
                 <Card title="Recent cases" description="The 20 most recently updated cases.">
                     {recent.isPending && <Spinner />}
