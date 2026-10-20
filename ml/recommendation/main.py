@@ -20,6 +20,8 @@ From ml/:
     uv run python -m recommendation.main followup-explain  # P6: SHAP reasons and counterfactuals
     uv run python -m recommendation.main followup       # P7: alert, next visit, review prompts
     uv run python -m recommendation.main followup-export  # P8: follow-up models -> ml-service JSON
+    uv run python -m recommendation.main followup-robustness  # conclusions under other simulation settings
+    uv run python -m recommendation.main followup-report  # Part B stages -> one HTML page
 """
 import argparse
 
@@ -44,6 +46,8 @@ TASKS = {
     "followup-baselines": pipeline.run_followup_baselines,
     "followup-explain": pipeline.run_followup_explain,
     "followup-export": None,
+    "followup-robustness": pipeline.run_followup_robustness,
+    "followup-report": None,
     "trajectory": pipeline.run_trajectory,
     "risk": pipeline.run_risk,
     "followup": pipeline.run_followup,
@@ -173,6 +177,16 @@ def main() -> None:
             print(f"  risk {ep}: {r['name']}, {len(r['features'])} inputs, recalibrated at {sorted(r['maps'])} months")
         print(f"  rules: {b['rules'].get('version')}; summary: {b['summary']}")
         print(f"Saved: {out} ({out.stat().st_size / 1024:.0f} KB)")
+    elif a.task == "followup-report":
+        from recommendation.reporting.followup_report import build_followup_report
+
+        path, log = build_followup_report(cfg)
+        print()
+        for line in log:
+            print(" OK", line)
+        print(f"\nReport: {path}")
+    elif a.task == "followup-robustness":
+        _print_robustness(pipeline.run_followup_robustness(cfg), cfg)
     elif a.task == "followup":
         _print_followup(pipeline.run_followup(cfg), cfg)
     elif a.task == "followup-explain":
@@ -246,6 +260,20 @@ def _print_explain(res: dict, cfg: dict) -> None:
                   f"{c['Cand_Days_In_Storage']} d in storage: {c['Why']}{tag}")
     out = f"{cfg['paths']['outputs']}/explain"
     print(f"\nSaved: {out}/shap_summary.md, {out}/shap_global_reasons.png, {out}/explanations.xlsx")
+
+
+def _print_robustness(res: dict, cfg: dict) -> None:
+    df = res["table"]
+    cols = ["grafts", "failures", "trajectory_mae_baseline", "trajectory_mae_gbm", "gbm_gain_pct",
+            "graft_failure_cox_c_index", "graft_failure_deepsurv_c_index", "low_ecd_cox_c_index",
+            "low_ecd_deepsurv_c_index", "literature_patterns_met"]
+    print("\nRobustness of the conclusions (repeated CV per simulated scenario):")
+    print(df[cols].to_string(float_format="{:.3f}".format))
+    print(f"\nGradient boosting beats the best baseline in {res['gbm_beats_baseline_in']} scenarios "
+          f"(gain {res['gbm_gain_pct_range'][0]:.0f}-{res['gbm_gain_pct_range'][1]:.0f}%)")
+    print(f"Cox is as good as DeepSurv (within 0.01 C-index or better) in {res['cox_as_good_as_deepsurv_in']} scenarios")
+    out = f"{cfg['paths']['outputs']}/robustness"
+    print(f"Saved: {out}/robustness_summary.md, {out}/robustness_results.json")
 
 
 def _print_followup(res: dict, cfg: dict) -> None:
