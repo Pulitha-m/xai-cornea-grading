@@ -10,6 +10,7 @@ Implemented:
 Part B (post-transplant follow-up; simulated cohort until real follow-up data arrives):
     run_followup_eda   P1: data checks, ECD trends, Kaplan-Meier survival, visits, rejection
     run_followup_dataset  P2: 12-month landmark dataset, split by graft, train-only preprocessing
+    run_followup_baselines  P3: trajectory baselines (MAE/RMSE) and risk baselines (C-index, AUC, Brier)
     run_trajectory, run_risk, run_followup   planned (P3-P7)
 """
 import json
@@ -398,6 +399,81 @@ def run_followup_dataset(cfg: dict) -> dict:
                                 "uv run python -m recommendation.main simulate")
     return build(cohort, paths["followup_dataset"], Path(paths["models"]) / "followup_preprocessor.json",
                  fractions=tuple(f["split"]), seed=f["seed"])
+
+
+# Clinical inputs for the small Cox baseline (procedure PK is the reference level).
+COX_CLINICAL = ["ECD_12m", "loss_12m", "log_ecd_slope_3_12", "rejection_by_12m", "donor_age",
+                "procedure=DMEK", "procedure=DSEK"]
+COX_PENALTIES = (0.1, 1.0, 10.0)
+
+
+def run_followup_baselines(cfg: dict) -> dict:
+    """P3: fit every baseline on training grafts; score on validation and repeated CV (test untouched)."""
+    from recommendation.data_prep.followup_dataset import load
+    from recommendation.evaluation import followup_eval as fe
+    from recommendation.risk.cox import CoxPH
+    from recommendation.trajectory.baselines import BASELINES
+
+    paths = cfg["paths"]
+    table, _ = load(paths["followup_dataset"], Path(paths["models"]) / "followup_preprocessor.json")
+    train, val = table[table["split"] == "train"], table[table["split"] == "val"]
+    dev = table[table["split"] != "test"]
+    source = str(table["data_source"].iloc[0])
+
+    trajectory = {}
+    for cls in BASELINES:
+        trajectory[cls.name] = {"validation": fe.score_trajectory(cls, train, val),
+                                "repeated_cv": fe.cv_trajectory(cls, dev)}
+
+    # Cox penalty chosen by CV on the training grafts only (failure endpoint)
+    choice = {}
+    for name, feats in (("clinical", COX_CLINICAL), ("all inputs", None)):
+        scores = {p: fe.cv_risk(lambda p=p: CoxPH(penalty=p), train, "graft_failure", feats, repeats=2)["c_index"]
+                  for p in COX_PENALTIES}
+        choice[name] = max(scores, key=scores.get)
+    models = {
+        "Kaplan-Meier (no inputs)": (fe.KaplanMeierRisk, None),
+        f"Cox, clinical inputs (ridge {choice['clinical']})": (lambda: CoxPH(penalty=choice["clinical"]), COX_CLINICAL),
+        f"Cox, all inputs (ridge {choice['all inputs']})": (lambda: CoxPH(penalty=choice["all inputs"]), None),
+    }
+    risk = {}
+    for endpoint in fe.ENDPOINTS:
+        risk[endpoint] = {name: {"validation": fe.score_risk(f, train, val, endpoint, feats),
+                                 "repeated_cv": fe.cv_risk(f, dev, endpoint, feats)}
+                          for name, (f, feats) in models.items()}
+
+    res = {"source": source, "train_grafts": int(len(train)), "validation_grafts": int(len(val)),
+           "cv_grafts": int(len(dev)), "test_grafts_untouched": int((table["split"] == "test").sum()),
+           "trajectory": trajectory, "risk": risk, "cox_penalty_selected": choice,
+           "risk_times_after_landmark": list(fe.RISK_TIMES)}
+    out = Path(paths["outputs"]) / "followup_baselines"
+    out.mkdir(parents=True, exist_ok=True)
+    (out / "baselines.json").write_text(json.dumps(res, indent=2), encoding="utf-8")
+    _write_baselines_md(out / "baselines_summary.md", res)
+    return res
+
+
+def _write_baselines_md(path: Path, r: dict) -> None:
+    md = ["# P3 Baselines (post-transplant follow-up)", "",
+          f"Data source: {r['source']}. Fitted on {r['train_grafts']} training grafts; scored on "
+          f"{r['validation_grafts']} validation grafts and by 5x repeated 5-fold CV over {r['cv_grafts']} "
+          f"training + validation grafts. The {r['test_grafts_untouched']} test grafts are not used yet.", "",
+          "## Trajectory: ECD at 24 / 36 / 60 months (MAE, cells/mm2; repeated CV)", "",
+          "| Model | 24 m | 36 m | 60 m | all | RMSE all |", "|---|---|---|---|---|---|"]
+    for name, d in r["trajectory"].items():
+        c = d["repeated_cv"]
+        md.append(f"| {name} | {c['24m']['mae']:.0f} | {c['36m']['mae']:.0f} | {c['60m']['mae']:.0f} | "
+                  f"{c['all']['mae']:.0f} | {c['all']['rmse']:.0f} |")
+    for endpoint, models in r["risk"].items():
+        md += ["", f"## Risk: {endpoint.replace('_', ' ')} (repeated CV)", "",
+               "| Model | C-index | AUC 12 m | AUC 24 m | AUC 36 m | Brier 24 m |", "|---|---|---|---|---|---|"]
+        for name, d in models.items():
+            c = d["repeated_cv"]
+            md.append(f"| {name} | {c['c_index']:.3f} | {c['auc_12m']:.3f} | {c['auc_24m']:.3f} | "
+                      f"{c['auc_36m']:.3f} | {c['brier_24m']:.3f} |")
+    md += ["", "Times for risk are months after the 12-month visit. AUC is the time-dependent (IPCW) AUC; "
+           "Brier is the IPCW Brier score (lower is better). These are the scores P4 and P5 must beat."]
+    path.write_text("\n".join(md) + "\n", encoding="utf-8")
 
 
 def run_trajectory(cfg: dict):

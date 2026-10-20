@@ -14,6 +14,7 @@ From ml/:
     uv run python -m recommendation.main simulate   # simulated follow-up cohort (simulation study)
     uv run python -m recommendation.main followup-eda   # P1: describe the follow-up cohort
     uv run python -m recommendation.main followup-data  # P2: landmark dataset, split, preprocessing
+    uv run python -m recommendation.main followup-baselines  # P3: trajectory and risk baselines
 """
 import argparse
 
@@ -35,6 +36,7 @@ TASKS = {
     "simulate": None,
     "followup-eda": pipeline.run_followup_eda,
     "followup-data": pipeline.run_followup_dataset,
+    "followup-baselines": pipeline.run_followup_baselines,
     "trajectory": pipeline.run_trajectory,
     "risk": pipeline.run_risk,
     "followup": pipeline.run_followup,
@@ -146,6 +148,8 @@ def main() -> None:
         for line in log:
             print(" OK", line)
         print(f"\nReport: {path}")
+    elif a.task == "followup-baselines":
+        _print_followup_baselines(pipeline.run_followup_baselines(cfg), cfg)
     elif a.task == "followup-data":
         _print_followup_data(pipeline.run_followup_dataset(cfg))
     elif a.task == "followup-eda":
@@ -209,6 +213,22 @@ def _print_explain(res: dict, cfg: dict) -> None:
                   f"{c['Cand_Days_In_Storage']} d in storage: {c['Why']}{tag}")
     out = f"{cfg['paths']['outputs']}/explain"
     print(f"\nSaved: {out}/shap_summary.md, {out}/shap_global_reasons.png, {out}/explanations.xlsx")
+
+
+def _print_followup_baselines(res: dict, cfg: dict) -> None:
+    print(f"\nData source: {res['source']}. Train {res['train_grafts']} grafts, validation "
+          f"{res['validation_grafts']}, repeated CV over {res['cv_grafts']}; test {res['test_grafts_untouched']} untouched.")
+    print("\n1. Trajectory baselines: MAE of predicted ECD (cells/mm2), repeated CV")
+    rows = {n: {h: d["repeated_cv"][h]["mae"] for h in ("24m", "36m", "60m", "all")}
+            for n, d in res["trajectory"].items()}
+    print(pd.DataFrame(rows).T.to_string(float_format="{:.0f}".format))
+    for endpoint, models in res["risk"].items():
+        print(f"\n2. Risk baselines, {endpoint.replace('_', ' ')} (repeated CV; times = months after 12-month visit)")
+        rows = {n: {k: d["repeated_cv"][k] for k in ("c_index", "auc_12m", "auc_24m", "auc_36m", "brier_24m")}
+                for n, d in models.items()}
+        print(pd.DataFrame(rows).T.to_string(float_format="{:.3f}".format))
+    out = f"{cfg['paths']['outputs']}/followup_baselines"
+    print(f"\nSaved: {out}/baselines_summary.md, {out}/baselines.json")
 
 
 def _print_followup_data(res: dict) -> None:

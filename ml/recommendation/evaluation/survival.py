@@ -71,3 +71,52 @@ def logrank(time, event, group) -> dict:
     return {"chi2": stat, "df": k - 1, "p": float(chi2.sf(stat, k - 1)),
             "groups": {str(lv): {"observed": int(o), "expected": round(float(x), 2)}
                        for lv, o, x in zip(levels, observed, expected)}}
+
+
+# ---------------------------------------------------------------- metrics for risk models
+def censoring_km(time, event) -> pd.DataFrame:
+    """Kaplan-Meier of the censoring distribution G(t) (censoring treated as the 'event')."""
+    return kaplan_meier(time, ~np.asarray(event, dtype=bool))
+
+
+def _G(cens_km: pd.DataFrame, t, eps: float = 0.05) -> np.ndarray:
+    """G(t-) from a censoring KM table, floored at eps to keep IPCW weights bounded."""
+    times, surv = cens_km["time"].to_numpy(), cens_km["survival"].to_numpy()
+    idx = np.searchsorted(times, np.asarray(t, dtype=float), side="left") - 1
+    return np.maximum(surv[np.clip(idx, 0, None)], eps)
+
+
+def concordance_index(time, event, risk) -> float:
+    """Harrell's C: share of comparable pairs where the earlier event has the higher risk."""
+    t, e, r = (np.asarray(x, dtype=float) for x in (time, event, risk))
+    e = e.astype(bool)
+    num = den = 0.0
+    for i in np.where(e)[0]:
+        later = t > t[i]
+        den += later.sum()
+        num += (r[i] > r[later]).sum() + 0.5 * (r[i] == r[later]).sum()
+    return float(num / den) if den else float("nan")
+
+
+def cumulative_dynamic_auc(time, event, risk, tau: float, cens_km: pd.DataFrame) -> float:
+    """Time-dependent AUC at tau (Uno-style IPCW): events by tau vs grafts still event-free after tau."""
+    t, e, r = np.asarray(time, float), np.asarray(event, bool), np.asarray(risk, float)
+    cases = e & (t <= tau)
+    controls = t > tau
+    if not cases.any() or not controls.any():
+        return float("nan")
+    w = 1 / _G(cens_km, t[cases])
+    rc, rk = r[cases][:, None], r[controls][None, :]
+    score = ((rc > rk) + 0.5 * (rc == rk)).mean(axis=1)
+    return float((w * score).sum() / w.sum())
+
+
+def brier_score(time, event, surv_at_tau, tau: float, cens_km: pd.DataFrame) -> float:
+    """IPCW Brier score at tau for predicted survival probabilities S(tau | x) (Graf et al.)."""
+    t, e, s = np.asarray(time, float), np.asarray(event, bool), np.asarray(surv_at_tau, float)
+    died = e & (t <= tau)
+    alive = t > tau
+    loss = np.zeros(len(t))
+    loss[died] = s[died] ** 2 / _G(cens_km, t[died])
+    loss[alive] = (1 - s[alive]) ** 2 / _G(cens_km, np.full(alive.sum(), tau))
+    return float(loss.mean())
