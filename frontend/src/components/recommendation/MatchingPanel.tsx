@@ -104,7 +104,7 @@ export function MatchingPanel() {
                                             <span className="sr-only">. {c.hint}</span>
                                         </th>
                                     ))}
-                                    <th className={tableHeaderCell} title="Yes = all infection tests negative; No = a positive test (never ranked); Unknown = not yet confirmed.">Serology clear</th>
+                                    <th className={tableHeaderCell} title="Yes = all infection tests negative; No = a positive test (excluded by the safety rule); Unknown = not yet confirmed.">Serology clear</th>
                                     <th className={tableHeaderCell}><span className="sr-only">Remove</span></th>
                                 </tr>
                             </thead>

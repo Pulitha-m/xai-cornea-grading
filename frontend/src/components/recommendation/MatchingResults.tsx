@@ -81,11 +81,15 @@ export function MatchingResults({ result }: { result: MatchResponse }) {
             </Card>
 
             {result.excluded.length > 0 && (
-                <Card title="Not ranked" description="Excluded before ranking.">
-                    <ul className="space-y-1 text-sm">
+                <Card
+                    title={`Excluded: not eligible for transplant (${result.excluded.length})`}
+                    description="Removed by a safety rule. This is a fixed rule, not a model decision."
+                >
+                    <ul className="space-y-2 text-sm">
                         {result.excluded.map((e) => (
-                            <li key={e.recordId}>
-                                <span className="font-medium">{e.recordId}</span>: {e.reason}
+                            <li key={e.recordId} className="flex flex-wrap items-center gap-2">
+                                <span className="font-medium">{e.recordId}</span>
+                                <StatusBadge tone="danger">{e.reason.charAt(0).toUpperCase() + e.reason.slice(1)}</StatusBadge>
                             </li>
                         ))}
                     </ul>

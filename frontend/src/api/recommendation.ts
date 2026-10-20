@@ -28,7 +28,7 @@ export interface MatchCandidate {
     donorAge: number | null
     deathToPreservationH: number | null
     daysInStorage: number | null
-    /** "No" (positive serology) is never ranked. */
+    /** "No" (positive serology) is excluded by the safety rule. */
     serologyClear: SerologyStatus | null
 }
 

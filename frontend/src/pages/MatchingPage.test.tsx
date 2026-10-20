@@ -71,7 +71,10 @@ describe("MatchingPage", () => {
         expect(ranking.getByText("R0001")).toBeInTheDocument()
         expect(ranking.getByText("serology not confirmed")).toBeInTheDocument()
         expect(ranking.getByText("stored 2 fewer days")).toBeInTheDocument()
-        expect(within(screen.getByRole("region", { name: "Not ranked" })).getByText(/positive serology/)).toBeInTheDocument()
+        const excluded = within(screen.getByRole("region", { name: "Excluded: not eligible for transplant (1)" }))
+        expect(excluded.getByText("R0003")).toBeInTheDocument()
+        expect(excluded.getByText("Positive serology")).toBeInTheDocument()
+        expect(screen.queryByText(/not ranked/i)).not.toBeInTheDocument()
 
         const sent = vi.mocked(recommendMatch).mock.calls[0][0]
         expect(sent.request).toEqual({ requestId: "Q0001", requestedGrade: "A", surgeryType: "PK", urgency: "Routine" })
