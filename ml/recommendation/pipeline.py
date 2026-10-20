@@ -11,7 +11,8 @@ Part B (post-transplant follow-up; simulated cohort until real follow-up data ar
     run_followup_eda   P1: data checks, ECD trends, Kaplan-Meier survival, visits, rejection
     run_followup_dataset  P2: 12-month landmark dataset, split by graft, train-only preprocessing
     run_followup_baselines  P3: trajectory baselines (MAE/RMSE) and risk baselines (C-index, AUC, Brier)
-    run_trajectory, run_risk, run_followup   planned (P3-P7)
+    run_trajectory     P4: GBM and LSTM vs baselines, learning curve, test once, save the chosen model
+    run_risk, run_followup   planned (P5-P7)
 """
 import json
 from pathlib import Path
@@ -476,8 +477,75 @@ def _write_baselines_md(path: Path, r: dict) -> None:
     path.write_text("\n".join(md) + "\n", encoding="utf-8")
 
 
-def run_trajectory(cfg: dict):
-    raise NotImplementedError("Needs recipient follow-up visits (ECD/CV/HEX over time).")
+def run_trajectory(cfg: dict, with_curve: bool = True) -> dict:
+    """P4: compare trajectory models by repeated CV, learning curve, test the chosen one once, save it."""
+    import joblib
+
+    from recommendation.data_prep.followup_dataset import load
+    from recommendation.trajectory import experiment
+
+    paths = cfg["paths"]
+    table, _ = load(paths["followup_dataset"], Path(paths["models"]) / "followup_preprocessor.json")
+    res = experiment.run(table, seed=cfg["followup"]["seed"], with_curve=with_curve)
+    res["source"] = str(table["data_source"].iloc[0])
+
+    models = Path(paths["models"])
+    models.mkdir(parents=True, exist_ok=True)
+    joblib.dump({"name": res["chosen"], "model": res.pop("final_model"), "band": res["band_log_residual_quantiles"],
+                 "band_level": res["band_level"], "source": res["source"]}, models / "followup_trajectory.joblib")
+    out = Path(paths["outputs"]) / "trajectory"
+    out.mkdir(parents=True, exist_ok=True)
+    (out / "trajectory_results.json").write_text(json.dumps(res, indent=2, default=str), encoding="utf-8")
+    figs = _trajectory_figures(res, out)
+    _write_trajectory_md(out / "trajectory_summary.md", res, figs)
+    return res
+
+
+def _trajectory_figures(res: dict, out: Path) -> list:
+    from recommendation.data_prep.eda import _figure, _save, _style
+
+    figs = []
+    if res["learning_curve"]:
+        curve = pd.DataFrame(res["learning_curve"]).groupby(["model", "train_grafts"])["mae_all"].mean().unstack(0)
+        fig, ax = _figure(8, 4.2)
+        colors = ["#2a78d6", "#eb6834", "#1f9e74", "#8b5cf6", "#c2410c"]
+        for c, col in zip(curve.columns, colors):
+            ax.plot(curve.index, curve[c], marker="o", linewidth=2, color=col, label=c)
+        ax.set_xscale("log")
+        ax.set_xticks(curve.index)
+        ax.set_xticklabels([str(i) for i in curve.index])
+        _style(ax, "Learning curve: ECD prediction error vs training size", "Training grafts (log scale)",
+               "MAE, cells/mm²")
+        ax.legend(frameon=False, fontsize=8)
+        fig.text(0.01, 0.005, f"Data source: {res['source']}", fontsize=7, color="#898781")
+        figs.append(_save(fig, out, "learning_curve.png"))
+    return figs
+
+
+def _write_trajectory_md(path: Path, r: dict, figs: list) -> None:
+    md = ["# P4 Trajectory models (ECD at 24 / 36 / 60 months)", "", f"Data source: {r['source']}.", "",
+          "## Repeated CV (training + validation grafts), MAE in cells/mm2", "",
+          "| Model | 24 m | 36 m | 60 m | all | RMSE all |", "|---|---|---|---|---|---|"]
+    for name, c in r["cv"].items():
+        mark = " **(chosen)**" if name == r["chosen"] else ""
+        md.append(f"| {name}{mark} | {c['24m']['mae']:.0f} | {c['36m']['mae']:.0f} | {c['60m']['mae']:.0f} | "
+                  f"{c['all']['mae']:.0f} | {c['all']['rmse']:.0f} |")
+    md += ["", f"Gradient-boosting settings chosen on training grafts only: {r['tuning']['selected']}.",
+           f"Choice rule: lowest CV error; a simpler model within {int(r['tie_margin'] * 100)}% wins.", "",
+           "## Test grafts (used once)", "", "| Model | 24 m | 36 m | 60 m | all |", "|---|---|---|---|---|"]
+    for name, d in r["test"].items():
+        e = d["errors"]
+        md.append(f"| {name} | {e['24m']['mae']:.0f} | {e['36m']['mae']:.0f} | {e['60m']['mae']:.0f} | {e['all']['mae']:.0f} |")
+    cov = r["test"][r["chosen"]].get("band_coverage", {})
+    md += ["", f"{r['band_level']} prediction band coverage on test: " + ", ".join(
+        f"{h} {d['coverage']:.0%} (n={d['n']})" for h, d in cov.items())]
+    if r["learning_curve"]:
+        curve = pd.DataFrame(r["learning_curve"]).groupby(["train_grafts", "model"])["mae_all"].mean().unstack()
+        md += ["", "## Learning curve (separate simulated cohort; MAE all horizons)", "",
+               "| Training grafts | " + " | ".join(curve.columns) + " |", "|---" * (len(curve.columns) + 1) + "|"]
+        md += [f"| {n} | " + " | ".join(f"{v:.0f}" for v in row) + " |" for n, row in curve.iterrows()]
+    md += ["", "Figures: " + ", ".join(figs)]
+    path.write_text("\n".join(md) + "\n", encoding="utf-8")
 
 
 def run_risk(cfg: dict):

@@ -15,6 +15,7 @@ From ml/:
     uv run python -m recommendation.main followup-eda   # P1: describe the follow-up cohort
     uv run python -m recommendation.main followup-data  # P2: landmark dataset, split, preprocessing
     uv run python -m recommendation.main followup-baselines  # P3: trajectory and risk baselines
+    uv run python -m recommendation.main trajectory     # P4: GBM / LSTM vs baselines, learning curve
 """
 import argparse
 
@@ -148,6 +149,8 @@ def main() -> None:
         for line in log:
             print(" OK", line)
         print(f"\nReport: {path}")
+    elif a.task == "trajectory":
+        _print_trajectory(pipeline.run_trajectory(cfg), cfg)
     elif a.task == "followup-baselines":
         _print_followup_baselines(pipeline.run_followup_baselines(cfg), cfg)
     elif a.task == "followup-data":
@@ -213,6 +216,27 @@ def _print_explain(res: dict, cfg: dict) -> None:
                   f"{c['Cand_Days_In_Storage']} d in storage: {c['Why']}{tag}")
     out = f"{cfg['paths']['outputs']}/explain"
     print(f"\nSaved: {out}/shap_summary.md, {out}/shap_global_reasons.png, {out}/explanations.xlsx")
+
+
+def _print_trajectory(res: dict, cfg: dict) -> None:
+    print(f"\nData source: {res['source']}")
+    print(f"\n1. Gradient-boosting settings (CV on training grafts): {res['tuning']['selected']}")
+    print("\n2. Repeated CV, MAE of predicted ECD (cells/mm2):")
+    rows = {n: {h: c[h]["mae"] for h in ("24m", "36m", "60m", "all")} for n, c in res["cv"].items()}
+    print(pd.DataFrame(rows).T.to_string(float_format="{:.0f}".format))
+    print(f"   Chosen: {res['chosen']}   (best baseline: {res['best_baseline']})")
+    print("\n3. Test grafts (used once), MAE:")
+    rows = {n: {h: d["errors"][h]["mae"] for h in ("24m", "36m", "60m", "all")} for n, d in res["test"].items()}
+    print(pd.DataFrame(rows).T.to_string(float_format="{:.0f}".format))
+    cov = res["test"][res["chosen"]].get("band_coverage", {})
+    print(f"   {res['band_level']} band coverage on test: " + ", ".join(f"{h} {d['coverage']:.0%}" for h, d in cov.items()))
+    if res["learning_curve"]:
+        curve = pd.DataFrame(res["learning_curve"]).groupby(["train_grafts", "model"])["mae_all"].mean().unstack()
+        print("\n4. Learning curve (MAE, separate simulated cohort):")
+        print(curve.to_string(float_format="{:.0f}".format))
+    out = f"{cfg['paths']['outputs']}/trajectory"
+    print(f"\nSaved: {out}/trajectory_summary.md, {out}/trajectory_results.json, {out}/learning_curve.png")
+    print(f"Model: {cfg['paths']['models']}/followup_trajectory.joblib")
 
 
 def _print_followup_baselines(res: dict, cfg: dict) -> None:
