@@ -2,6 +2,7 @@ package com.cornealai.backend.analysis.client;
 
 import com.cornealai.backend.analysis.AnalysisRejectedException;
 import com.cornealai.backend.analysis.dto.AnalyzeResponse;
+import com.cornealai.backend.analysis.dto.cellular.CellularAnalyzeResponse;
 import com.cornealai.backend.analysis.dto.disease.DiseaseAnalyzeResponse;
 import com.cornealai.backend.analysis.dto.disease.ImageQuality;
 import com.cornealai.backend.analysis.dto.disease.InputCheck;
@@ -123,6 +124,31 @@ public class MlServiceClient {
             if (failedChecks != null) {
                 return failedChecks;
             }
+            throw translate(e);
+        } catch (RestClientException e) {
+            log.warn("ml-service unreachable: {}", e.getClass().getSimpleName());
+            throw new AnalysisRejectedException(HttpStatus.SERVICE_UNAVAILABLE, "MODEL_NOT_READY", null,
+                    "The analysis service is unavailable. Try again later.");
+        }
+    }
+
+    /**
+     * Cellular analysis (ml-service POST /cellular/analyze): ROI, cells, ECD / CV / HEX. Rejections are raised as
+     * for analyze().
+     */
+    public CellularAnalyzeResponse analyzeCellular(String caseId, byte[] image, String filename) {
+        MultiValueMap<String, Object> form = new LinkedMultiValueMap<>();
+        form.add("caseId", caseId);
+        form.add("image", new NamedBytes(image, filename));
+
+        try {
+            return restClient.post()
+                    .uri("/cellular/analyze")
+                    .contentType(MediaType.MULTIPART_FORM_DATA)
+                    .body(form)
+                    .retrieve()
+                    .body(CellularAnalyzeResponse.class);
+        } catch (RestClientResponseException e) {
             throw translate(e);
         } catch (RestClientException e) {
             log.warn("ml-service unreachable: {}", e.getClass().getSimpleName());

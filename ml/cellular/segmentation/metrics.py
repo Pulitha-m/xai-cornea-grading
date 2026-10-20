@@ -7,6 +7,10 @@ reference mask, excluding ignore regions of either:
   dice/iou_interior         pixel overlap of cell interiors (scope targets 0.85 / 0.80)
   dice_wall                 pixel overlap of walls (strict: walls are 1-3 px wide)
   n_cells_pred/gt, area_ratio   complete cells and mean-area ratio (biomarker sanity)
+  area_ratio_tess           mean-area ratio with cells measured up to the wall centre
+                            line, so it no longer depends on how thick each model
+                            draws walls (1-px watershed lines vs ~2-px reference walls
+                            vs gaps between Cellpose cells)
 """
 
 from __future__ import annotations
@@ -16,8 +20,28 @@ from pathlib import Path
 import cv2
 import numpy as np
 import pandas as pd
+from scipy import ndimage as ndi
+from skimage.measure import label
+from skimage.segmentation import expand_labels
 
 from data_prep.check_annotations import IGNORE, INTERIOR, WALL, agreement, cells_from_mask
+
+# Cells grow into neighbouring wall pixels by at most this distance (nearest cell
+# wins), i.e. up to the wall centre line. Larger empty areas (dark or blurry
+# regions a model left out) stay unassigned. Same rule for reference and models.
+TESS_GROW_PX = 3
+
+
+def tessellated_cells(mask: np.ndarray) -> np.ndarray:
+    """Complete cells grown up to the wall centre line; cells touching the border or ignore are dropped."""
+    grown = expand_labels(label(mask == INTERIOR, connectivity=1), distance=TESS_GROW_PX)
+    grown[mask == IGNORE] = 0
+    edge = np.zeros(mask.shape, bool)
+    edge[[0, -1], :] = True
+    edge[:, [0, -1]] = True
+    edge |= ndi.binary_dilation(mask == IGNORE, iterations=2)
+    grown[np.isin(grown, np.unique(grown[edge]))] = 0
+    return grown
 
 
 def _overlap(pred: np.ndarray, gt: np.ndarray, cls: int, keep: np.ndarray) -> tuple[float, float]:
@@ -38,6 +62,10 @@ def score_crop(pred_mask: np.ndarray, gt_mask: np.ndarray) -> dict:
     areas = [a[a > 0] for a in areas]
     out["n_cells_pred"], out["n_cells_gt"] = len(areas[0]), len(areas[1])
     out["area_ratio"] = (areas[0].mean() / areas[1].mean()) if len(areas[0]) and len(areas[1]) else float("nan")
+
+    tess = [np.bincount(tessellated_cells(restrict(m)).ravel())[1:] for m in (pred_mask, gt_mask)]
+    tess = [a[a > 0] for a in tess]
+    out["area_ratio_tess"] = (tess[0].mean() / tess[1].mean()) if len(tess[0]) and len(tess[1]) else float("nan")
     return out
 
 

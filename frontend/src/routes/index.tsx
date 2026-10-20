@@ -3,8 +3,9 @@ import { HomeRedirect } from "@/components/auth/HomeRedirect"
 import { ProtectedRoute } from "@/components/auth/ProtectedRoute"
 import { RoleGuard } from "@/components/auth/RoleGuard"
 import { AppLayout } from "@/components/layout/AppLayout"
-import { ANALYSIS_PATH, DISEASE_PATH, GRADING_PATH, PLANNED_MODULES } from "@/lib/roles"
+import { ANALYSIS_PATH, CELLULAR_PATH, DISEASE_PATH, GRADING_PATH, PLANNED_MODULES } from "@/lib/roles"
 import { AnalysisPage } from "@/pages/AnalysisPage"
+import { CellularPage } from "@/pages/CellularPage"
 import { ComingSoonPage } from "@/pages/ComingSoonPage"
 import { DiseasePage } from "@/pages/DiseasePage"
 import { GradingPage } from "@/pages/GradingPage"
@@ -48,6 +49,10 @@ export const routes: RouteObject[] = [
                     {
                         element: <RoleGuard allow={["DOCTOR", "NURSE"]} permission="analysis:run" />,
                         children: [{ path: ANALYSIS_PATH, element: <AnalysisPage /> }],
+                    },
+                    {
+                        element: <RoleGuard allow={["DOCTOR", "NURSE"]} permission="analysis:run" />,
+                        children: [{ path: CELLULAR_PATH, element: <CellularPage /> }],
                     },
                     {
                         element: <RoleGuard allow={["DOCTOR", "NURSE"]} permission="analysis:run" />,
