@@ -69,19 +69,23 @@ class DiseaseAnalysisIntegrationTests extends IntegrationTestSupport {
 
     @Test
     void analysisSendsStoredBytesAndRecordsTheRunWithoutGradcam() throws Exception {
-        UUID imageId = uploadedImage(doctor, "CASE-1");
-        when(mlServiceClient.analyzeDisease(eq("CASE-1"), anyString(), eq(false), any(), anyString()))
+        UUID imageId = uploadedImage(doctor, "12656R");
+        when(mlServiceClient.analyzeDisease(anyString(), anyString(), eq(false), any(), anyString()))
                 .thenReturn(completed());
 
-        analyze(doctor, "CASE-1", imageId, false)
+        analyze(doctor, "12656R", imageId, false)
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.analysisId").isNotEmpty())
                 .andExpect(jsonPath("$.detected[0]").value("FECD"))
                 .andExpect(jsonPath("$.diseases[0].gradcamPng").value("iVBORw0KGgo="));
 
-        verify(mlServiceClient).analyzeDisease(eq("CASE-1"), contains("\"Donor_Age\":null"), eq(false), eq(stored), anyString());
+        verify(mlServiceClient).analyzeDisease(anyString(), contains("\"Donor_Age\":null"), eq(false), eq(image()), anyString());  // decrypted, as uploaded
         DiseaseAnalysisRun run = runs.findByImageId(imageId).getFirst();
         assertThat(run.getStatus()).isEqualTo("completed");
+        // Linked to the donor case by UUID; the tissue ID is not stored in the run.
+        assertThat(run.getDonorCaseId()).isNotNull();
+        assertThat(run.getCaseId()).isEqualTo(run.getDonorCaseId().toString());
+        assertThat(run.getResultJson()).doesNotContain("12656R");
         assertThat(run.isForced()).isFalse();
         assertThat(run.getMeasurementsJson()).contains("\"ECD_CD_cells_per_mm2\":2650");
         assertThat(run.getResultJson()).contains("\"detected\":[\"FECD\"]").doesNotContain("iVBORw0KGgo");
@@ -89,14 +93,14 @@ class DiseaseAnalysisIntegrationTests extends IntegrationTestSupport {
 
     @Test
     void failedInputChecksAreReturnedAndRecorded() throws Exception {
-        UUID imageId = uploadedImage(doctor, "CASE-1");
+        UUID imageId = uploadedImage(doctor, "12656R");
         InputCheck check = new InputCheck(false, false,
                 List.of(new InputIssue("VALUE_NOT_POSSIBLE", "ECD_CD_cells_per_mm2", "ECD = 0: zero or negative is impossible.")),
                 List.of(new InputIssue("VALUE_MISSING", "Donor_Age", "Donor age not recorded.")));
         when(mlServiceClient.analyzeDisease(anyString(), anyString(), anyBoolean(), any(), anyString()))
-                .thenReturn(DiseaseAnalyzeResponse.inputCheckFailed("CASE-1", "The inputs did not pass the checks.", check, null));
+                .thenReturn(DiseaseAnalyzeResponse.inputCheckFailed("12656R", "The inputs did not pass the checks.", check, null));
 
-        analyze(doctor, "CASE-1", imageId, false)
+        analyze(doctor, "12656R", imageId, false)
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.status").value("input_check_failed"))
                 .andExpect(jsonPath("$.inputCheck.errors[0].field").value("ECD_CD_cells_per_mm2"))
@@ -106,21 +110,21 @@ class DiseaseAnalysisIntegrationTests extends IntegrationTestSupport {
 
     @Test
     void forceIsPassedOnAndRecorded() throws Exception {
-        UUID imageId = uploadedImage(doctor, "CASE-1");
+        UUID imageId = uploadedImage(doctor, "12656R");
         when(mlServiceClient.analyzeDisease(anyString(), anyString(), eq(true), any(), anyString())).thenReturn(completed());
 
-        analyze(doctor, "CASE-1", imageId, true).andExpect(status().isOk());
+        analyze(doctor, "12656R", imageId, true).andExpect(status().isOk());
         assertThat(runs.findByImageId(imageId).getFirst().isForced()).isTrue();
     }
 
     @Test
     void mlServiceRejectionIsRecordedAndReturnedWithItsCode() throws Exception {
-        UUID imageId = uploadedImage(doctor, "CASE-1");
+        UUID imageId = uploadedImage(doctor, "12656R");
         when(mlServiceClient.analyzeDisease(anyString(), anyString(), anyBoolean(), any(), anyString()))
                 .thenThrow(new AnalysisRejectedException(HttpStatus.UNPROCESSABLE_CONTENT, "INVALID_IMAGE_DOMAIN", "image",
                         "Upload a specular microscopy image showing corneal endothelial cells."));
 
-        analyze(doctor, "CASE-1", imageId, false)
+        analyze(doctor, "12656R", imageId, false)
                 .andExpect(status().isUnprocessableContent())
                 .andExpect(jsonPath("$.code").value("INVALID_IMAGE_DOMAIN"));
         DiseaseAnalysisRun run = runs.findByImageId(imageId).getFirst();
@@ -129,20 +133,20 @@ class DiseaseAnalysisIntegrationTests extends IntegrationTestSupport {
     }
 
     @Test
-    void onlyTheUploaderMayAnalyseAnImage() throws Exception {
-        UUID imageId = uploadedImage(doctor, "CASE-1");
+    void anotherClinicianCanAnalyseTheCase() throws Exception {
+        UUID imageId = uploadedImage(doctor, "12656R");
         AppUser other = createUser("dr.other", RoleName.DOCTOR);
 
-        analyze(other, "CASE-1", imageId, false)
-                .andExpect(status().isForbidden())
-                .andExpect(jsonPath("$.code").value("TISSUE_ACCESS_DENIED"));
-        verifyNoInteractions(mlServiceClient);
+        when(mlServiceClient.analyzeDisease(anyString(), anyString(), eq(false), any(), anyString())).thenReturn(completed());
+
+        analyze(other, "12656R", imageId, false).andExpect(status().isOk());
+        assertThat(runs.findByImageId(imageId).getFirst().getRequestedBy()).isEqualTo(other.getId());
     }
 
     @Test
     void nonClinicalRoleCannotRunDiseaseAnalysis() throws Exception {
         AppUser support = createUser("support.disease", RoleName.SUPPORT_STAFF);
-        analyze(support, "CASE-1", UUID.randomUUID(), false).andExpect(status().isForbidden());
+        analyze(support, "12656R", UUID.randomUUID(), false).andExpect(status().isForbidden());
         verifyNoInteractions(mlServiceClient);
     }
 
@@ -150,7 +154,7 @@ class DiseaseAnalysisIntegrationTests extends IntegrationTestSupport {
         List<DiseaseFinding> findings = List.of(
                 new DiseaseFinding("FECD", "FECD", 0.8, 0.23, true, "iVBORw0KGgo="),
                 new DiseaseFinding("Guttata", "Guttata", 0.1, 0.44, false, null));
-        return new DiseaseAnalyzeResponse(null, "CASE-1", "completed", "Research tool, not a medical diagnosis.",
+        return new DiseaseAnalyzeResponse(null, "12656R", "completed", "Research tool, not a medical diagnosis.",
                 null, new InputCheck(true, false, List.of(), List.of()), null, "densenet121_image_numbers_fusion_v2",
                 findings, List.of("FECD"), false, List.of(), "Mild", Map.of("FECDgroup", 0.3), Map.of(), List.of(), true);
     }

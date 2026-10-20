@@ -3,8 +3,21 @@ import { HomeRedirect } from "@/components/auth/HomeRedirect"
 import { ProtectedRoute } from "@/components/auth/ProtectedRoute"
 import { RoleGuard } from "@/components/auth/RoleGuard"
 import { AppLayout } from "@/components/layout/AppLayout"
-import { ANALYSIS_PATH, CELLULAR_PATH, DISEASE_PATH, FOLLOWUP_PATH, GRADING_PATH, MATCHING_PATH, PLANNED_MODULES } from "@/lib/roles"
+import {
+    ANALYSIS_PATH,
+    AUDIT_PATH,
+    CASES_PATH,
+    CELLULAR_PATH,
+    DISEASE_PATH,
+    FOLLOWUP_PATH,
+    GRADING_PATH,
+    MATCHING_PATH,
+    PLANNED_MODULES,
+} from "@/lib/roles"
 import { AnalysisPage } from "@/pages/AnalysisPage"
+import { AuditLogPage } from "@/pages/AuditLogPage"
+import { CaseWorkspacePage } from "@/pages/CaseWorkspacePage"
+import { CasesPage } from "@/pages/CasesPage"
 import { CellularPage } from "@/pages/CellularPage"
 import { ComingSoonPage } from "@/pages/ComingSoonPage"
 import { DiseasePage } from "@/pages/DiseasePage"
@@ -33,6 +46,10 @@ export const routes: RouteObject[] = [
                         children: [{ path: "/admin/dashboard", element: <AdminDashboard /> }],
                     },
                     {
+                        element: <RoleGuard allow={["ADMIN"]} permission="audit:read" />,
+                        children: [{ path: AUDIT_PATH, element: <AuditLogPage /> }],
+                    },
+                    {
                         element: <RoleGuard allow={["MANAGER"]} />,
                         children: [{ path: "/manager/dashboard", element: <ManagerDashboard /> }],
                     },
@@ -47,6 +64,13 @@ export const routes: RouteObject[] = [
                     {
                         element: <RoleGuard allow={["SUPPORT_STAFF"]} />,
                         children: [{ path: "/support/dashboard", element: <SupportDashboard /> }],
+                    },
+                    {
+                        element: <RoleGuard allow={["DOCTOR", "NURSE"]} permission="analysis:run" />,
+                        children: [
+                            { path: CASES_PATH, element: <CasesPage /> },
+                            { path: `${CASES_PATH}/:caseId`, element: <CaseWorkspacePage /> },
+                        ],
                     },
                     {
                         element: <RoleGuard allow={["DOCTOR", "NURSE"]} permission="analysis:run" />,

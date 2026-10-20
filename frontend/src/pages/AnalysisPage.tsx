@@ -1,4 +1,5 @@
 import { BrainCircuitIcon } from "lucide-react"
+import { PreviousResults } from "@/components/cases/PreviousResults"
 import { AnalysisPanel } from "@/components/dashboard/AnalysisPanel"
 import { PageHeader } from "@/components/dashboard/PageHeader"
 
@@ -16,6 +17,9 @@ export function AnalysisPage() {
                 description="Run the cellular, grading, disease and recommendation modules on a specular microscopy image. Each module reports independently."
             />
             <AnalysisPanel />
+            <div className="mt-6">
+                <PreviousResults module="combined" />
+            </div>
         </>
     )
 }

@@ -7,6 +7,10 @@ import { ApiError } from "@/lib/api-client"
 import { FEATURES } from "@/lib/grading-features"
 import { makeAuth, makeUser, renderApp } from "@/test/auth-test-utils"
 
+vi.mock(import("@/api/cases"), async (importOriginal) => ({
+    ...(await importOriginal()),
+    listModuleRuns: vi.fn().mockResolvedValue({ items: [], nextBefore: null }),
+}))
 vi.mock(import("@/api/analysis"), async (importOriginal) => ({
     ...(await importOriginal()),
     uploadImage: vi.fn(),
@@ -20,7 +24,7 @@ const FEATURES_USED = { ...Object.fromEntries(FEATURES.map((f) => [f.name, null]
 
 const COMPLETED: GradingAnalyzeResponse = {
     analysisId: "run-1",
-    caseId: "CASE-9",
+    caseId: "12656R",
     status: "completed",
     imageValidation: { domainStatus: "VALID_CORNEAL_IMAGE", qualityAssessed: false, width: 1296, height: 972, format: "JPEG" },
     grade: "B",
@@ -63,7 +67,7 @@ function jpeg() {
 async function fillAndGrade(ecd: string) {
     const user = userEvent.setup()
     await user.upload(await screen.findByLabelText("Specular microscopy image"), jpeg())
-    await user.type(screen.getByLabelText("Case ID"), "CASE-9")
+    await user.type(screen.getByLabelText("Tissue ID"), "12656R")
     if (ecd) await user.type(screen.getByLabelText("ECD (cells/mm²)"), ecd)
     await user.click(screen.getByRole("button", { name: "Grade" }))
     return user
@@ -71,7 +75,7 @@ async function fillAndGrade(ecd: string) {
 
 beforeEach(() => {
     vi.mocked(uploadImage).mockReset().mockResolvedValue({
-        imageId: "img-1", caseId: "CASE-9", contentType: "image/jpeg", sizeBytes: 10, width: 1296, height: 972,
+        imageId: "img-1", caseId: "12656R", contentType: "image/jpeg", sizeBytes: 10, width: 1296, height: 972,
     })
     vi.mocked(analyzeGrading).mockReset()
 })
@@ -89,9 +93,9 @@ describe("GradingPage", () => {
 
         await fillAndGrade("2400")
 
-        expect(await screen.findByRole("heading", { name: /Results for case CASE-9/ })).toBeInTheDocument()
+        expect(await screen.findByRole("heading", { name: /Results for case 12656R/ })).toBeInTheDocument()
         const sent = vi.mocked(analyzeGrading).mock.calls[0][0]
-        expect(sent).toMatchObject({ caseId: "CASE-9", imageId: "img-1" })
+        expect(sent).toMatchObject({ caseId: "12656R", imageId: "img-1" })
         expect(Object.keys(sent.clinicalFeatures)).toHaveLength(24)
         expect(sent.clinicalFeatures.ECD_CD_cells_per_mm2).toBe(2400)
         expect(sent.clinicalFeatures.HEX_percent).toBeNull()
@@ -151,7 +155,7 @@ describe("GradingPage", () => {
         expect(await screen.findByText("ECD must be greater than 0.")).toBeInTheDocument()
         await user.click(screen.getByRole("button", { name: "Grade" }))
 
-        expect(await screen.findByRole("heading", { name: /Results for case CASE-9/ })).toBeInTheDocument()
+        expect(await screen.findByRole("heading", { name: /Results for case 12656R/ })).toBeInTheDocument()
         expect(uploadImage).toHaveBeenCalledTimes(1)
     })
 

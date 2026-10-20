@@ -6,6 +6,10 @@ import { analyzeDisease, type DiseaseAnalyzeResponse } from "@/api/disease"
 import { ApiError } from "@/lib/api-client"
 import { makeAuth, makeUser, renderApp } from "@/test/auth-test-utils"
 
+vi.mock(import("@/api/cases"), async (importOriginal) => ({
+    ...(await importOriginal()),
+    listModuleRuns: vi.fn().mockResolvedValue({ items: [], nextBefore: null }),
+}))
 vi.mock(import("@/api/analysis"), async (importOriginal) => ({
     ...(await importOriginal()),
     uploadImage: vi.fn(),
@@ -22,7 +26,7 @@ const QUALITY = {
 
 const COMPLETED: DiseaseAnalyzeResponse = {
     analysisId: "run-1",
-    caseId: "CASE-7",
+    caseId: "12656R",
     status: "completed",
     message: "Research tool, not a medical diagnosis.",
     imageValidation: { domainStatus: "VALID_CORNEAL_IMAGE", qualityAssessed: true, width: 1296, height: 972, format: "JPEG" },
@@ -67,7 +71,7 @@ function jpeg() {
 async function fillAndAnalyse(values: Record<string, string>) {
     const user = userEvent.setup()
     await user.upload(await screen.findByLabelText("Specular microscopy image"), jpeg())
-    await user.type(screen.getByLabelText("Case ID"), "CASE-7")
+    await user.type(screen.getByLabelText("Tissue ID"), "12656R")
     for (const [label, value] of Object.entries(values)) {
         await user.type(screen.getByLabelText(label), value)
     }
@@ -77,7 +81,7 @@ async function fillAndAnalyse(values: Record<string, string>) {
 
 beforeEach(() => {
     vi.mocked(uploadImage).mockReset().mockResolvedValue({
-        imageId: "img-1", caseId: "CASE-7", contentType: "image/jpeg", sizeBytes: 10, width: 1296, height: 972,
+        imageId: "img-1", caseId: "12656R", contentType: "image/jpeg", sizeBytes: 10, width: 1296, height: 972,
     })
     vi.mocked(analyzeDisease).mockReset()
 })
@@ -95,9 +99,9 @@ describe("DiseasePage", () => {
 
         await fillAndAnalyse({ "ECD (cells/mm²)": "1667", "SD of cell area (µm²)": "180", "Coefficient of variation (%)": "30", "Hexagonality (%)": "72" })
 
-        expect(await screen.findByRole("heading", { name: /Results for case CASE-7/ })).toBeInTheDocument()
+        expect(await screen.findByRole("heading", { name: /Results for case 12656R/ })).toBeInTheDocument()
         expect(analyzeDisease).toHaveBeenCalledWith({
-            caseId: "CASE-7", imageId: "img-1", force: false,
+            caseId: "12656R", imageId: "img-1", force: false,
             measurements: { ECD_CD_cells_per_mm2: 1667, SD: 180, CV: 30, HEX_percent: 72, Donor_Age: null },
         })
         const findings = within(screen.getByRole("region", { name: "Disease findings" }))

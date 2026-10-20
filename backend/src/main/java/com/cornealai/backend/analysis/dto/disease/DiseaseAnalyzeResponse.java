@@ -39,6 +39,12 @@ public record DiseaseAnalyzeResponse(
                 null, null, null, null, null, null, null, null, null, null);
     }
 
+    public DiseaseAnalyzeResponse withCaseId(String id) {
+        return new DiseaseAnalyzeResponse(analysisId, id, status, message, imageValidation, inputCheck, imageQuality,
+                method, diseases, detected, normal, severity, overallSeverity, severityProbabilities,
+                measurementsUsed, measurementsNotRecorded, reliable);
+    }
+
     public DiseaseAnalyzeResponse withAnalysisId(UUID id) {
         return new DiseaseAnalyzeResponse(id, caseId, status, message, imageValidation, inputCheck, imageQuality,
                 method, diseases, detected, normal, severity, overallSeverity, severityProbabilities,

@@ -9,7 +9,13 @@ public enum Permission {
     USERS_READ("users:read"),
     USERS_MANAGE("users:manage"),
     ROLES_ASSIGN("roles:assign"),
-    ANALYSIS_RUN("analysis:run");
+    ANALYSIS_RUN("analysis:run"),
+    /** Confirm a case's grade and findings (specialist sign-off). */
+    CASE_SIGNOFF("case:signoff"),
+    /** Read and record serology results, and list sign-off candidates (which carry serology status). */
+    SEROLOGY_ACCESS("serology:access"),
+    /** Read the audit log of who decrypted or changed what. */
+    AUDIT_READ("audit:read");
 
     private final String authority;
 

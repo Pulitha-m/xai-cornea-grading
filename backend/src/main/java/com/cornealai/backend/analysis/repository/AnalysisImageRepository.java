@@ -6,4 +6,8 @@ import org.springframework.data.jpa.repository.JpaRepository;
 import java.util.UUID;
 
 public interface AnalysisImageRepository extends JpaRepository<AnalysisImage, UUID> {
+
+    java.util.List<AnalysisImage> findByDonorCaseIdOrderByCreatedAtDesc(UUID donorCaseId);
+
+    long countByDonorCaseId(UUID donorCaseId);
 }

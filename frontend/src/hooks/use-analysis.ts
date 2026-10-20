@@ -1,5 +1,5 @@
 import { useRef, useState } from "react"
-import { useMutation } from "@tanstack/react-query"
+import { useMutation, useQueryClient } from "@tanstack/react-query"
 import { analyzeCornea, uploadImage, type AnalyzeResponse } from "@/api/analysis"
 
 export interface ImageAnalysisInput {
@@ -20,7 +20,10 @@ export function useImageAnalysis() {
     const [progress, setProgress] = useState(0)
     const uploaded = useRef<{ file: File; caseId: string; imageId: string } | null>(null)
 
+    const queryClient = useQueryClient()
     const mutation = useMutation<AnalyzeResponse, Error, ImageAnalysisInput>({
+        // New results appear in "Previous results" on the module pages.
+        onSuccess: () => void queryClient.invalidateQueries({ queryKey: ["runs"] }),
         mutationFn: async ({ caseId, file, clinicalFeatures }) => {
             try {
                 let imageId = uploaded.current?.file === file && uploaded.current.caseId === caseId

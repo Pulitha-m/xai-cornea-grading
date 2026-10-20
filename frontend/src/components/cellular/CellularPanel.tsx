@@ -1,4 +1,5 @@
 import { useEffect, useId, useMemo, useState, type ChangeEvent, type FormEvent } from "react"
+import { normaliseTissueId, TISSUE_ID_PLACEHOLDER } from "@/lib/tissue-id"
 import { IMAGE_ACCEPT, IMAGE_MAX_BYTES } from "@/api/analysis"
 import { useCellularAnalysis } from "@/hooks/use-cellular-analysis"
 import { ApiError } from "@/lib/api-client"
@@ -65,7 +66,7 @@ export function CellularPanel() {
             setFileError((current) => current ?? "Choose a specular microscopy image to analyse.")
             return
         }
-        analysis.mutate({ caseId: caseId.trim(), file }, {
+        analysis.mutate({ caseId: normaliseTissueId(caseId), file }, {
             onError: (err) => {
                 if (err instanceof ApiError && err.code !== null && IMAGE_ERROR_CODES.has(err.code)) {
                     analysis.resetUpload()
@@ -96,7 +97,7 @@ export function CellularPanel() {
                             />
                         </div>
                         <div>
-                            <label htmlFor={caseIdId} className="mb-1.5 block text-sm font-medium">Case ID</label>
+                            <label htmlFor={caseIdId} className="mb-1.5 block text-sm font-medium">Tissue ID</label>
                             <input
                                 id={caseIdId}
                                 required
@@ -107,7 +108,7 @@ export function CellularPanel() {
                                     analysis.reset()
                                 }}
                                 className={textInput}
-                                placeholder="CASE-001"
+                                placeholder={TISSUE_ID_PLACEHOLDER}
                             />
                         </div>
                     </div>

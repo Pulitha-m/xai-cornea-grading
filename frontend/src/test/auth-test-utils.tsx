@@ -8,9 +8,9 @@ import { routes } from "@/routes"
 import type { Role, User } from "@/types/auth"
 
 const PERMISSIONS: Record<Role, User["permissions"]> = {
-    ADMIN: ["roles:assign", "users:manage", "users:read"],
+    ADMIN: ["roles:assign", "users:manage", "users:read", "audit:read"],
     MANAGER: ["users:read"],
-    DOCTOR: ["analysis:run"],
+    DOCTOR: ["analysis:run", "case:signoff", "serology:access"],
     NURSE: ["analysis:run"],
     SUPPORT_STAFF: [],
 }

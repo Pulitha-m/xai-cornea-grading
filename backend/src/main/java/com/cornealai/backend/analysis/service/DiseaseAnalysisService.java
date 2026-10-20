@@ -6,92 +6,121 @@ import com.cornealai.backend.analysis.dto.disease.DiseaseAnalyzeRequest;
 import com.cornealai.backend.analysis.dto.disease.DiseaseAnalyzeResponse;
 import com.cornealai.backend.analysis.entity.AnalysisImage;
 import com.cornealai.backend.analysis.entity.DiseaseAnalysisRun;
-import com.cornealai.backend.analysis.repository.AnalysisImageRepository;
 import com.cornealai.backend.analysis.repository.DiseaseAnalysisRunRepository;
-import com.cornealai.backend.analysis.storage.ImageStorage;
+import com.cornealai.backend.cases.TissueNumber;
+import com.cornealai.backend.cases.entity.DonorCase;
+import com.cornealai.backend.cases.service.DonorCaseService;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import tools.jackson.databind.ObjectMapper;
 
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Map;
 import java.util.UUID;
 
 /**
- * Runs the v2 disease detection + severity model on a stored image, with the same access
- * policy as {@link AnalysisService}: only the uploader may analyse an image, its bytes are read
- * server-side and checked against the stored SHA-256. Every attempt is recorded.
+ * Runs the v2 disease detection and severity models on a stored image of a donor case. Same access
+ * policy as {@link GradingAnalysisService}: any clinical user, the image must belong to the case, its
+ * bytes are read server-side and verified (decrypted, see ImageService). Every attempt is recorded.
  */
 @Service
 public class DiseaseAnalysisService {
 
-    private final AnalysisImageRepository images;
+    private static final Logger log = LoggerFactory.getLogger(DiseaseAnalysisService.class);
+
     private final DiseaseAnalysisRunRepository runs;
-    private final ImageStorage storage;
+    private final ImageService imageService;
+    private final RunArtifactService artifacts;
+    private final DonorCaseService donorCases;
     private final MlServiceClient mlServiceClient;
     private final ObjectMapper objectMapper;
 
     public DiseaseAnalysisService(
-            AnalysisImageRepository images,
             DiseaseAnalysisRunRepository runs,
-            ImageStorage storage,
+            ImageService imageService,
+            RunArtifactService artifacts,
+            DonorCaseService donorCases,
             MlServiceClient mlServiceClient,
             ObjectMapper objectMapper
     ) {
-        this.images = images;
         this.runs = runs;
-        this.storage = storage;
+        this.imageService = imageService;
+        this.artifacts = artifacts;
+        this.donorCases = donorCases;
         this.mlServiceClient = mlServiceClient;
         this.objectMapper = objectMapper;
     }
 
+    /** The module page: the case is named by tissue ID and the measurements are entered with the request. */
     public DiseaseAnalyzeResponse analyze(DiseaseAnalyzeRequest request, Long userId) {
-        String caseId = ImageService.normalizeCaseId(request.caseId());
-        AnalysisImage image = images.findById(request.imageId())
-                .orElseThrow(() -> new AnalysisRejectedException(HttpStatus.NOT_FOUND, "IMAGE_NOT_FOUND", "imageId",
-                        "The image was not found. Upload it again."));
+        TissueNumber tissue = TissueNumber.parse(request.caseId());
+        AnalysisImage image = imageService.requireImage(request.imageId());
+        DonorCase donorCase = donorCases.requireCaseOf(image, tissue);
+        return run(donorCase, image, request.measurements(), request.force(), null, userId).withCaseId(tissue.value());
+    }
 
-        if (!image.getUploadedBy().equals(userId)) {
-            throw new AnalysisRejectedException(HttpStatus.FORBIDDEN, "TISSUE_ACCESS_DENIED", "imageId",
-                    "You do not have access to this image.");
-        }
-        if (!image.getCaseId().equals(caseId)) {
-            throw new AnalysisRejectedException(HttpStatus.FORBIDDEN, "TISSUE_ACCESS_DENIED", "caseId",
-                    "The image belongs to a different case.");
-        }
-
+    /**
+     * Analyses {@code image} of {@code donorCase} (already resolved and checked by the caller) and records
+     * the run. The response carries the case UUID as {@code caseId}.
+     */
+    public DiseaseAnalyzeResponse run(DonorCase donorCase, AnalysisImage image, Map<String, Object> measurements,
+                                      boolean force, UUID caseAnalysisId, Long userId) {
+        String caseId = donorCase.getId().toString();
         DiseaseAnalysisRun run = new DiseaseAnalysisRun();
         run.setId(UUID.randomUUID());
         run.setImageId(image.getId());
         run.setCaseId(caseId);
+        run.setDonorCaseId(donorCase.getId());
+        run.setCaseAnalysisId(caseAnalysisId);
         run.setRequestedBy(userId);
-        run.setForced(request.force());
-        String measurementsJson = objectMapper.writeValueAsString(request.measurements());
+        run.setForced(force);
+        String measurementsJson = objectMapper.writeValueAsString(measurements);
         run.setMeasurementsJson(measurementsJson);
 
         try {
-            byte[] data = storage.read(image.getObjectPath());
-            if (data == null || !ImageService.sha256(data).equals(image.getSha256())) {
-                throw new AnalysisRejectedException(HttpStatus.BAD_GATEWAY, "IMAGE_STORAGE_ACCESS_FAILED", null,
-                        "The stored image could not be verified. Upload it again.");
-            }
+            byte[] data = imageService.readVerified(image);
             String filename = image.getId() + (image.getContentType().equals("image/png") ? ".png" : ".jpg");
-            DiseaseAnalyzeResponse result = mlServiceClient.analyzeDisease(caseId, measurementsJson, request.force(),
+            DiseaseAnalyzeResponse result = mlServiceClient.analyzeDisease(caseId, measurementsJson, force,
                     data, filename);
             if (result == null || result.status() == null
                     || (!DiseaseAnalyzeResponse.INPUT_CHECK_FAILED.equals(result.status()) && result.diseases() == null)) {
                 throw new AnalysisRejectedException(HttpStatus.BAD_GATEWAY, "MODEL_INFERENCE_FAILED", null,
                         "The analysis could not be completed. Try again later.");
             }
-            DiseaseAnalyzeResponse response = result.withAnalysisId(run.getId());
+            DiseaseAnalyzeResponse response = result.withAnalysisId(run.getId()).withCaseId(caseId);
 
             run.setStatus(response.status());
             run.setResultJson(objectMapper.writeValueAsString(response.withoutGradcam()));
             runs.save(run);
+            if (response.diseases() != null) {
+                List<RunArtifactService.Image> maps = new ArrayList<>();
+                for (int i = 0; i < response.diseases().size(); i++) {
+                    maps.add(new RunArtifactService.Image("/diseases/" + i + "/gradcamPng",
+                            response.diseases().get(i).gradcamPng()));
+                }
+                artifacts.store("disease", run.getId(), donorCase.getId(), maps);
+            }
             return response;
         } catch (AnalysisRejectedException e) {
-            run.setStatus("rejected");
-            run.setErrorCode(e.getCode());
-            runs.save(run);
+            record(run, "rejected", e.getCode());
             throw e;
+        } catch (RuntimeException e) {
+            record(run, "failed", "INTERNAL_ERROR");
+            throw e;
+        }
+    }
+
+    /** Records an unsuccessful attempt; if even that fails (e.g. the database is unreachable), log and move on. */
+    private void record(DiseaseAnalysisRun run, String status, String errorCode) {
+        run.setStatus(status);
+        run.setErrorCode(errorCode);
+        try {
+            runs.save(run);
+        } catch (RuntimeException e) {
+            log.error("Could not record {} disease run {}", status, run.getId(), e);
         }
     }
 }

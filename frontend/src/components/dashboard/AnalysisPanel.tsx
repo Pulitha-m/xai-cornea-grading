@@ -1,4 +1,5 @@
 import { useEffect, useId, useMemo, useState, type ChangeEvent, type FormEvent } from "react"
+import { normaliseTissueId, TISSUE_ID_PLACEHOLDER } from "@/lib/tissue-id"
 import { IMAGE_ACCEPT, IMAGE_MAX_BYTES } from "@/api/analysis"
 import { useImageAnalysis } from "@/hooks/use-analysis"
 import { ApiError } from "@/lib/api-client"
@@ -95,7 +96,7 @@ export function AnalysisPanel() {
         if (Object.keys(errors).length > 0) {
             return
         }
-        analysis.mutate({ caseId: caseId.trim(), file, clinicalFeatures: payload }, {
+        analysis.mutate({ caseId: normaliseTissueId(caseId), file, clinicalFeatures: payload }, {
             onError: (err) => {
                 // Feature errors are shown at their fields until the field is edited.
                 setFeatureErrors(featureErrorsFrom(err instanceof ApiError ? err : null))
@@ -131,7 +132,7 @@ export function AnalysisPanel() {
                         </div>
                         <div>
                             <label htmlFor={caseIdId} className="mb-1.5 block text-sm font-medium">
-                                Case ID
+                                Tissue ID
                             </label>
                             <input
                                 id={caseIdId}
@@ -142,7 +143,7 @@ export function AnalysisPanel() {
                                     analysis.resetUpload()
                                 }}
                                 className={textInput}
-                                placeholder="CASE-001"
+                                placeholder={TISSUE_ID_PLACEHOLDER}
                             />
                         </div>
                     </div>

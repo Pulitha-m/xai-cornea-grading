@@ -3,7 +3,14 @@ export const ROLES = ["ADMIN", "MANAGER", "DOCTOR", "NURSE", "SUPPORT_STAFF"] as
 export type Role = (typeof ROLES)[number]
 
 /** Permission strings granted by the backend. Used only to shape the UI; the API enforces them. */
-export type Permission = "users:read" | "users:manage" | "roles:assign" | "analysis:run"
+export type Permission =
+    | "users:read"
+    | "users:manage"
+    | "roles:assign"
+    | "analysis:run"
+    | "case:signoff"
+    | "serology:access"
+    | "audit:read"
 
 export interface User {
     id: number

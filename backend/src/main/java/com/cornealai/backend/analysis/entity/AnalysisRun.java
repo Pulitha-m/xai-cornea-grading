@@ -22,8 +22,12 @@ public class AnalysisRun {
     @Column(name = "image_id", nullable = false)
     private UUID imageId;
 
+    /** The donor case's id as text (never the tissue ID); same value as {@link #donorCaseId}. */
     @Column(name = "case_id", nullable = false, length = 100)
     private String caseId;
+
+    @Column(name = "donor_case_id")
+    private UUID donorCaseId;
 
     @Column(name = "requested_by", nullable = false)
     private Long requestedBy;
@@ -48,6 +52,6 @@ public class AnalysisRun {
 
     @PrePersist
     void onCreate() {
-        createdAt = Instant.now();
+        createdAt = Instant.now().truncatedTo(java.time.temporal.ChronoUnit.MICROS);  // as stored, so paging cursors match
     }
 }

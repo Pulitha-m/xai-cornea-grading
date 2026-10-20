@@ -52,6 +52,9 @@ class AnalysisIntegrationTests extends IntegrationTestSupport {
     @Autowired
     private AnalysisRunRepository runs;
 
+    @Autowired
+    private com.cornealai.backend.cases.service.DonorCaseService donorCases;
+
     private AppUser doctor;
     private byte[] stored;
 
@@ -70,41 +73,52 @@ class AnalysisIntegrationTests extends IntegrationTestSupport {
     // ---------------------------------------------------------------- upload
 
     @Test
-    void validJpegIsStoredUnderAServerGeneratedPath() throws Exception {
-        upload(doctor, "NEB-2024 R/../x", image("jpg", 640, 480), "anything.exe")
+    void validJpegIsStoredEncryptedUnderAServerGeneratedPath() throws Exception {
+        byte[] jpeg = image("jpg", 640, 480);
+        upload(doctor, " 12656r ", jpeg, "anything.exe")
                 .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.caseId").value("12656R"))
                 .andExpect(jsonPath("$.contentType").value("image/jpeg"))
                 .andExpect(jsonPath("$.width").value(640))
                 .andExpect(jsonPath("$.objectPath").doesNotExist());
 
         ArgumentCaptor<String> path = ArgumentCaptor.forClass(String.class);
-        verify(storage).store(path.capture(), any(), eq("image/jpeg"));
-        // Client input cannot steer the path: unsafe characters are replaced and the name is a new UUID.
-        assertThat(path.getValue()).matches("NEB-2024_R_.._x/[0-9a-f-]{36}\\.jpg");
+        ArgumentCaptor<byte[]> bytes = ArgumentCaptor.forClass(byte[].class);
+        verify(storage).store(path.capture(), bytes.capture(), eq("application/octet-stream"));
+        // The path is only a new UUID: neither the case id nor the image format can be read from it.
+        assertThat(path.getValue()).matches("images/[0-9a-f-]{36}").doesNotContain("12656");
+        // Stored bytes are ciphertext, not the JPEG.
+        assertThat(bytes.getValue()).isNotEqualTo(jpeg);
+        assertThat(java.util.Arrays.copyOf(bytes.getValue(), 2)).isNotEqualTo(new byte[]{(byte) 0xFF, (byte) 0xD8});
         AnalysisImage saved = images.findAll().getFirst();
         assertThat(saved.getUploadedBy()).isEqualTo(doctor.getId());
         assertThat(saved.getObjectPath()).isEqualTo(path.getValue());
+        assertThat(saved.isEncrypted()).isTrue();
+        assertThat(saved.getSha256()).isNull();
+        // The record refers to the donor case by its UUID; the tissue ID is not stored in plain text.
+        assertThat(saved.getDonorCaseId()).isNotNull();
+        assertThat(saved.getCaseId()).isEqualTo(saved.getDonorCaseId().toString());
     }
 
     @Test
     void unsupportedOrMisnamedFileIsRejectedBeforeStorage() throws Exception {
-        upload(doctor, "CASE-1", image("bmp", 640, 480), "photo.png")
+        upload(doctor, "12656R", image("bmp", 640, 480), "photo.png")
                 .andExpect(status().isUnsupportedMediaType())
                 .andExpect(jsonPath("$.code").value("UNSUPPORTED_IMAGE_FORMAT"));
-        upload(doctor, "CASE-1", "not an image".getBytes(), "scan.jpg")
+        upload(doctor, "12656R", "not an image".getBytes(), "scan.jpg")
                 .andExpect(jsonPath("$.code").value("UNSUPPORTED_IMAGE_FORMAT"));
         verify(storage, never()).store(anyString(), any(), anyString());
     }
 
     @Test
     void emptyTruncatedAndTooSmallImagesAreRejected() throws Exception {
-        upload(doctor, "CASE-1", new byte[0], "empty.jpg")
+        upload(doctor, "12656R", new byte[0], "empty.jpg")
                 .andExpect(status().isUnprocessableContent())
                 .andExpect(jsonPath("$.code").value("IMAGE_DECODE_FAILED"));
         byte[] png = image("png", 640, 480);
-        upload(doctor, "CASE-1", java.util.Arrays.copyOf(png, 12), "cut.png")
+        upload(doctor, "12656R", java.util.Arrays.copyOf(png, 12), "cut.png")
                 .andExpect(jsonPath("$.code").value("IMAGE_DECODE_FAILED"));
-        upload(doctor, "CASE-1", image("png", 100, 100), "small.png")
+        upload(doctor, "12656R", image("png", 100, 100), "small.png")
                 .andExpect(jsonPath("$.code").value("IMAGE_DIMENSIONS_INVALID"));
         verify(storage, never()).store(anyString(), any(), anyString());
     }
@@ -115,7 +129,7 @@ class AnalysisIntegrationTests extends IntegrationTestSupport {
                 "The image could not be stored or retrieved. Try again later."))
                 .when(storage).store(anyString(), any(), anyString());
 
-        upload(doctor, "CASE-1", image("jpg", 640, 480), "a.jpg")
+        upload(doctor, "12656R", image("jpg", 640, 480), "a.jpg")
                 .andExpect(status().isBadGateway())
                 .andExpect(jsonPath("$.code").value("IMAGE_STORAGE_ACCESS_FAILED"));
         assertThat(images.count()).isZero();
@@ -124,7 +138,7 @@ class AnalysisIntegrationTests extends IntegrationTestSupport {
     @Test
     void nonClinicalRoleCannotUpload() throws Exception {
         AppUser support = createUser("support.upload", RoleName.SUPPORT_STAFF);
-        upload(support, "CASE-1", image("jpg", 640, 480), "a.jpg").andExpect(status().isForbidden());
+        upload(support, "12656R", image("jpg", 640, 480), "a.jpg").andExpect(status().isForbidden());
         verify(storage, never()).store(anyString(), any(), anyString());
     }
 
@@ -132,23 +146,27 @@ class AnalysisIntegrationTests extends IntegrationTestSupport {
 
     @Test
     void analysisSendsStoredBytesAndRecordsTheRun() throws Exception {
-        UUID imageId = uploadedImage(doctor, "CASE-1");
-        when(mlServiceClient.analyze(eq("CASE-1"), anyString(), any(), anyString())).thenReturn(response("completed"));
+        UUID imageId = uploadedImage(doctor, "12656R");
+        when(mlServiceClient.analyze(anyString(), anyString(), any(), anyString())).thenReturn(response("completed"));
 
-        analyze(doctor, "CASE-1", imageId, 2400.0)
+        analyze(doctor, "12656R", imageId, 2400.0)
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.analysisId").isNotEmpty())
                 .andExpect(jsonPath("$.grading.grade").value("A"));
 
         ArgumentCaptor<String> features = ArgumentCaptor.forClass(String.class);
         ArgumentCaptor<byte[]> bytes = ArgumentCaptor.forClass(byte[].class);
-        verify(mlServiceClient).analyze(eq("CASE-1"), features.capture(), bytes.capture(), anyString());
-        assertThat(bytes.getValue()).isEqualTo(stored);
+        verify(mlServiceClient).analyze(anyString(), features.capture(), bytes.capture(), anyString());
+        assertThat(bytes.getValue()).isEqualTo(image("jpg", 640, 480));  // decrypted, as uploaded
         assertThat(features.getValue()).contains("\"ECD_CD_cells_per_mm2\":2400.0").contains("\"Stroma_Has_Scar\":null");
 
         List<AnalysisRun> recorded = runs.findByImageId(imageId);
         assertThat(recorded).singleElement().satisfies(run -> {
             assertThat(run.getStatus()).isEqualTo("completed");
+            // Linked to the donor case by UUID; the tissue ID is not stored in the run.
+            assertThat(run.getDonorCaseId()).isNotNull();
+            assertThat(run.getCaseId()).isEqualTo(run.getDonorCaseId().toString());
+            assertThat(run.getResultJson()).doesNotContain("12656R");
             assertThat(run.getRequestedBy()).isEqualTo(doctor.getId());
             assertThat(run.getResultJson()).contains("\"grade\":\"A\"");
             assertThat(run.getEcd()).isEqualTo(2400.0);
@@ -157,20 +175,22 @@ class AnalysisIntegrationTests extends IntegrationTestSupport {
     }
 
     @Test
-    void anotherUsersImageCannotBeAnalysed() throws Exception {
-        UUID imageId = uploadedImage(doctor, "CASE-1");
+    void anotherClinicianCanAnalyseTheCase() throws Exception {
+        UUID imageId = uploadedImage(doctor, "12656R");
         AppUser otherDoctor = createUser("dr.other", RoleName.DOCTOR);
 
-        analyze(otherDoctor, "CASE-1", imageId, 2400.0)
-                .andExpect(status().isForbidden())
-                .andExpect(jsonPath("$.code").value("TISSUE_ACCESS_DENIED"));
-        verify(mlServiceClient, never()).analyze(any(), any(), any(), any());
+        when(mlServiceClient.analyze(anyString(), anyString(), any(), anyString())).thenReturn(response("completed"));
+
+        // Any DOCTOR or NURSE may work on any case, not only the uploader.
+        analyze(otherDoctor, "12656R", imageId, 2400.0).andExpect(status().isOk());
+        assertThat(runs.findByImageId(imageId)).singleElement()
+                .satisfies(run -> assertThat(run.getRequestedBy()).isEqualTo(otherDoctor.getId()));
     }
 
     @Test
     void imageCannotBeAnalysedUnderADifferentCase() throws Exception {
-        UUID imageId = uploadedImage(doctor, "CASE-1");
-        analyze(doctor, "CASE-2", imageId, null)
+        UUID imageId = uploadedImage(doctor, "12656R");
+        analyze(doctor, "12657L", imageId, null)
                 .andExpect(status().isForbidden())
                 .andExpect(jsonPath("$.code").value("TISSUE_ACCESS_DENIED"));
         verify(mlServiceClient, never()).analyze(any(), any(), any(), any());
@@ -178,30 +198,84 @@ class AnalysisIntegrationTests extends IntegrationTestSupport {
 
     @Test
     void unknownImageIsNotFound() throws Exception {
-        analyze(doctor, "CASE-1", UUID.randomUUID(), null)
+        analyze(doctor, "12656R", UUID.randomUUID(), null)
                 .andExpect(status().isNotFound())
                 .andExpect(jsonPath("$.code").value("IMAGE_NOT_FOUND"));
     }
 
     @Test
     void tamperedStoredImageIsNotAnalysed() throws Exception {
-        UUID imageId = uploadedImage(doctor, "CASE-1");
+        UUID imageId = uploadedImage(doctor, "12656R");
         stored = image("jpg", 641, 480);  // different bytes than were uploaded
 
-        analyze(doctor, "CASE-1", imageId, null)
+        analyze(doctor, "12656R", imageId, null)
                 .andExpect(status().isBadGateway())
                 .andExpect(jsonPath("$.code").value("IMAGE_STORAGE_ACCESS_FAILED"));
         verify(mlServiceClient, never()).analyze(any(), any(), any(), any());
     }
 
     @Test
+    void changedCiphertextIsNotAnalysed() throws Exception {
+        UUID imageId = uploadedImage(doctor, "12656R");
+        stored[stored.length - 20] ^= 0x01;
+
+        analyze(doctor, "12656R", imageId, null)
+                .andExpect(status().isBadGateway())
+                .andExpect(jsonPath("$.code").value("IMAGE_STORAGE_ACCESS_FAILED"));
+        verify(mlServiceClient, never()).analyze(any(), any(), any(), any());
+    }
+
+    @Test
+    void anotherImagesObjectIsNotAcceptedInItsPlace() throws Exception {
+        uploadedImage(doctor, "12656R");
+        byte[] firstObject = stored;
+        UUID secondId = uploadedImage(doctor, "12656R");
+        stored = firstObject;  // valid ciphertext, but encrypted for the other image id
+
+        analyze(doctor, "12656R", secondId, null)
+                .andExpect(status().isBadGateway())
+                .andExpect(jsonPath("$.code").value("IMAGE_STORAGE_ACCESS_FAILED"));
+        verify(mlServiceClient, never()).analyze(any(), any(), any(), any());
+    }
+
+    @Test
+    void imageStoredBeforeEncryptionIsStillVerifiedAndAnalysed() throws Exception {
+        byte[] jpeg = image("jpg", 640, 480);
+        var donorCase = donorCases.findOrCreate(com.cornealai.backend.cases.TissueNumber.parse("12656R"), doctor.getId());
+        AnalysisImage legacy = new AnalysisImage();
+        legacy.setId(UUID.randomUUID());
+        legacy.setCaseId(donorCase.getId().toString());
+        legacy.setDonorCaseId(donorCase.getId());
+        legacy.setBucket("specular-images");
+        legacy.setObjectPath("legacy/" + legacy.getId() + ".jpg");
+        legacy.setContentType("image/jpeg");
+        legacy.setSizeBytes(jpeg.length);
+        legacy.setSha256(java.util.HexFormat.of().formatHex(
+                java.security.MessageDigest.getInstance("SHA-256").digest(jpeg)));
+        legacy.setEncrypted(false);
+        legacy.setWidth(640);
+        legacy.setHeight(480);
+        legacy.setUploadedBy(doctor.getId());
+        images.saveAndFlush(legacy);
+        stored = jpeg;
+        when(mlServiceClient.analyze(anyString(), anyString(), any(), anyString())).thenReturn(response("completed"));
+
+        analyze(doctor, "12656R", legacy.getId(), null).andExpect(status().isOk());
+
+        stored = image("jpg", 641, 480);
+        analyze(doctor, "12656R", legacy.getId(), null)
+                .andExpect(status().isBadGateway())
+                .andExpect(jsonPath("$.code").value("IMAGE_STORAGE_ACCESS_FAILED"));
+    }
+
+    @Test
     void imageRejectedByMlServiceIsReportedAndRecorded() throws Exception {
-        UUID imageId = uploadedImage(doctor, "CASE-1");
+        UUID imageId = uploadedImage(doctor, "12656R");
         when(mlServiceClient.analyze(any(), any(), any(), any())).thenThrow(new AnalysisRejectedException(
                 HttpStatus.UNPROCESSABLE_CONTENT, "INVALID_IMAGE_DOMAIN", "image",
                 "Upload a specular microscopy image showing corneal endothelial cells."));
 
-        analyze(doctor, "CASE-1", imageId, 2400.0)
+        analyze(doctor, "12656R", imageId, 2400.0)
                 .andExpect(status().isUnprocessableContent())
                 .andExpect(jsonPath("$.code").value("INVALID_IMAGE_DOMAIN"))
                 .andExpect(jsonPath("$.fieldErrors.image").exists())
@@ -216,10 +290,10 @@ class AnalysisIntegrationTests extends IntegrationTestSupport {
 
     @Test
     void malformedMlResponseIsAFailureNotAResult() throws Exception {
-        UUID imageId = uploadedImage(doctor, "CASE-1");
+        UUID imageId = uploadedImage(doctor, "12656R");
         when(mlServiceClient.analyze(any(), any(), any(), any())).thenReturn(null);
 
-        analyze(doctor, "CASE-1", imageId, 2400.0)
+        analyze(doctor, "12656R", imageId, 2400.0)
                 .andExpect(status().isBadGateway())
                 .andExpect(jsonPath("$.code").value("MODEL_INFERENCE_FAILED"));
         assertThat(runs.findByImageId(imageId)).singleElement()
@@ -228,7 +302,7 @@ class AnalysisIntegrationTests extends IntegrationTestSupport {
 
     @Test
     void requestWithoutClinicalFeaturesIsRejectedBeforeCallingMlService() throws Exception {
-        UUID imageId = uploadedImage(doctor, "CASE-1");
+        UUID imageId = uploadedImage(doctor, "12656R");
         mockMvc.perform(post("/api/analysis")
                         .header(HttpHeaders.AUTHORIZATION, bearer(doctor))
                         .contentType(MediaType.APPLICATION_JSON)
@@ -240,14 +314,14 @@ class AnalysisIntegrationTests extends IntegrationTestSupport {
 
     @Test
     void featureValidationErrorsFromMlServiceAreReportedPerField() throws Exception {
-        UUID imageId = uploadedImage(doctor, "CASE-1");
+        UUID imageId = uploadedImage(doctor, "12656R");
         when(mlServiceClient.analyze(any(), any(), any(), any())).thenThrow(new AnalysisRejectedException(
                 HttpStatus.UNPROCESSABLE_CONTENT, "MISSING_CLINICAL_FEATURES", "HEX_percent",
                 "HEX_percent is required (use null if not recorded).",
                 java.util.Map.of("HEX_percent", "HEX_percent is required (use null if not recorded).",
                         "CV", "CV must be a number (%).")));
 
-        analyze(doctor, "CASE-1", imageId, 2400.0)
+        analyze(doctor, "12656R", imageId, 2400.0)
                 .andExpect(status().isUnprocessableContent())
                 .andExpect(jsonPath("$.code").value("MISSING_CLINICAL_FEATURES"))
                 .andExpect(jsonPath("$.fieldErrors.HEX_percent").exists())
@@ -283,7 +357,7 @@ class AnalysisIntegrationTests extends IntegrationTestSupport {
         GradingResult grading = new GradingResult("completed", null, "A", "hybrid_random_forest_24_resnet50",
                 java.util.Map.of("A", 0.6, "A+", 0.3, "B", 0.1), java.util.List.of(), java.util.List.of(), null,
                 false, "Grade from the 24-feature model.");
-        return new AnalyzeResponse(null, "CASE-1", status, null, null, grading, null, null);
+        return new AnalyzeResponse(null, "12656R", status, null, null, grading, null, null);
     }
 
     private static byte[] image(String format, int width, int height) throws Exception {

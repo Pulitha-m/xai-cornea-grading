@@ -3,6 +3,15 @@ spring:
     url: jdbc:postgresql://${DB_HOST}:${DB_PORT}/${DB_NAME}?sslmode=require
     username: ${DB_USERNAME}
     password: ${DB_PASSWORD}
+    # Supabase's session pooler allows only 15 clients in total: keep this pool small so a second
+    # backend (another container, an IDE run) still fits, and release idle connections.
+    # (Hikari times are in milliseconds.)
+    hikari:
+      maximum-pool-size: ${DB_POOL_SIZE:5}
+      minimum-idle: 1
+      idle-timeout: 60000
+      max-lifetime: 600000
+      connection-timeout: 10000
 
   jpa:
     hibernate:
@@ -50,6 +59,15 @@ app:
       service-key: ${SUPABASE_SERVICE_ROLE_KEY:}
       # Must be a private bucket; the backend refuses a public one.
       bucket: ${SUPABASE_STORAGE_BUCKET:specular-images}
+  crypto:
+    # Field-level encryption of sensitive data (AES-256-GCM). Server-only secrets: never commit or log them.
+    # Generate each with: openssl rand -base64 32
+    data-key-id: ${DATA_ENCRYPTION_KEY_ID:k1}
+    data-key: ${DATA_ENCRYPTION_KEY}
+    # Keys replaced by rotation, still needed to decrypt older values:
+    # APP_CRYPTO_RETIREDDATAKEYS_<id>=<base64 key>
+    # Separate from the data key; used for exact-match lookups (blind indexes).
+    blind-index-key: ${BLIND_INDEX_KEY}
   security:
     jwt:
       # Base64-encoded HMAC key, at least 256 bits. Generate with: openssl rand -base64 48

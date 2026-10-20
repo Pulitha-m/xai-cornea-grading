@@ -31,6 +31,8 @@ export const DASHBOARD_PATHS: Record<Role, string> = {
 }
 
 export const ANALYSIS_PATH = "/analysis"
+export const CASES_PATH = "/cases"
+export const AUDIT_PATH = "/audit"
 export const CELLULAR_PATH = "/cellular"
 export const DISEASE_PATH = "/disease"
 export const GRADING_PATH = "/grading"
@@ -54,10 +56,18 @@ export interface NavItem {
 /** Navigation shown in the app shell; filtered per user so hidden items are never rendered. */
 export const NAV_ITEMS: NavItem[] = [
     { label: "Admin dashboard", to: DASHBOARD_PATHS.ADMIN, icon: LayoutDashboardIcon, roles: ["ADMIN"] },
+    { label: "Audit log", to: AUDIT_PATH, icon: ShieldCheckIcon, roles: ["ADMIN"], permission: "audit:read" },
     { label: "Manager dashboard", to: DASHBOARD_PATHS.MANAGER, icon: LayoutDashboardIcon, roles: ["MANAGER"] },
     { label: "Doctor dashboard", to: DASHBOARD_PATHS.DOCTOR, icon: LayoutDashboardIcon, roles: ["DOCTOR"] },
     { label: "Nurse dashboard", to: DASHBOARD_PATHS.NURSE, icon: LayoutDashboardIcon, roles: ["NURSE"] },
     { label: "Support dashboard", to: DASHBOARD_PATHS.SUPPORT_STAFF, icon: LayoutDashboardIcon, roles: ["SUPPORT_STAFF"] },
+    {
+        label: "Donor cases",
+        to: CASES_PATH,
+        icon: ClipboardListIcon,
+        roles: ["DOCTOR", "NURSE"],
+        permission: "analysis:run",
+    },
     {
         label: "AI analysis",
         to: ANALYSIS_PATH,
@@ -112,13 +122,6 @@ export interface PlannedModule extends NavItem {
  */
 export const PLANNED_MODULES: PlannedModule[] = [
     {
-        label: "Donor cases",
-        to: "/cases",
-        icon: ClipboardListIcon,
-        roles: ["ADMIN", "MANAGER", "DOCTOR", "NURSE"],
-        description: "Register donors, record clinical observations and track each cornea from collection to allocation.",
-    },
-    {
         label: "Tissue inventory",
         to: "/inventory",
         icon: PackageIcon,
@@ -131,13 +134,6 @@ export const PLANNED_MODULES: PlannedModule[] = [
         icon: FileTextIcon,
         roles: ["ADMIN", "MANAGER", "DOCTOR"],
         description: "Clinical and operational reporting across cases and branches.",
-    },
-    {
-        label: "Audit log",
-        to: "/audit",
-        icon: ShieldCheckIcon,
-        roles: ["ADMIN"],
-        description: "A searchable record of who did what, and when, across the system.",
     },
 ]
 

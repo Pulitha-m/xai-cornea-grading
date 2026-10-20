@@ -9,4 +9,6 @@ import java.util.UUID;
 public interface RecommendationAnalysisRunRepository extends JpaRepository<RecommendationAnalysisRun, UUID> {
 
     List<RecommendationAnalysisRun> findBySubjectId(String subjectId);
+
+    List<RecommendationAnalysisRun> findBySubjectIdAndKindOrderByCreatedAtDesc(String subjectId, String kind);
 }

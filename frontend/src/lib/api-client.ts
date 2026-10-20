@@ -202,6 +202,35 @@ function sendUpload(path: string, form: FormData, { onProgress }: UploadOptions)
     })
 }
 
+/**
+ * Binary download (e.g. a decrypted case image for display) with the same Bearer token and
+ * 401 refresh-and-retry as {@link apiRequest}. The caller owns any object URL made from it.
+ */
+export async function apiBlob(path: string, accept = "image/*"): Promise<Blob> {
+    const fetchBlob = async () => {
+        const headers: Record<string, string> = { Accept: accept }
+        if (accessToken) headers.Authorization = `Bearer ${accessToken}`
+        try {
+            return await fetch(`${API_BASE_URL}${path}`, { headers, credentials: "include" })
+        } catch {
+            throw new ApiError(0, NETWORK_ERROR)
+        }
+    }
+
+    let response = await fetchBlob()
+    if (response.status === 401 && sessionHandlers) {
+        if (await sessionHandlers.refresh()) {
+            response = await fetchBlob()
+        } else {
+            sessionHandlers.onSessionExpired()
+        }
+    }
+    if (!response.ok) {
+        throw await toApiError(response)
+    }
+    return response.blob()
+}
+
 function readCookie(name: string): string | null {
     const match = document.cookie
         .split("; ")

@@ -5,6 +5,10 @@ import { recommendFollowup, type FollowupResponse } from "@/api/recommendation"
 import { ApiError } from "@/lib/api-client"
 import { makeAuth, makeUser, renderApp } from "@/test/auth-test-utils"
 
+vi.mock(import("@/api/transplants"), async (importOriginal) => ({
+    ...(await importOriginal()),
+    listGrafts: vi.fn().mockResolvedValue([]),
+}))
 vi.mock(import("@/api/recommendation"), async (importOriginal) => ({
     ...(await importOriginal()),
     recommendFollowup: vi.fn(),
@@ -69,6 +73,7 @@ beforeEach(() => {
 describe("FollowupPage", () => {
     it("is in the navigation for clinical roles and is no longer 'coming soon'", async () => {
         renderApp("/post-transplant", makeAuth({ user: makeUser("NURSE") }))
+        await userEvent.setup().click(await screen.findByRole("radio", { name: "Enter values by hand" }))
         expect(await screen.findByRole("link", { name: /Post-transplant follow-up/ })).toHaveAttribute("href", "/post-transplant")
         expect(screen.getByRole("heading", { name: "Post-transplant follow-up", level: 1 })).toBeInTheDocument()
         expect(screen.getAllByText(/Decision support only/).length).toBeGreaterThan(0)
@@ -83,6 +88,7 @@ describe("FollowupPage", () => {
     it("sends the visits and shows the alert, next visit, predictions, risk and reasons", async () => {
         vi.mocked(recommendFollowup).mockResolvedValue(RED)
         renderApp("/post-transplant", makeAuth({ user: makeUser("DOCTOR") }))
+        await userEvent.setup().click(await screen.findByRole("radio", { name: "Enter values by hand" }))
 
         await fillAndSubmit()
 
@@ -117,6 +123,7 @@ describe("FollowupPage", () => {
             risk: RED.risk.map((r) => ({ ...r, probability: 0.01 })),
         })
         renderApp("/post-transplant", makeAuth({ user: makeUser("DOCTOR") }))
+        await userEvent.setup().click(await screen.findByRole("radio", { name: "Enter values by hand" }))
         const user = await fillAndSubmit()
 
         const whatIf = within(await screen.findByRole("region", { name: "What if?" }))
@@ -132,6 +139,7 @@ describe("FollowupPage", () => {
     it("accepts a missed 3-month visit", async () => {
         vi.mocked(recommendFollowup).mockResolvedValue(RED)
         renderApp("/post-transplant", makeAuth({ user: makeUser("DOCTOR") }))
+        await userEvent.setup().click(await screen.findByRole("radio", { name: "Enter values by hand" }))
 
         await fillAndSubmit({ skip3m: true })
 
@@ -141,6 +149,7 @@ describe("FollowupPage", () => {
 
     it("lists missing values instead of calling the server", async () => {
         renderApp("/post-transplant", makeAuth({ user: makeUser("DOCTOR") }))
+        await userEvent.setup().click(await screen.findByRole("radio", { name: "Enter values by hand" }))
 
         await fillAndSubmit({ leaveOut: "12-month ECD" })
 
@@ -152,6 +161,7 @@ describe("FollowupPage", () => {
         vi.mocked(recommendFollowup).mockRejectedValue(
             new ApiError(503, "The follow-up model is unavailable. Try again later.", {}, "MODEL_NOT_READY"))
         renderApp("/post-transplant", makeAuth({ user: makeUser("DOCTOR") }))
+        await userEvent.setup().click(await screen.findByRole("radio", { name: "Enter values by hand" }))
 
         await fillAndSubmit()
 
