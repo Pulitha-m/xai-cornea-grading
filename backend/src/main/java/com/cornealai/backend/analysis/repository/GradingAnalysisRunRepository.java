@@ -9,4 +9,6 @@ import java.util.UUID;
 public interface GradingAnalysisRunRepository extends JpaRepository<GradingAnalysisRun, UUID> {
 
     List<GradingAnalysisRun> findByImageId(UUID imageId);
+
+    List<GradingAnalysisRun> findByDonorCaseIdOrderByCreatedAtDesc(UUID donorCaseId);
 }

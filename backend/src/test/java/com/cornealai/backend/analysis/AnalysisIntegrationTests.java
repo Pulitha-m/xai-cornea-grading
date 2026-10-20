@@ -175,14 +175,16 @@ class AnalysisIntegrationTests extends IntegrationTestSupport {
     }
 
     @Test
-    void anotherUsersImageCannotBeAnalysed() throws Exception {
+    void anotherClinicianCanAnalyseTheCase() throws Exception {
         UUID imageId = uploadedImage(doctor, "12656R");
         AppUser otherDoctor = createUser("dr.other", RoleName.DOCTOR);
 
-        analyze(otherDoctor, "12656R", imageId, 2400.0)
-                .andExpect(status().isForbidden())
-                .andExpect(jsonPath("$.code").value("TISSUE_ACCESS_DENIED"));
-        verify(mlServiceClient, never()).analyze(any(), any(), any(), any());
+        when(mlServiceClient.analyze(anyString(), anyString(), any(), anyString())).thenReturn(response("completed"));
+
+        // Any DOCTOR or NURSE may work on any case, not only the uploader.
+        analyze(otherDoctor, "12656R", imageId, 2400.0).andExpect(status().isOk());
+        assertThat(runs.findByImageId(imageId)).singleElement()
+                .satisfies(run -> assertThat(run.getRequestedBy()).isEqualTo(otherDoctor.getId()));
     }
 
     @Test

@@ -31,6 +31,7 @@ export const DASHBOARD_PATHS: Record<Role, string> = {
 }
 
 export const ANALYSIS_PATH = "/analysis"
+export const CASES_PATH = "/cases"
 export const CELLULAR_PATH = "/cellular"
 export const DISEASE_PATH = "/disease"
 export const GRADING_PATH = "/grading"
@@ -56,6 +57,13 @@ export const NAV_ITEMS: NavItem[] = [
     { label: "Doctor dashboard", to: DASHBOARD_PATHS.DOCTOR, icon: LayoutDashboardIcon, roles: ["DOCTOR"] },
     { label: "Nurse dashboard", to: DASHBOARD_PATHS.NURSE, icon: LayoutDashboardIcon, roles: ["NURSE"] },
     { label: "Support dashboard", to: DASHBOARD_PATHS.SUPPORT_STAFF, icon: LayoutDashboardIcon, roles: ["SUPPORT_STAFF"] },
+    {
+        label: "Donor cases",
+        to: CASES_PATH,
+        icon: ClipboardListIcon,
+        roles: ["DOCTOR", "NURSE"],
+        permission: "analysis:run",
+    },
     {
         label: "AI analysis",
         to: ANALYSIS_PATH,
@@ -95,13 +103,6 @@ export interface PlannedModule extends NavItem {
  * navigation and route to a "coming soon" screen; no sample data is shown for them.
  */
 export const PLANNED_MODULES: PlannedModule[] = [
-    {
-        label: "Donor cases",
-        to: "/cases",
-        icon: ClipboardListIcon,
-        roles: ["ADMIN", "MANAGER", "DOCTOR", "NURSE"],
-        description: "Register donors, record clinical observations and track each cornea from collection to allocation.",
-    },
     {
         label: "Tissue inventory",
         to: "/inventory",

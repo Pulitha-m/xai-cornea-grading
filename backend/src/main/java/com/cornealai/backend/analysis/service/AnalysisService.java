@@ -6,7 +6,6 @@ import com.cornealai.backend.analysis.dto.AnalyzeRequest;
 import com.cornealai.backend.analysis.dto.AnalyzeResponse;
 import com.cornealai.backend.analysis.entity.AnalysisImage;
 import com.cornealai.backend.analysis.entity.AnalysisRun;
-import com.cornealai.backend.analysis.repository.AnalysisImageRepository;
 import com.cornealai.backend.cases.TissueNumber;
 import com.cornealai.backend.cases.entity.DonorCase;
 import com.cornealai.backend.cases.service.DonorCaseService;
@@ -18,14 +17,13 @@ import tools.jackson.databind.ObjectMapper;
 import java.util.UUID;
 
 /**
- * Runs an analysis on a stored image. The image is resolved from its id only after
- * checking that the caller uploaded it, then its bytes are read server-side and sent
- * to ml-service. Every attempt is recorded, including rejections.
+ * Runs the combined analysis on a stored image of a donor case (any clinical user; the image must
+ * belong to the case named). Its bytes are read server-side and verified, then sent to ml-service.
+ * Every attempt is recorded, including rejections and failures.
  */
 @Service
 public class AnalysisService {
 
-    private final AnalysisImageRepository images;
     private final AnalysisRunRepository runs;
     private final ImageService imageService;
     private final DonorCaseService donorCases;
@@ -33,14 +31,12 @@ public class AnalysisService {
     private final ObjectMapper objectMapper;
 
     public AnalysisService(
-            AnalysisImageRepository images,
             AnalysisRunRepository runs,
             ImageService imageService,
             DonorCaseService donorCases,
             MlServiceClient mlServiceClient,
             ObjectMapper objectMapper
     ) {
-        this.images = images;
         this.runs = runs;
         this.imageService = imageService;
         this.donorCases = donorCases;
@@ -50,15 +46,8 @@ public class AnalysisService {
 
     public AnalyzeResponse analyze(AnalyzeRequest request, Long userId) {
         TissueNumber tissue = TissueNumber.parse(request.caseId());
-        AnalysisImage image = images.findById(request.imageId())
-                .orElseThrow(() -> new AnalysisRejectedException(HttpStatus.NOT_FOUND, "IMAGE_NOT_FOUND", "imageId",
-                        "The image was not found. Upload it again."));
-
-        // Access policy: only the user who uploaded an image may analyse it.
-        if (!image.getUploadedBy().equals(userId)) {
-            throw new AnalysisRejectedException(HttpStatus.FORBIDDEN, "TISSUE_ACCESS_DENIED", "imageId",
-                    "You do not have access to this image.");
-        }
+        // Access policy: any clinical user may analyse any case; the image must belong to the case named.
+        AnalysisImage image = imageService.requireImage(request.imageId());
         DonorCase donorCase = donorCases.requireCaseOf(image, tissue);
         String caseId = donorCase.getId().toString();
 
@@ -92,6 +81,15 @@ public class AnalysisService {
             run.setStatus("rejected");
             run.setErrorCode(e.getCode());
             runs.save(run);
+            throw e;
+        } catch (RuntimeException e) {
+            run.setStatus("failed");
+            run.setErrorCode("INTERNAL_ERROR");
+            try {
+                runs.save(run);
+            } catch (RuntimeException ignored) {
+                // The database itself failed; the original error is what matters.
+            }
             throw e;
         }
     }

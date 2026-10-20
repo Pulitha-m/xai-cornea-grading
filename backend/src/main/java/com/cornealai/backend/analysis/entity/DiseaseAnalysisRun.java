@@ -29,6 +29,10 @@ public class DiseaseAnalysisRun {
     @Column(name = "donor_case_id")
     private UUID donorCaseId;
 
+    /** The case analysis this run belongs to; null when run on its own (module page). */
+    @Column(name = "case_analysis_id")
+    private UUID caseAnalysisId;
+
     @Column(name = "requested_by", nullable = false)
     private Long requestedBy;
 

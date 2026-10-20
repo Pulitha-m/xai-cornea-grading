@@ -9,4 +9,6 @@ import java.util.UUID;
 public interface AnalysisRunRepository extends JpaRepository<AnalysisRun, UUID> {
 
     List<AnalysisRun> findByImageId(UUID imageId);
+
+    List<AnalysisRun> findByDonorCaseIdOrderByCreatedAtDesc(UUID donorCaseId);
 }

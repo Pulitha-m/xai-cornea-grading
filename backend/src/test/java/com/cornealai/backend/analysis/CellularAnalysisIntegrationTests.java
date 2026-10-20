@@ -133,14 +133,14 @@ class CellularAnalysisIntegrationTests extends IntegrationTestSupport {
     }
 
     @Test
-    void onlyTheUploaderMayAnalyseAnImage() throws Exception {
+    void anotherClinicianCanAnalyseTheCase() throws Exception {
         UUID imageId = uploadedImage(doctor, "12656R");
         AppUser other = createUser("dr.other.cellular", RoleName.DOCTOR);
 
-        analyze(other, "12656R", imageId)
-                .andExpect(status().isForbidden())
-                .andExpect(jsonPath("$.code").value("TISSUE_ACCESS_DENIED"));
-        verifyNoInteractions(mlServiceClient);
+        when(mlServiceClient.analyzeCellular(anyString(), any(), anyString())).thenReturn(completed(true));
+
+        analyze(other, "12656R", imageId).andExpect(status().isOk());
+        assertThat(runs.findByImageId(imageId).getFirst().getRequestedBy()).isEqualTo(other.getId());
     }
 
     @Test

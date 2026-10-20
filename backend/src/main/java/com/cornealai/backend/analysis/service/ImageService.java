@@ -58,6 +58,24 @@ public class ImageService {
      */
     public ImageUploadResponse upload(String tissueId, byte[] data, Long userId) {
         TissueNumber tissue = TissueNumber.parse(tissueId);
+        return store(data, userId, tissue, () -> donorCases.findOrCreate(tissue, userId));
+    }
+
+    /** Stores an image for an existing donor case (the case workspace). */
+    public ImageUploadResponse uploadToCase(DonorCase donorCase, byte[] data, Long userId) {
+        return store(data, userId, donorCases.tissueNumberOf(donorCase), () -> donorCase);
+    }
+
+    /** The image record, or 404. Callers check that it belongs to the case they were given. */
+    public AnalysisImage requireImage(UUID imageId) {
+        return images.findById(imageId)
+                .orElseThrow(() -> new AnalysisRejectedException(HttpStatus.NOT_FOUND, "IMAGE_NOT_FOUND", "imageId",
+                        "The image was not found. Upload it again."));
+    }
+
+    /** The case is resolved only after the image passed inspection and was stored, so a rejected upload creates no case. */
+    private ImageUploadResponse store(byte[] data, Long userId, TissueNumber tissue,
+                                      java.util.function.Supplier<DonorCase> caseFor) {
         ImageInspector.InspectedImage inspected = inspector.inspect(data);
 
         UUID id = UUID.randomUUID();
@@ -65,7 +83,7 @@ public class ImageService {
         storage.store(objectPath, cipher.encryptBytes(data, CONTENT_FIELD, id), STORED_CONTENT_TYPE);
 
         try {
-            DonorCase donorCase = donorCases.findOrCreate(tissue, userId);
+            DonorCase donorCase = caseFor.get();
             AnalysisImage image = new AnalysisImage();
             image.setId(id);
             image.setCaseId(donorCase.getId().toString());

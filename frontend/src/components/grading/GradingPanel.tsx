@@ -1,4 +1,5 @@
 import { useEffect, useId, useMemo, useState, type ChangeEvent, type FormEvent } from "react"
+import { normaliseTissueId, TISSUE_ID_PLACEHOLDER } from "@/lib/tissue-id"
 import { IMAGE_ACCEPT, IMAGE_MAX_BYTES } from "@/api/analysis"
 import { useGradingAnalysis } from "@/hooks/use-grading-analysis"
 import { ApiError } from "@/lib/api-client"
@@ -80,7 +81,7 @@ export function GradingPanel() {
         const { payload, errors } = buildFeaturePayload(features)
         setFeatureErrors(errors)
         if (Object.keys(errors).length > 0) return
-        analysis.mutate({ caseId: caseId.trim(), file, clinicalFeatures: payload }, {
+        analysis.mutate({ caseId: normaliseTissueId(caseId), file, clinicalFeatures: payload }, {
             onError: (err) => {
                 setFeatureErrors(featureErrorsFrom(err instanceof ApiError ? err : null))
                 if (err instanceof ApiError && err.code !== null && IMAGE_ERROR_CODES.has(err.code)) {
@@ -110,7 +111,7 @@ export function GradingPanel() {
                             />
                         </div>
                         <div>
-                            <label htmlFor={caseIdId} className="mb-1.5 block text-sm font-medium">Case ID</label>
+                            <label htmlFor={caseIdId} className="mb-1.5 block text-sm font-medium">Tissue ID</label>
                             <input
                                 id={caseIdId}
                                 required
@@ -121,7 +122,7 @@ export function GradingPanel() {
                                     analysis.reset()
                                 }}
                                 className={textInput}
-                                placeholder="CASE-001"
+                                placeholder={TISSUE_ID_PLACEHOLDER}
                             />
                         </div>
                     </div>

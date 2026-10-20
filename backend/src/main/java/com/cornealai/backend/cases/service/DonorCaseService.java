@@ -31,6 +31,12 @@ public class DonorCaseService {
         this.blindIndex = blindIndex;
     }
 
+    /** The case with this id, or 404. */
+    public DonorCase require(UUID id) {
+        return cases.findById(id).orElseThrow(() -> new AnalysisRejectedException(HttpStatus.NOT_FOUND,
+                "CASE_NOT_FOUND", "caseId", "The case was not found."));
+    }
+
     public Optional<DonorCase> find(TissueNumber tissue) {
         return cases.findByTissueNumberBidx(index(tissue));
     }

@@ -32,7 +32,7 @@ const NOT_RECORDED = FEATURES.map((f) => f.name).filter((name) => name !== "ECD_
 
 const RESPONSE: AnalyzeResponse = {
     analysisId: "run-1",
-    caseId: "CASE-042",
+    caseId: "12656R",
     status: "partial",
     imageValidation: { domainStatus: "VALID_CORNEAL_IMAGE", qualityAssessed: false, width: 1296, height: 972, format: "JPEG" },
     cellular: { status: "completed", error: null, cellCount: 312, ecd: 2487.6, coefficientOfVariation: 0.3, hexagonality: 0.7 },
@@ -98,7 +98,7 @@ async function runAnalysis({
 }: { ecd?: string; scar?: string; file?: File; fill?: (user: User) => Promise<void> } = {}) {
     const user = userEvent.setup()
     await user.upload(await screen.findByLabelText("Specular microscopy image"), file)
-    await user.type(screen.getByLabelText("Case ID"), "CASE-042")
+    await user.type(screen.getByLabelText("Tissue ID"), "12656R")
     if (ecd) {
         await user.type(screen.getByLabelText("ECD (cells/mm²)"), ecd)
     }
@@ -120,7 +120,7 @@ function moduleCard(title: string) {
 
 beforeEach(() => {
     vi.mocked(uploadImage).mockReset().mockResolvedValue({
-        imageId: "img-1", caseId: "CASE-042", contentType: "image/jpeg", sizeBytes: 10, width: 1296, height: 972,
+        imageId: "img-1", caseId: "12656R", contentType: "image/jpeg", sizeBytes: 10, width: 1296, height: 972,
     })
     vi.mocked(analyzeCornea).mockReset()
 })
@@ -132,10 +132,10 @@ describe("AnalysisPage", () => {
 
         await runAnalysis()
 
-        expect(await screen.findByRole("heading", { name: /Results for case CASE-042/ })).toBeInTheDocument()
-        expect(uploadImage).toHaveBeenCalledWith("CASE-042", expect.any(File), expect.any(Function))
+        expect(await screen.findByRole("heading", { name: /Results for case 12656R/ })).toBeInTheDocument()
+        expect(uploadImage).toHaveBeenCalledWith("12656R", expect.any(File), expect.any(Function))
         expect(analyzeCornea).toHaveBeenCalledWith({
-            caseId: "CASE-042",
+            caseId: "12656R",
             imageId: "img-1",
             clinicalFeatures: expectedFeatures({ ECD_CD_cells_per_mm2: 2400, Stroma_Has_Scar: 0 }),
         })
@@ -174,7 +174,7 @@ describe("AnalysisPage", () => {
         await runAnalysis({ ecd: "", scar: "" })
 
         const grade = within(await screen.findByRole("region", { name: "Cornea grade" }))
-        expect(analyzeCornea).toHaveBeenLastCalledWith({ caseId: "CASE-042", imageId: "img-1", clinicalFeatures: expectedFeatures() })
+        expect(analyzeCornea).toHaveBeenLastCalledWith({ caseId: "12656R", imageId: "img-1", clinicalFeatures: expectedFeatures() })
         expect(grade.getByRole("alert")).toHaveTextContent("CV 80 is outside the training range")
         expect(grade.getByRole("alert")).toHaveTextContent("The image is 640 × 480 px; it was resized.")
         expect(grade.getByText("ECD is required for automated grading. Grade this tissue manually.")).toBeInTheDocument()
@@ -194,7 +194,7 @@ describe("AnalysisPage", () => {
             },
         })
 
-        await screen.findByRole("heading", { name: /Results for case CASE-042/ })
+        await screen.findByRole("heading", { name: /Results for case 12656R/ })
         expect(analyzeCornea).toHaveBeenCalledWith(expect.objectContaining({
             clinicalFeatures: expectedFeatures({
                 ECD_CD_cells_per_mm2: 2400,
@@ -246,7 +246,7 @@ describe("AnalysisPage", () => {
         await user.upload(screen.getByLabelText("Specular microscopy image"), jpeg("endothelium.jpg"))
         await user.click(screen.getByRole("button", { name: "Analyse" }))
 
-        expect(await screen.findByRole("heading", { name: /Results for case CASE-042/ })).toBeInTheDocument()
+        expect(await screen.findByRole("heading", { name: /Results for case 12656R/ })).toBeInTheDocument()
         expect(uploadImage).toHaveBeenCalledTimes(2)
     })
 
@@ -255,7 +255,7 @@ describe("AnalysisPage", () => {
         renderApp("/analysis", makeAuth({ user: makeUser("DOCTOR") }))
 
         const user = await runAnalysis()
-        await screen.findByRole("heading", { name: /Results for case CASE-042/ })
+        await screen.findByRole("heading", { name: /Results for case 12656R/ })
         await user.click(screen.getByRole("button", { name: "Analyse" }))
 
         await vi.waitFor(() => expect(analyzeCornea).toHaveBeenCalledTimes(2))

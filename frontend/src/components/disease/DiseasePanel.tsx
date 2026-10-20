@@ -1,4 +1,5 @@
 import { useEffect, useId, useMemo, useState, type ChangeEvent, type FormEvent } from "react"
+import { normaliseTissueId, TISSUE_ID_PLACEHOLDER } from "@/lib/tissue-id"
 import { IMAGE_ACCEPT, IMAGE_MAX_BYTES } from "@/api/analysis"
 import { useDiseaseAnalysis } from "@/hooks/use-disease-analysis"
 import { ApiError } from "@/lib/api-client"
@@ -82,7 +83,7 @@ export function DiseasePanel() {
         const { payload, errors } = buildMeasurementPayload(values)
         setValueErrors(errors)
         if (Object.keys(errors).length > 0) return
-        analysis.mutate({ caseId: caseId.trim(), file, measurements: payload, force }, {
+        analysis.mutate({ caseId: normaliseTissueId(caseId), file, measurements: payload, force }, {
             onError: (err) => {
                 setValueErrors(measurementErrorsFrom(err instanceof ApiError ? err : null))
                 if (err instanceof ApiError && err.code !== null && IMAGE_ERROR_CODES.has(err.code)) {
@@ -117,7 +118,7 @@ export function DiseasePanel() {
                             />
                         </div>
                         <div>
-                            <label htmlFor={caseIdId} className="mb-1.5 block text-sm font-medium">Case ID</label>
+                            <label htmlFor={caseIdId} className="mb-1.5 block text-sm font-medium">Tissue ID</label>
                             <input
                                 id={caseIdId}
                                 required
@@ -128,7 +129,7 @@ export function DiseasePanel() {
                                     clearResult()
                                 }}
                                 className={textInput}
-                                placeholder="CASE-001"
+                                placeholder={TISSUE_ID_PLACEHOLDER}
                             />
                         </div>
                     </div>

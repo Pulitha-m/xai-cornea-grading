@@ -123,14 +123,14 @@ class GradingAnalysisIntegrationTests extends IntegrationTestSupport {
     }
 
     @Test
-    void onlyTheUploaderMayGradeAnImage() throws Exception {
+    void anotherClinicianCanGradeTheCase() throws Exception {
         UUID imageId = uploadedImage(doctor, "12656R");
         AppUser other = createUser("dr.other.grading", RoleName.DOCTOR);
 
-        analyze(other, "12656R", imageId)
-                .andExpect(status().isForbidden())
-                .andExpect(jsonPath("$.code").value("TISSUE_ACCESS_DENIED"));
-        verifyNoInteractions(mlServiceClient);
+        when(mlServiceClient.analyzeGrading(anyString(), anyString(), any(), anyString())).thenReturn(completed());
+
+        analyze(other, "12656R", imageId).andExpect(status().isOk());
+        assertThat(runs.findByImageId(imageId).getFirst().getRequestedBy()).isEqualTo(other.getId());
     }
 
     @Test

@@ -75,9 +75,9 @@ describe("Navigation", () => {
 
 describe("Planned modules", () => {
     it("shows a coming-soon screen to a permitted role", async () => {
-        renderApp("/cases", makeAuth({ user: makeUser("NURSE") }))
+        renderApp("/inventory", makeAuth({ user: makeUser("NURSE") }))
 
-        expect(await screen.findByRole("heading", { name: "Donor cases" })).toBeInTheDocument()
+        expect(await screen.findByRole("heading", { name: "Tissue inventory" })).toBeInTheDocument()
         expect(screen.getByText("This module is not available yet")).toBeInTheDocument()
     })
 

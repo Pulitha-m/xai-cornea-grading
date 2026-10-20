@@ -9,4 +9,6 @@ import java.util.UUID;
 public interface CellularAnalysisRunRepository extends JpaRepository<CellularAnalysisRun, UUID> {
 
     List<CellularAnalysisRun> findByImageId(UUID imageId);
+
+    List<CellularAnalysisRun> findByDonorCaseIdOrderByCreatedAtDesc(UUID donorCaseId);
 }
