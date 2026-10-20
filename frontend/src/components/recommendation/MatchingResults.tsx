@@ -9,14 +9,14 @@ import { DivergingBars, ScoreBars } from "@/components/recommendation/charts"
 export function MatchingResults({ result }: { result: MatchResponse }) {
     const ml = result.methodUsed === "ml"
     const [open, setOpen] = useState<string | null>(null)
-    const columns = ml ? 7 : 6
+    const columns = 6
 
     return (
         <div className="space-y-6">
             <Card
                 title={`Ranking for ${result.requestId}`}
                 description={ml
-                    ? "Ordered by the trained ranker; the MCDA (clinician-weighted) rank is shown for comparison."
+                    ? "Ordered by the trained ranker. Open Details to compare with the MCDA (clinician-weighted) rank."
                     : "Ordered by the clinician-weighted MCDA score."}
                 actions={<StatusBadge tone="info">{ml ? "ML ranker" : "MCDA"}</StatusBadge>}
             >
@@ -33,7 +33,6 @@ export function MatchingResults({ result }: { result: MatchResponse }) {
                                 <th className={tableHeaderCell}>Rank</th>
                                 <th className={tableHeaderCell}>Tissue</th>
                                 <th className={tableHeaderCell}>Grade</th>
-                                {ml && <th className={tableHeaderCell}>MCDA rank</th>}
                                 <th className={tableHeaderCell}>Why</th>
                                 <th className={tableHeaderCell}>Would be #1 if…</th>
                                 <th className={tableHeaderCell}><span className="sr-only">Details</span></th>
@@ -46,10 +45,14 @@ export function MatchingResults({ result }: { result: MatchResponse }) {
                                         <td className={`${tableCell} font-semibold tabular-nums`}>#{c.rank}</td>
                                         <td className={tableCell}>
                                             <div className="font-medium">{c.recordId}</div>
-                                            {c.flags.map((f) => <StatusBadge key={f} tone="warning">{f}</StatusBadge>)}
+                                            <div className="mt-1 flex flex-wrap gap-1">
+                                                {c.flags.map((f) => <StatusBadge key={f} tone="warning">{f}</StatusBadge>)}
+                                                {ml && c.mcdaRank !== null && c.mcdaRank !== c.rank && (
+                                                    <StatusBadge tone="info">Methods differ</StatusBadge>
+                                                )}
+                                            </div>
                                         </td>
                                         <td className={tableCell}>{c.grade ?? "–"}</td>
-                                        {ml && <td className={`${tableCell} tabular-nums`}>{c.mcdaRank ?? "–"}</td>}
                                         <td className={`${tableCell} text-muted-foreground`}>{c.whyText ?? c.reasons.join(", ")}</td>
                                         <td className={`${tableCell} text-muted-foreground`}>
                                             {c.rank === 1 ? "–" : (c.counterfactual?.replace(/^would be #1 if:\s*/, "") ?? "–")}
@@ -113,10 +116,13 @@ function CandidateDetails({ candidate: c, ml }: { candidate: RankedCandidate; ml
                 <p className="text-sm text-muted-foreground">MCDA reasons: {c.reasons.join(", ")}</p>
             )}
             <div>
-                <p className="mb-2 text-xs font-medium">
-                    MCDA criterion scores (0–1): total {c.matchScore.toFixed(2)}
-                    {ml && c.mcdaRank !== null && ` — ML rank #${c.rank}, MCDA rank #${c.mcdaRank}`}
-                </p>
+                {ml && c.mcdaRank !== null && (
+                    <p className="mb-2 text-sm">
+                        <span className="font-medium">Method comparison:</span> ML rank #{c.rank}, MCDA rank #{c.mcdaRank}
+                        {c.mcdaRank === c.rank ? " (same)" : " (methods differ)"}
+                    </p>
+                )}
+                <p className="mb-2 text-xs font-medium">MCDA criterion scores (0–1): total {c.matchScore.toFixed(2)}</p>
                 <ScoreBars scores={c.criterionScores} />
             </div>
         </div>

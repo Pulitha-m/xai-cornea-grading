@@ -103,6 +103,41 @@ describe("MatchingPage", () => {
         expect(screen.getByText(/not statistically significant/)).toBeInTheDocument()
     })
 
+    it("shows one rank, flags rows where ML and MCDA disagree and compares them in Details", async () => {
+        vi.mocked(recommendMatch).mockResolvedValue({
+            ...RANKED,
+            ranked: [{ ...RANKED.ranked[0], mcdaRank: 2 }, { ...RANKED.ranked[1], mcdaRank: 1 }],
+        })
+        renderApp("/recipients", makeAuth({ user: makeUser("DOCTOR") }))
+        const user = userEvent.setup()
+        await user.type(await screen.findByLabelText("Request ID"), "Q0001")
+        await fillRow(user, 1, "R0001", "Yes")
+        await fillRow(user, 2, "R0002")
+        await user.click(screen.getByRole("button", { name: "Rank corneas" }))
+
+        const ranking = within(await screen.findByRole("region", { name: "Ranking for Q0001" }))
+        expect(ranking.queryByRole("columnheader", { name: /MCDA rank/i })).not.toBeInTheDocument()
+        expect(ranking.getAllByText("Methods differ")).toHaveLength(2)
+
+        await user.click(ranking.getByRole("button", { name: "Details for R0001" }))
+        const details = within(screen.getByRole("region", { name: "Details for R0001" }))
+        expect(details.getByText(/ML rank #1, MCDA rank #2/)).toBeInTheDocument()
+        expect(details.getByText(/\(methods differ\)/)).toBeInTheDocument()
+    })
+
+    it("does not flag rows where both methods agree", async () => {
+        vi.mocked(recommendMatch).mockResolvedValue(RANKED)
+        renderApp("/recipients", makeAuth({ user: makeUser("DOCTOR") }))
+        const user = userEvent.setup()
+        await user.type(await screen.findByLabelText("Request ID"), "Q0001")
+        await fillRow(user, 1, "R0001", "Yes")
+        await fillRow(user, 2, "R0002")
+        await user.click(screen.getByRole("button", { name: "Rank corneas" }))
+
+        await screen.findByRole("region", { name: "Ranking for Q0001" })
+        expect(screen.queryByText("Methods differ")).not.toBeInTheDocument()
+    })
+
     it("requires a request ID and a tissue ID on every row", async () => {
         renderApp("/recipients", makeAuth({ user: makeUser("DOCTOR") }))
         const user = userEvent.setup()
