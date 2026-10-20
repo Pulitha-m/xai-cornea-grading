@@ -16,6 +16,7 @@ From ml/:
     uv run python -m recommendation.main followup-data  # P2: landmark dataset, split, preprocessing
     uv run python -m recommendation.main followup-baselines  # P3: trajectory and risk baselines
     uv run python -m recommendation.main trajectory     # P4: GBM / LSTM vs baselines, learning curve
+    uv run python -m recommendation.main risk           # P5: Cox / boosted Cox / DeepSurv, calibration
 """
 import argparse
 
@@ -149,6 +150,8 @@ def main() -> None:
         for line in log:
             print(" OK", line)
         print(f"\nReport: {path}")
+    elif a.task == "risk":
+        _print_risk(pipeline.run_risk(cfg), cfg)
     elif a.task == "trajectory":
         _print_trajectory(pipeline.run_trajectory(cfg), cfg)
     elif a.task == "followup-baselines":
@@ -216,6 +219,27 @@ def _print_explain(res: dict, cfg: dict) -> None:
                   f"{c['Cand_Days_In_Storage']} d in storage: {c['Why']}{tag}")
     out = f"{cfg['paths']['outputs']}/explain"
     print(f"\nSaved: {out}/shap_summary.md, {out}/shap_global_reasons.png, {out}/explanations.xlsx")
+
+
+def _print_risk(res: dict, cfg: dict) -> None:
+    print(f"\nData source: {res['source']}")
+    print(f"Settings (CV on training grafts): {res['settings']}")
+    for endpoint, e in res["endpoints"].items():
+        print(f"\n== {endpoint.replace('_', ' ')} (times = months after the 12-month visit)")
+        print("Repeated CV:")
+        rows = {n: {k: c[k] for k in ("c_index", "auc_12m", "auc_24m", "auc_36m", "brier_24m")}
+                for n, c in e["cv"].items()}
+        print(pd.DataFrame(rows).T.to_string(float_format="{:.3f}".format))
+        print(f"   Chosen: {e['chosen']}")
+        print("Test grafts (used once):")
+        rows = {n: {k: c[k] for k in ("events", "c_index", "auc_24m", "brier_24m")} for n, c in e["test"].items()}
+        print(pd.DataFrame(rows).T.to_string(float_format="{:.3f}".format))
+        cal = pd.DataFrame(e["calibration_24m"]).set_index("group")
+        print("Calibration at 24 months (out-of-fold): predicted vs observed risk")
+        print(cal[["n", "events", "predicted_risk", "observed_risk"]].to_string(float_format="{:.3f}".format))
+    out = f"{cfg['paths']['outputs']}/risk"
+    print(f"\nSaved: {out}/risk_summary.md, {out}/risk_results.json, {out}/calibration_24m.png")
+    print(f"Models: {cfg['paths']['models']}/followup_risk.joblib")
 
 
 def _print_trajectory(res: dict, cfg: dict) -> None:

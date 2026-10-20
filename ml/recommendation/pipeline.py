@@ -12,7 +12,8 @@ Part B (post-transplant follow-up; simulated cohort until real follow-up data ar
     run_followup_dataset  P2: 12-month landmark dataset, split by graft, train-only preprocessing
     run_followup_baselines  P3: trajectory baselines (MAE/RMSE) and risk baselines (C-index, AUC, Brier)
     run_trajectory     P4: GBM and LSTM vs baselines, learning curve, test once, save the chosen model
-    run_risk, run_followup   planned (P5-P7)
+    run_risk           P5: Cox, gradient-boosted Cox, DeepSurv per endpoint, calibration, test once
+    run_followup       planned (P6-P7)
 """
 import json
 from pathlib import Path
@@ -402,10 +403,7 @@ def run_followup_dataset(cfg: dict) -> dict:
                  fractions=tuple(f["split"]), seed=f["seed"])
 
 
-# Clinical inputs for the small Cox baseline (procedure PK is the reference level).
-COX_CLINICAL = ["ECD_12m", "loss_12m", "log_ecd_slope_3_12", "rejection_by_12m", "donor_age",
-                "procedure=DMEK", "procedure=DSEK"]
-COX_PENALTIES = (0.1, 1.0, 10.0)
+from recommendation.risk.experiment import COX_CLINICAL, COX_PENALTIES  # noqa: E402  (shared with P5)
 
 
 def run_followup_baselines(cfg: dict) -> dict:
@@ -548,8 +546,73 @@ def _write_trajectory_md(path: Path, r: dict, figs: list) -> None:
     path.write_text("\n".join(md) + "\n", encoding="utf-8")
 
 
-def run_risk(cfg: dict):
-    raise NotImplementedError("Needs recipient follow-up visits and the low-ECD endpoint definition.")
+def run_risk(cfg: dict) -> dict:
+    """P5: compare risk models (Cox, gradient-boosted Cox, DeepSurv) per endpoint, test once, save."""
+    import joblib
+
+    from recommendation.data_prep.followup_dataset import load
+    from recommendation.risk import experiment
+
+    paths = cfg["paths"]
+    table, _ = load(paths["followup_dataset"], Path(paths["models"]) / "followup_preprocessor.json")
+    res = experiment.run(table, seed=cfg["followup"]["seed"])
+    res["source"] = str(table["data_source"].iloc[0])
+    finals = res.pop("final_models")
+
+    models = Path(paths["models"])
+    models.mkdir(parents=True, exist_ok=True)
+    joblib.dump({"source": res["source"], "models": finals}, models / "followup_risk.joblib")
+    out = Path(paths["outputs"]) / "risk"
+    out.mkdir(parents=True, exist_ok=True)
+    (out / "risk_results.json").write_text(json.dumps(res, indent=2, default=str), encoding="utf-8")
+    figs = [_calibration_figure(res, out)]
+    _write_risk_md(out / "risk_summary.md", res, figs)
+    return res
+
+
+def _calibration_figure(res: dict, out: Path) -> str:
+    import matplotlib.pyplot as plt
+
+    from recommendation.data_prep.eda import SURFACE, _save, _style
+
+    eps = res["endpoints"]
+    fig, axes = plt.subplots(1, len(eps), figsize=(10, 4), facecolor=SURFACE)
+    for ax, (endpoint, r) in zip(axes, eps.items()):
+        cal = pd.DataFrame(r["calibration_24m"])
+        top = max(cal["predicted_risk"].max(), cal["observed_risk"].max(), 0.05) * 1.1
+        ax.plot([0, top], [0, top], color="#c3c2b7", linewidth=1, linestyle="--")
+        ax.plot(cal["predicted_risk"], cal["observed_risk"], marker="o", color="#2a78d6", linewidth=2)
+        _style(ax, f"{endpoint.replace('_', ' ').capitalize()}: {r['chosen']}", "Predicted 24-month risk",
+               "Observed (Kaplan-Meier)")
+        ax.yaxis.set_major_locator(plt.MaxNLocator(5))
+        ax.set_xlim(0, top)
+        ax.set_ylim(0, top)
+    fig.text(0.01, 0.005, f"Data source: {res['source']}; out-of-fold predictions, 5 risk groups",
+             fontsize=7, color="#898781")
+    return _save(fig, out, "calibration_24m.png")
+
+
+def _write_risk_md(path: Path, r: dict, figs: list) -> None:
+    md = ["# P5 Risk models (after the 12-month visit)", "", f"Data source: {r['source']}.", "",
+          f"Settings chosen on training grafts only: {r['settings']}.",
+          f"Choice rule: highest CV C-index; a simpler model within {r['tie_margin']} wins.", ""]
+    for endpoint, e in r["endpoints"].items():
+        md += [f"## {endpoint.replace('_', ' ').capitalize()}", "", "Repeated CV (training + validation grafts):", "",
+               "| Model | C-index | AUC 12 m | AUC 24 m | AUC 36 m | Brier 24 m |", "|---|---|---|---|---|---|"]
+        for name, c in e["cv"].items():
+            mark = " **(chosen)**" if name == e["chosen"] else ""
+            md.append(f"| {name}{mark} | {c['c_index']:.3f} | {c['auc_12m']:.3f} | {c['auc_24m']:.3f} | "
+                      f"{c['auc_36m']:.3f} | {c['brier_24m']:.3f} |")
+        md += ["", "Test grafts (used once):", "", "| Model | events | C-index | AUC 24 m | Brier 24 m |",
+               "|---|---|---|---|---|"]
+        for name, c in e["test"].items():
+            md.append(f"| {name} | {c['events']} | {c['c_index']:.3f} | {c['auc_24m']:.3f} | {c['brier_24m']:.3f} |")
+        md += ["", "Calibration at 24 months (out-of-fold):", "", "| Group | n | predicted | observed |", "|---|---|---|---|"]
+        md += [f"| {c['group']} | {c['n']} | {c['predicted_risk']:.3f} | {c['observed_risk']:.3f} |"
+               for c in e["calibration_24m"]]
+        md.append("")
+    md += ["Times are months after the 12-month visit. Figures: " + ", ".join(figs)]
+    path.write_text("\n".join(md) + "\n", encoding="utf-8")
 
 
 def run_followup(cfg: dict):
