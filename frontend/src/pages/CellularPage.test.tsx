@@ -6,6 +6,10 @@ import { analyzeCellular, type CellularAnalyzeResponse } from "@/api/cellular"
 import { ApiError } from "@/lib/api-client"
 import { makeAuth, makeUser, renderApp } from "@/test/auth-test-utils"
 
+vi.mock(import("@/api/cases"), async (importOriginal) => ({
+    ...(await importOriginal()),
+    listModuleRuns: vi.fn().mockResolvedValue({ items: [], nextBefore: null }),
+}))
 vi.mock(import("@/api/analysis"), async (importOriginal) => ({
     ...(await importOriginal()),
     uploadImage: vi.fn(),

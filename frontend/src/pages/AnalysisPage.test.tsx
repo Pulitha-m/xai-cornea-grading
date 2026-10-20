@@ -7,6 +7,10 @@ import { FEATURES } from "@/lib/grading-features"
 import { makeAuth, makeUser, renderApp } from "@/test/auth-test-utils"
 
 // Keep the real constants (used by validation); mock only the network calls.
+vi.mock(import("@/api/cases"), async (importOriginal) => ({
+    ...(await importOriginal()),
+    listModuleRuns: vi.fn().mockResolvedValue({ items: [], nextBefore: null }),
+}))
 vi.mock(import("@/api/analysis"), async (importOriginal) => ({
     ...(await importOriginal()),
     analyzeCornea: vi.fn(),

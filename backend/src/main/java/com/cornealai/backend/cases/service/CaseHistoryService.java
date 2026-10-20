@@ -12,18 +12,26 @@ import com.cornealai.backend.analysis.repository.GradingAnalysisRunRepository;
 import com.cornealai.backend.analysis.service.RunArtifactService;
 import com.cornealai.backend.audit.AuditService;
 import tools.jackson.databind.node.ObjectNode;
+import com.cornealai.backend.cases.TissueNumber;
+import com.cornealai.backend.cases.dto.CaseDtos.ModuleRun;
+import com.cornealai.backend.cases.dto.CaseDtos.ModuleRunPage;
 import com.cornealai.backend.cases.dto.CaseDtos.RunDetail;
 import com.cornealai.backend.cases.dto.CaseDtos.RunSummary;
+import com.cornealai.backend.cases.entity.DonorCase;
+import org.springframework.data.domain.PageRequest;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.ObjectMapper;
 
+import java.time.Instant;
 import java.util.ArrayList;
 import java.util.Comparator;
+import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.UUID;
 
 /** Every saved run of a donor case, across modules, newest first; and one run in full. */
@@ -62,6 +70,58 @@ public class CaseHistoryService {
         combinedRuns.findByDonorCaseIdOrderByCreatedAtDesc(caseId).forEach(r -> all.add(summary(r)));
         all.sort(Comparator.comparing(RunSummary::createdAt).reversed());
         return all;
+    }
+
+    private record Row(RunSummary summary, UUID caseId) {
+    }
+
+    /**
+     * Saved runs of one module across all cases (or one case, by tissue ID), newest first, for the module
+     * pages. Keyset paging: pass the returned {@code nextBefore} as {@code before} for older runs. An
+     * unknown tissue ID gives an empty page. Listing shows tissue IDs, so it is audited.
+     */
+    public ModuleRunPage moduleRuns(String module, String tissueId, Instant before, Integer limit, Long userId) {
+        int size = Math.clamp(limit == null ? 20 : limit, 1, 100);
+        Instant cursor = before == null ? Instant.now().plusSeconds(1) : before;
+        UUID caseId = null;
+        if (tissueId != null && !tissueId.isBlank()) {
+            Optional<DonorCase> found = donorCases.find(TissueNumber.parse(tissueId));
+            if (found.isEmpty()) {
+                return new ModuleRunPage(List.of(), null);
+            }
+            caseId = found.get().getId();
+        }
+        PageRequest page = PageRequest.of(0, size + 1);  // one extra tells whether older runs exist
+        UUID only = caseId;
+        List<Row> rows = switch (module) {
+            case "cellular" -> (only == null
+                    ? cellularRuns.findByDonorCaseIdIsNotNullAndCreatedAtBeforeOrderByCreatedAtDesc(cursor, page)
+                    : cellularRuns.findByDonorCaseIdAndCreatedAtBeforeOrderByCreatedAtDesc(only, cursor, page))
+                    .stream().map(r -> new Row(summary(r), r.getDonorCaseId())).toList();
+            case "grading" -> (only == null
+                    ? gradingRuns.findByDonorCaseIdIsNotNullAndCreatedAtBeforeOrderByCreatedAtDesc(cursor, page)
+                    : gradingRuns.findByDonorCaseIdAndCreatedAtBeforeOrderByCreatedAtDesc(only, cursor, page))
+                    .stream().map(r -> new Row(summary(r), r.getDonorCaseId())).toList();
+            case "disease" -> (only == null
+                    ? diseaseRuns.findByDonorCaseIdIsNotNullAndCreatedAtBeforeOrderByCreatedAtDesc(cursor, page)
+                    : diseaseRuns.findByDonorCaseIdAndCreatedAtBeforeOrderByCreatedAtDesc(only, cursor, page))
+                    .stream().map(r -> new Row(summary(r), r.getDonorCaseId())).toList();
+            case "combined" -> (only == null
+                    ? combinedRuns.findByDonorCaseIdIsNotNullAndCreatedAtBeforeOrderByCreatedAtDesc(cursor, page)
+                    : combinedRuns.findByDonorCaseIdAndCreatedAtBeforeOrderByCreatedAtDesc(only, cursor, page))
+                    .stream().map(r -> new Row(summary(r), r.getDonorCaseId())).toList();
+            default -> throw new AnalysisRejectedException(HttpStatus.BAD_REQUEST, "INVALID_REQUEST", "module",
+                    "Unknown module '" + module + "'.");
+        };
+
+        List<Row> shown = rows.subList(0, Math.min(size, rows.size()));
+        Map<UUID, String> tissueIds = new HashMap<>();
+        List<ModuleRun> items = shown.stream().map(row -> new ModuleRun(row.summary(), row.caseId(),
+                tissueIds.computeIfAbsent(row.caseId(),
+                        id -> donorCases.tissueNumberOf(donorCases.require(id)).value()))).toList();
+        Instant nextBefore = rows.size() > size ? shown.getLast().summary().createdAt() : null;
+        audit.record(userId, AuditService.CASE_LIST, null, only, items.size() + " " + module + " runs");
+        return new ModuleRunPage(items, nextBefore);
     }
 
     /**

@@ -182,6 +182,14 @@ public final class CaseDtos {
     ) {
     }
 
+    /** A saved run of one module with the case it belongs to (for the module pages' previous results). */
+    public record ModuleRun(RunSummary run, UUID caseId, String tissueId) {
+    }
+
+    /** One page of a module's saved runs, newest first; pass {@code nextBefore} back to get older ones. */
+    public record ModuleRunPage(List<ModuleRun> items, Instant nextBefore) {
+    }
+
     /** A saved run with the inputs it was given and the stored result (image maps are not stored). */
     public record RunDetail(RunSummary summary, JsonNode inputs, JsonNode result) {
     }

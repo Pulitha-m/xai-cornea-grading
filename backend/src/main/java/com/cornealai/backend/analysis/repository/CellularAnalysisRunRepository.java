@@ -11,4 +11,11 @@ public interface CellularAnalysisRunRepository extends JpaRepository<CellularAna
     List<CellularAnalysisRun> findByImageId(UUID imageId);
 
     List<CellularAnalysisRun> findByDonorCaseIdOrderByCreatedAtDesc(UUID donorCaseId);
+
+    /** Runs of any case older than {@code before}, newest first (keyset paging). */
+    List<CellularAnalysisRun> findByDonorCaseIdIsNotNullAndCreatedAtBeforeOrderByCreatedAtDesc(java.time.Instant before,
+            org.springframework.data.domain.Pageable page);
+
+    List<CellularAnalysisRun> findByDonorCaseIdAndCreatedAtBeforeOrderByCreatedAtDesc(UUID donorCaseId, java.time.Instant before,
+            org.springframework.data.domain.Pageable page);
 }

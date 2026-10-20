@@ -14,34 +14,9 @@ import { measurementLabel } from "@/lib/disease-measurements"
 import { featureLabel, formatFeatureValue } from "@/lib/grading-features"
 import { EmptyState } from "@/components/ui/empty-state"
 import { Spinner } from "@/components/ui/spinner"
-import { StatusBadge, type StatusTone } from "@/components/ui/status-badge"
+import { StatusBadge } from "@/components/ui/status-badge"
+import { runHeadline, STATUS_TONES } from "@/lib/run-summary"
 import { alertError, tableCell, tableHead, tableHeaderCell, tableRow } from "@/lib/styles"
-
-const STATUS_TONES: Record<string, StatusTone> = {
-    completed: "success",
-    partial: "warning",
-    input_check_failed: "warning",
-    rejected: "danger",
-    failed: "danger",
-}
-
-/** The main values of a saved run, for the history list. */
-function headline(run: RunSummary): string {
-    const h = run.headline
-    const number = (v: unknown, digits = 0) => (typeof v === "number" ? v.toLocaleString("en-GB", { maximumFractionDigits: digits }) : "—")
-    switch (run.module) {
-        case "grading":
-        case "combined":
-            return h.grade ? `Grade ${String(h.grade)}` : "—"
-        case "cellular":
-            return `ECD ${number(h.ecd)} · CV ${number(h.cv, 1)} % · HEX ${number(h.hex, 1)} %${h.reliable === false ? " · not reliable" : ""}`
-        case "disease": {
-            const detected = Array.isArray(h.detected) ? (h.detected as string[]) : []
-            if (h.normal === true) return "No disease detected"
-            return detected.length > 0 ? `Detected: ${detected.join(", ")}` : "—"
-        }
-    }
-}
 
 /** Every saved run of the case, across modules, newest first. Any clinician on the case can see them. */
 export function CaseHistory({ caseId, images }: { caseId: string; images: CaseImage[] }) {
@@ -82,7 +57,7 @@ export function CaseHistory({ caseId, images }: { caseId: string; images: CaseIm
                                             <StatusBadge tone={STATUS_TONES[run.status] ?? "neutral"}>{run.status.replaceAll("_", " ")}</StatusBadge>
                                             {run.errorCode && <span className="ml-2 font-mono text-2xs text-muted-foreground">{run.errorCode}</span>}
                                         </td>
-                                        <td className={tableCell}>{headline(run)}</td>
+                                        <td className={tableCell}>{runHeadline(run)}</td>
                                         <td className={tableCell}>{imageNumber(run.imageId)}</td>
                                         <td className={tableCell}>
                                             <button type="button" className="text-sm font-medium text-accent hover:underline"
@@ -109,7 +84,8 @@ export function CaseHistory({ caseId, images }: { caseId: string; images: CaseIm
     )
 }
 
-function RunDetailView({ caseId, run }: { caseId: string; run: RunSummary }) {
+/** One saved run as its report: inputs and result, images restored by the server. */
+export function RunDetailView({ caseId, run }: { caseId: string; run: RunSummary }) {
     const detail = useQuery({
         queryKey: ["case", caseId, "run", run.module, run.id],
         queryFn: () => getCaseRun(caseId, run.module, run.id),

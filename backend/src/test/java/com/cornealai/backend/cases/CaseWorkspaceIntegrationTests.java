@@ -260,6 +260,50 @@ class CaseWorkspaceIntegrationTests extends IntegrationTestSupport {
                 .andExpect(status().isNotFound());
     }
 
+    @Test
+    void modulePagesListEarlierResultsAcrossCasesSearchableByTissueIdAndPagedBack() throws Exception {
+        stubAllModules();
+        for (String tissue : List.of("12656R", "12657L", "12658R")) {
+            String id = caseId(tissue);
+            call(doctor, put("/api/cases/" + id + "/details").contentType(MediaType.APPLICATION_JSON).content(DETAILS));
+            String imageId = uploadImage(id);
+            call(doctor, post("/api/cases/" + id + "/analyses").contentType(MediaType.APPLICATION_JSON)
+                    .content("{\"imageId\":\"" + imageId + "\",\"modules\":[\"grading\"]}"))
+                    .andExpect(status().isOk());
+            Thread.sleep(5);  // distinct timestamps for paging
+        }
+        AppUser nurse = createUser("nurse.modules", RoleName.NURSE);
+
+        call(nurse, get("/api/cases/runs").param("module", "grading"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.items", hasSize(3)))
+                .andExpect(jsonPath("$.items[0].tissueId").value("12658R"))
+                .andExpect(jsonPath("$.items[0].run.headline.grade").value("A"))
+                .andExpect(jsonPath("$.nextBefore").doesNotExist());
+
+        String first = call(nurse, get("/api/cases/runs").param("module", "grading").param("limit", "2"))
+                .andExpect(jsonPath("$.items", hasSize(2)))
+                .andExpect(jsonPath("$.nextBefore").isNotEmpty())
+                .andReturn().getResponse().getContentAsString();
+        String nextBefore = first.replaceAll(".*\"nextBefore\":\"([^\"]+)\".*", "$1");
+        call(nurse, get("/api/cases/runs").param("module", "grading").param("limit", "2").param("before", nextBefore))
+                .andExpect(jsonPath("$.items", hasSize(1)))
+                .andExpect(jsonPath("$.items[0].tissueId").value("12656R"))
+                .andExpect(jsonPath("$.nextBefore").doesNotExist());
+
+        call(nurse, get("/api/cases/runs").param("module", "grading").param("tissueId", " 12657l "))
+                .andExpect(jsonPath("$.items", hasSize(1)))
+                .andExpect(jsonPath("$.items[0].tissueId").value("12657L"));
+        call(nurse, get("/api/cases/runs").param("module", "grading").param("tissueId", "99999R"))
+                .andExpect(jsonPath("$.items", hasSize(0)));
+        call(nurse, get("/api/cases/runs").param("module", "cellular")).andExpect(jsonPath("$.items", hasSize(0)));
+        call(nurse, get("/api/cases/runs").param("module", "recommendation")).andExpect(status().isBadRequest());
+        call(nurse, get("/api/cases/runs").param("module", "grading").param("tissueId", "CASE-1"))
+                .andExpect(status().isBadRequest());
+        call(createUser("manager.modules", RoleName.MANAGER), get("/api/cases/runs").param("module", "grading"))
+                .andExpect(status().isForbidden());
+    }
+
     // ---------------------------------------------------------------- helpers
 
     private ResultActions call(AppUser user, MockHttpServletRequestBuilder request) throws Exception {

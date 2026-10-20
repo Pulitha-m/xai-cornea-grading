@@ -10,6 +10,7 @@ import com.cornealai.backend.cases.dto.CaseDtos.CaseImage;
 import com.cornealai.backend.cases.dto.CaseDtos.CaseResponse;
 import com.cornealai.backend.cases.dto.CaseDtos.CreateCaseRequest;
 import com.cornealai.backend.cases.dto.CaseDtos.MatchCandidateView;
+import com.cornealai.backend.cases.dto.CaseDtos.ModuleRunPage;
 import com.cornealai.backend.cases.dto.CaseDtos.Serology;
 import com.cornealai.backend.cases.dto.CaseDtos.Signoff;
 import com.cornealai.backend.cases.dto.CaseDtos.SignoffRequest;
@@ -31,6 +32,7 @@ import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
 
 import java.io.IOException;
+import java.time.Instant;
 import java.util.List;
 import java.util.UUID;
 
@@ -130,6 +132,18 @@ public class CaseController {
     public RunDetail run(@PathVariable UUID caseId, @PathVariable String module, @PathVariable UUID runId,
                          @AuthenticationPrincipal AppUserDetails user) {
         return history.run(caseId, module, runId, user.getId());
+    }
+
+    /**
+     * Saved runs of one module (cellular, grading, disease, combined) across cases, newest first, for
+     * the module pages; {@code tissueId} narrows to one case, {@code before} (from nextBefore) pages back.
+     */
+    @GetMapping("/runs")
+    public ModuleRunPage moduleRuns(@RequestParam String module, @RequestParam(required = false) String tissueId,
+                                    @RequestParam(required = false) Instant before,
+                                    @RequestParam(required = false) Integer limit,
+                                    @AuthenticationPrincipal AppUserDetails user) {
+        return history.moduleRuns(module, tissueId, before, limit, user.getId());
     }
 
     // ---------------------------------------------------------------- sign-off, serology, candidates

@@ -230,3 +230,28 @@ export function updateSerology(caseId: string, serology: Omit<Serology, "serolog
 export function listCandidates(): Promise<MatchCandidate[]> {
     return apiRequest<MatchCandidate[]>("/api/cases/candidates")
 }
+
+/** A saved run of one module with the case it belongs to. */
+export interface ModuleRun {
+    run: RunSummary
+    caseId: string
+    tissueId: string
+}
+
+/** One page of a module's saved runs, newest first; nextBefore fetches the older ones. */
+export interface ModuleRunPage {
+    items: ModuleRun[]
+    nextBefore: string | null
+}
+
+/** Saved runs of one module across cases (or one case, by tissue ID), newest first. Audited. */
+export function listModuleRuns(
+    module: RunSummary["module"],
+    options: { tissueId?: string; before?: string; limit?: number } = {},
+): Promise<ModuleRunPage> {
+    const query = new URLSearchParams({ module })
+    if (options.tissueId) query.set("tissueId", options.tissueId)
+    if (options.before) query.set("before", options.before)
+    if (options.limit) query.set("limit", String(options.limit))
+    return apiRequest<ModuleRunPage>(`/api/cases/runs?${query}`)
+}
