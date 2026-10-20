@@ -1,6 +1,7 @@
 package com.cornealai.backend.analysis;
 
 import com.cornealai.backend.analysis.client.MlServiceClient;
+import com.cornealai.backend.analysis.dto.disease.CellChekReport;
 import com.cornealai.backend.analysis.dto.disease.DiseaseAnalyzeResponse;
 import com.cornealai.backend.analysis.dto.disease.DiseaseFinding;
 import com.sun.net.httpserver.HttpServer;
@@ -127,9 +128,38 @@ class MlServiceDiseaseContractTest {
                 });
     }
 
+    @Test
+    void reportReadingMapsToDto() throws Exception {
+        String body = strictMapper.writeValueAsString(fixture().get("report"));
+        MlServiceClient client = clientFor(200, body, new AtomicReference<>(), "/disease/read-report");
+
+        CellChekReport report = client.readCellChekReport(new byte[]{1, 2, 3}, "report.img");
+
+        assertEquals("image", report.source());
+        assertEquals(2480.0, report.values().get("ECD_CD_cells_per_mm2"));
+        assertEquals(61.0, report.values().get("Donor_Age"));
+        assertThat(report.notFound()).isEmpty();
+        assertThat(report.warnings()).isEmpty();
+    }
+
+    @Test
+    void unreadableReportIsRaisedWithItsCode() throws Exception {
+        String body = strictMapper.writeValueAsString(fixture().get("report_unsupported"));
+        MlServiceClient client = clientFor(422, body, new AtomicReference<>(), "/disease/read-report");
+
+        assertThatThrownBy(() -> client.readCellChekReport(new byte[]{1}, "report.img"))
+                .isInstanceOfSatisfying(AnalysisRejectedException.class,
+                        e -> assertEquals("REPORT_UNSUPPORTED_FORMAT", e.getCode()));
+    }
+
     private MlServiceClient clientFor(int status, String body, AtomicReference<String> contentType) throws Exception {
+        return clientFor(status, body, contentType, "/disease/analyze");
+    }
+
+    private MlServiceClient clientFor(int status, String body, AtomicReference<String> contentType, String path)
+            throws Exception {
         server = HttpServer.create(new InetSocketAddress("127.0.0.1", 0), 0);
-        server.createContext("/disease/analyze", exchange -> {
+        server.createContext(path, exchange -> {
             contentType.set(exchange.getRequestHeaders().getFirst("Content-Type"));
             exchange.getRequestBody().readAllBytes();
             byte[] bytes = body.getBytes(StandardCharsets.UTF_8);

@@ -1,6 +1,7 @@
 package com.cornealai.backend.analysis;
 
 import com.cornealai.backend.analysis.client.MlServiceClient;
+import com.cornealai.backend.analysis.dto.disease.CellChekReport;
 import com.cornealai.backend.analysis.dto.disease.DiseaseAnalyzeResponse;
 import com.cornealai.backend.analysis.dto.disease.DiseaseFinding;
 import com.cornealai.backend.analysis.dto.disease.GradcamFocus;
@@ -145,6 +146,33 @@ class DiseaseAnalysisIntegrationTests extends IntegrationTestSupport {
     void nonClinicalRoleCannotRunDiseaseAnalysis() throws Exception {
         AppUser support = createUser("support.disease", RoleName.SUPPORT_STAFF);
         analyze(support, "CASE-1", UUID.randomUUID(), false).andExpect(status().isForbidden());
+        verifyNoInteractions(mlServiceClient);
+    }
+
+    @Test
+    void reportIsReadThroughMlServiceAndNotStored() throws Exception {
+        CellChekReport reading = new CellChekReport("image",
+                Map.of("ECD_CD_cells_per_mm2", 2016.0, "SD", 175.0, "CV", 35.0, "HEX_percent", 48.0, "Donor_Age", 59.0),
+                List.of(), "NEB-TEST L", "OS", 124.0, 61468.0, List.of());
+        when(mlServiceClient.readCellChekReport(any(), anyString())).thenReturn(reading);
+
+        mockMvc.perform(multipart("/api/analysis/disease/report")
+                        .file(new MockMultipartFile("file", "report.jpg", "image/jpeg", image()))
+                        .header(HttpHeaders.AUTHORIZATION, bearer(doctor)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.values.ECD_CD_cells_per_mm2").value(2016.0))
+                .andExpect(jsonPath("$.tissueId").value("NEB-TEST L"));
+        verify(storage, never()).store(anyString(), any(), anyString());
+        assertThat(runs.count()).isZero();
+    }
+
+    @Test
+    void nonClinicalRoleCannotReadReports() throws Exception {
+        AppUser support = createUser("support.report", RoleName.SUPPORT_STAFF);
+        mockMvc.perform(multipart("/api/analysis/disease/report")
+                        .file(new MockMultipartFile("file", "report.jpg", "image/jpeg", image()))
+                        .header(HttpHeaders.AUTHORIZATION, bearer(support)))
+                .andExpect(status().isForbidden());
         verifyNoInteractions(mlServiceClient);
     }
 

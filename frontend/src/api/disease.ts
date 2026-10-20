@@ -1,5 +1,5 @@
 import type { ImageValidation } from "@/api/analysis"
-import { apiRequest } from "@/lib/api-client"
+import { apiRequest, apiUpload } from "@/lib/api-client"
 
 export interface DiseaseAnalyzeRequest {
     caseId: string
@@ -117,4 +117,29 @@ export interface DiseaseAnalyzeResponse {
 
 export function analyzeDisease(request: DiseaseAnalyzeRequest): Promise<DiseaseAnalyzeResponse> {
     return apiRequest<DiseaseAnalyzeResponse>("/api/analysis/disease", { method: "POST", body: request })
+}
+
+/** Values read from a CellChek report to pre-fill the form; the clinician checks every one. */
+export interface CellChekReport {
+    /** "image" (read with OCR) or "text_export". */
+    source: string
+    /** The five measurements by name; null = not found in the report. */
+    values: Record<string, number | null>
+    notFound: string[]
+    tissueId: string | null
+    eye: string | null
+    totalCells: number | null
+    totalAreaUm2: number | null
+    /** Possible misreads (cross-checks) and values that could not be trusted. */
+    warnings: InputIssue[]
+}
+
+/** Report files accepted for reading the values: a picture of the report or the CellChek .txt export. */
+export const REPORT_ACCEPT = "image/jpeg,image/png,.txt,text/plain"
+
+/** Reads the CellChek values from a report. The report is not stored and is not the model's image. */
+export function readCellChekReport(file: File): Promise<CellChekReport> {
+    const form = new FormData()
+    form.append("file", file)
+    return apiUpload<CellChekReport>("/api/analysis/disease/report", form)
 }

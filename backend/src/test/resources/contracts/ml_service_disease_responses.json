@@ -462,5 +462,29 @@
         "message": "Donor_Age is missing."
       }
     ]
+  },
+  "report": {
+    "source": "image",
+    "values": {
+      "ECD_CD_cells_per_mm2": 2480.0,
+      "SD": 133.0,
+      "CV": 33.0,
+      "HEX_percent": 55.0,
+      "Donor_Age": 61.0
+    },
+    "notFound": [],
+    "tissueId": "TEST-0o01 L",
+    "eye": "OD",
+    "totalCells": 124.0,
+    "totalAreaUm2": 50000.0,
+    "warnings": []
+  },
+  "report_unsupported": {
+    "status": "rejected",
+    "error": {
+      "code": "REPORT_UNSUPPORTED_FORMAT",
+      "field": "report",
+      "message": "Upload the CellChek report as a JPEG or PNG image, or the CellChek .txt export."
+    }
   }
 }

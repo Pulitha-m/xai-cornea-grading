@@ -6,6 +6,7 @@ import { buildMeasurementPayload, emptyMeasurementInputs, MEASUREMENTS } from "@
 import { checkImageFile } from "@/lib/image-file"
 import { alertError, primaryButton, textInput } from "@/lib/styles"
 import { DiseaseResults, InputIssues } from "@/components/disease/DiseaseResults"
+import { ReportReader } from "@/components/disease/ReportReader"
 import { Card } from "@/components/dashboard/PageHeader"
 import { Spinner } from "@/components/ui/spinner"
 
@@ -33,6 +34,8 @@ export function DiseasePanel() {
     const [fileError, setFileError] = useState<string | null>(null)
     const [values, setValues] = useState(emptyMeasurementInputs)
     const [valueErrors, setValueErrors] = useState<Record<string, string>>({})
+    /** Fields whose current value was read from the report and not edited since. */
+    const [fromReport, setFromReport] = useState<Set<string>>(() => new Set())
     const fileId = useId()
     const fileHelpId = useId()
     const caseIdId = useId()
@@ -150,6 +153,20 @@ export function DiseasePanel() {
 
                     <fieldset className="space-y-3 border-t border-border pt-4">
                         <legend className="text-sm font-semibold">CellChek values</legend>
+                        <ReportReader
+                            caseId={caseId}
+                            onRead={(read) => {
+                                setValues((current) => ({ ...current, ...read }))
+                                setFromReport(new Set(Object.keys(read)))
+                                setValueErrors({})
+                                clearResult()
+                            }}
+                            onUseCaseId={(tissueId) => {
+                                setCaseId(tissueId)
+                                analysis.resetUpload()
+                                clearResult()
+                            }}
+                        />
                         <p className="text-xs text-muted-foreground">
                             Leave a value blank if it is unknown — it is never read as zero. Blank values are filled
                             with the training median; with three or more missing, no result is produced.
@@ -162,8 +179,14 @@ export function DiseasePanel() {
                                     unit={m.unit}
                                     value={values[m.name] ?? ""}
                                     error={valueErrors[m.name] ?? null}
+                                    fromReport={fromReport.has(m.name)}
                                     onChange={(value) => {
                                         setValues((current) => ({ ...current, [m.name]: value }))
+                                        setFromReport((current) => {
+                                            const next = new Set(current)
+                                            next.delete(m.name)
+                                            return next
+                                        })
                                         setValueErrors((current) => {
                                             const next = { ...current }
                                             delete next[m.name]
@@ -208,11 +231,13 @@ export function DiseasePanel() {
     )
 }
 
-function MeasurementField({ label, unit, value, error, onChange }: {
+function MeasurementField({ label, unit, value, error, fromReport, onChange }: {
     label: string
     unit?: string
     value: string
     error: string | null
+    /** The value was read from the CellChek report and not edited since. */
+    fromReport: boolean
     onChange: (value: string) => void
 }) {
     const id = useId()
@@ -222,6 +247,11 @@ function MeasurementField({ label, unit, value, error, onChange }: {
             <label htmlFor={id} className="mb-1 block text-xs font-medium">
                 {label}
                 {unit && <span className="font-normal text-muted-foreground"> ({unit})</span>}
+                {fromReport && (
+                    <span className="ml-1.5 rounded-full bg-accent-soft px-1.5 py-0.5 text-[10px] font-semibold text-accent">
+                        From report
+                    </span>
+                )}
             </label>
             <input
                 id={id}

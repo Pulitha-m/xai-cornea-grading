@@ -2,7 +2,7 @@ import { screen, within } from "@testing-library/react"
 import userEvent from "@testing-library/user-event"
 import { beforeEach, describe, expect, it, vi } from "vitest"
 import { uploadImage } from "@/api/analysis"
-import { analyzeDisease, type DiseaseAnalyzeResponse } from "@/api/disease"
+import { analyzeDisease, readCellChekReport, type DiseaseAnalyzeResponse } from "@/api/disease"
 import { ApiError } from "@/lib/api-client"
 import { makeAuth, makeUser, renderApp } from "@/test/auth-test-utils"
 
@@ -13,6 +13,7 @@ vi.mock(import("@/api/analysis"), async (importOriginal) => ({
 vi.mock(import("@/api/disease"), async (importOriginal) => ({
     ...(await importOriginal()),
     analyzeDisease: vi.fn(),
+    readCellChekReport: vi.fn(),
 }))
 
 const QUALITY = {
@@ -92,6 +93,7 @@ beforeEach(() => {
         imageId: "img-1", caseId: "CASE-7", contentType: "image/jpeg", sizeBytes: 10, width: 1296, height: 972,
     })
     vi.mocked(analyzeDisease).mockReset()
+    vi.mocked(readCellChekReport).mockReset()
 })
 
 describe("DiseasePage", () => {
@@ -188,6 +190,58 @@ describe("DiseasePage", () => {
         await fillAndAnalyse({})
 
         expect(await screen.findByText(/Choose a different image and try again/)).toBeInTheDocument()
+    })
+
+    it("fills the values from a CellChek report for the clinician to check", async () => {
+        vi.mocked(readCellChekReport).mockResolvedValue({
+            source: "image",
+            values: { ECD_CD_cells_per_mm2: 2016, SD: 175, CV: 35, HEX_percent: 48, Donor_Age: null },
+            notFound: ["Donor_Age"],
+            tissueId: "NEB-2020-09-12673 L",
+            eye: "OS",
+            totalCells: 124,
+            totalAreaUm2: 61468,
+            warnings: [{ code: "REPORT_LOW_CONFIDENCE", field: "CV", message: "CV (35) was hard to read; check it against the report." }],
+        })
+        vi.mocked(analyzeDisease).mockResolvedValue(COMPLETED)
+        renderApp("/disease", makeAuth({ user: makeUser("DOCTOR") }))
+        const user = userEvent.setup()
+
+        await user.upload(await screen.findByLabelText(/Fill from CellChek report/), new File(["x"], "report.jpg", { type: "image/jpeg" }))
+
+        expect(await screen.findByText(/Filled 4 of 5 values from the report/)).toHaveTextContent("NEB-2020-09-12673 L (OS)")
+        expect(screen.getByLabelText(/^ECD/)).toHaveValue("2016")
+        expect(screen.getByLabelText(/^Hexagonality/)).toHaveValue("48")
+        expect(screen.getByLabelText(/^Donor age/)).toHaveValue("")
+        expect(screen.getAllByText("From report")).toHaveLength(4)
+        expect(screen.getByText(/Not found in the report/)).toHaveTextContent("Donor age")
+        expect(screen.getByText("CV (35) was hard to read; check it against the report.")).toBeInTheDocument()
+
+        await user.click(screen.getByRole("button", { name: "Use NEB-2020-09-12673 L as case ID" }))
+        expect(screen.getByLabelText("Case ID")).toHaveValue("NEB-2020-09-12673 L")
+
+        await user.clear(screen.getByLabelText(/^SD of cell area/))
+        await user.type(screen.getByLabelText(/^SD of cell area/), "176")
+        expect(screen.getAllByText("From report")).toHaveLength(3)
+
+        await user.upload(screen.getByLabelText("Specular microscopy image"), jpeg())
+        await user.click(screen.getByRole("button", { name: "Analyse" }))
+        await screen.findByRole("heading", { name: /Results for case/ })
+        expect(analyzeDisease).toHaveBeenCalledWith(expect.objectContaining({
+            caseId: "NEB-2020-09-12673 L",
+            measurements: { ECD_CD_cells_per_mm2: 2016, SD: 176, CV: 35, HEX_percent: 48, Donor_Age: null },
+        }))
+    })
+
+    it("asks for manual entry when the report cannot be read", async () => {
+        vi.mocked(readCellChekReport).mockRejectedValue(new ApiError(422, "No CellChek values could be read from this file. Enter them by hand.", {}, "REPORT_NO_VALUES"))
+        renderApp("/disease", makeAuth({ user: makeUser("NURSE") }))
+        const user = userEvent.setup()
+
+        await user.upload(await screen.findByLabelText(/Fill from CellChek report/), new File(["x"], "blank.png", { type: "image/png" }))
+
+        expect(await screen.findByText(/No CellChek values could be read/)).toBeInTheDocument()
+        expect(screen.getByLabelText(/^ECD/)).toHaveValue("")
     })
 
     it("flags a value that is not a number before sending", async () => {

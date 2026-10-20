@@ -13,6 +13,7 @@ dependencies = [
     "pillow>=12.3.0",
     "pydantic>=2.13.5",
     "python-multipart>=0.0.32",
+    "rapidocr-onnxruntime==1.4.4",
     "scikit-learn==1.9.1",
     "uvicorn>=0.54.0",
 ]
@@ -25,3 +26,8 @@ dev = [
 
 [tool.pytest.ini_options]
 markers = ["real_backbone: uses the exported ONNX grading backbone instead of the synthetic stub"]
+
+[tool.uv]
+# rapidocr_onnxruntime asks for the GUI build of OpenCV; the headless build above provides the same cv2
+# without X11/libGL (python:3.11-slim), so the GUI build is never installed.
+override-dependencies = ["opencv-python; sys_platform == 'never'"]

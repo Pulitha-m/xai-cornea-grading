@@ -91,3 +91,16 @@ class DiseaseRejectedResponse(RejectedResponse):
 
     inputCheck: InputCheck | None = None
     imageQuality: ImageQuality | None = None
+
+
+class CellChekReport(BaseModel):
+    """Values read from a CellChek report to pre-fill the form; the clinician checks them."""
+
+    source: str = Field(..., description="image (OCR) or text_export")
+    values: dict[str, float | None] = Field(..., description="The 5 measurements by name; null = not found")
+    notFound: list[str]
+    tissueId: str | None = None
+    eye: str | None = None
+    totalCells: float | None = None
+    totalAreaUm2: float | None = None
+    warnings: list[ErrorDetail]

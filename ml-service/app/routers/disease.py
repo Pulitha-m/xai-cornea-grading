@@ -14,12 +14,13 @@ from fastapi.responses import JSONResponse
 from PIL import Image, ImageOps
 
 from app.schemas.analysis import ErrorDetail, ImageValidation
-from app.schemas.disease import DiseaseAnalyzeResponse, DiseaseRejectedResponse
+from app.schemas.disease import CellChekReport, DiseaseAnalyzeResponse, DiseaseRejectedResponse
 from pipelines.disease import service
 from pipelines.disease.checks import MEASUREMENTS, is_number
 from pipelines.disease.config import DiseaseModelNotReady
+from pipelines.disease.report import ReportUnreadable, read_report
 from pipelines.image import domain
-from pipelines.image.decode import ImageRejected, decode_image
+from pipelines.image.decode import MAX_BYTES, ImageRejected, decode_image
 
 logger = logging.getLogger("ml-service")
 
@@ -118,3 +119,26 @@ async def analyze_disease(
         imageQuality=outcome.image_quality,
         **outcome.result,
     )
+
+
+@router.post(
+    "/read-report",
+    response_model=CellChekReport,
+    responses={422: {"model": DiseaseRejectedResponse}, 503: {"model": DiseaseRejectedResponse}},
+)
+def read_cellchek_report(report: UploadFile = File(..., description="CellChek report image (JPEG/PNG) or .txt export")):
+    """Reads ECD, SD, CV, HEX % and donor age from a CellChek report, to pre-fill the form.
+
+    Synchronous on purpose: FastAPI runs it in a worker thread, so OCR (a few seconds on CPU)
+    does not block other requests. The report is not stored and is never used as the model's image.
+    """
+    data = report.file.read(MAX_BYTES + 1)
+    if len(data) > MAX_BYTES:
+        return rejected(422, "IMAGE_TOO_LARGE", f"Reports must be at most {MAX_BYTES // (1024 * 1024)} MB.", "report")
+    try:
+        return CellChekReport(**read_report(data))
+    except ReportUnreadable as exc:
+        return rejected(422, exc.code, exc.message, "report")
+    except DiseaseModelNotReady:
+        logger.exception("Disease config unavailable")
+        return rejected(503, "MODEL_NOT_READY", "Reading reports is unavailable. Enter the values by hand.", "report")
