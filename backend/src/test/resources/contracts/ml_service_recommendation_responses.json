@@ -1,0 +1,308 @@
+{
+  "match_completed": {
+    "request_id": "Q0001",
+    "ranked": [
+      {
+        "rank": 1,
+        "record_id": "R0001",
+        "grade": "A+",
+        "ml_score": 1.2285,
+        "match_score": 0.8419,
+        "mcda_rank": 1,
+        "grade_gap": 0,
+        "criterion_scores": {
+          "grade_fit": 1.0,
+          "endothelium": 0.5444,
+          "serology": 1.0,
+          "freshness": 0.7857,
+          "surgery_compatibility": 1.0
+        },
+        "reasons": [
+          "grade fit 1.00",
+          "serology 1.00"
+        ],
+        "why": [
+          {
+            "reason": "serology",
+            "effect": 0.244
+          },
+          {
+            "reason": "grade match",
+            "effect": 0.207
+          },
+          {
+            "reason": "freshness",
+            "effect": 0.16
+          },
+          {
+            "reason": "endothelium",
+            "effect": 0.0
+          },
+          {
+            "reason": "donor age",
+            "effect": 0.0
+          },
+          {
+            "reason": "preservation time",
+            "effect": 0.0
+          }
+        ],
+        "why_text": "serology (+0.24); grade match (+0.21); freshness (+0.16)",
+        "counterfactual": null,
+        "flags": []
+      },
+      {
+        "rank": 2,
+        "record_id": "R0003",
+        "grade": "A+",
+        "ml_score": 0.4149,
+        "match_score": 0.799,
+        "mcda_rank": 2,
+        "grade_gap": 0,
+        "criterion_scores": {
+          "grade_fit": 1.0,
+          "endothelium": 0.5444,
+          "serology": 1.0,
+          "freshness": 0.3571,
+          "surgery_compatibility": 1.0
+        },
+        "reasons": [
+          "grade fit 1.00",
+          "serology 1.00"
+        ],
+        "why": [
+          {
+            "reason": "freshness",
+            "effect": -0.653
+          },
+          {
+            "reason": "serology",
+            "effect": 0.244
+          },
+          {
+            "reason": "grade match",
+            "effect": 0.207
+          },
+          {
+            "reason": "endothelium",
+            "effect": 0.0
+          },
+          {
+            "reason": "donor age",
+            "effect": 0.0
+          },
+          {
+            "reason": "preservation time",
+            "effect": 0.0
+          }
+        ],
+        "why_text": "freshness (-0.65); serology (+0.24); grade match (+0.21)",
+        "counterfactual": "would be #1 if: stored 7 fewer days",
+        "flags": []
+      },
+      {
+        "rank": 3,
+        "record_id": "R0002",
+        "grade": "A",
+        "ml_score": -0.4019,
+        "match_score": 0.504,
+        "mcda_rank": 3,
+        "grade_gap": -1,
+        "criterion_scores": {
+          "grade_fit": 0.3,
+          "endothelium": 0.5444,
+          "serology": 0.5,
+          "freshness": 0.8571,
+          "surgery_compatibility": 1.0
+        },
+        "reasons": [
+          "surgery compatibility 1.00",
+          "freshness 0.86"
+        ],
+        "why": [
+          {
+            "reason": "serology",
+            "effect": -0.731
+          },
+          {
+            "reason": "grade match",
+            "effect": -0.621
+          },
+          {
+            "reason": "freshness",
+            "effect": 0.333
+          },
+          {
+            "reason": "endothelium",
+            "effect": 0.0
+          },
+          {
+            "reason": "donor age",
+            "effect": 0.0
+          },
+          {
+            "reason": "preservation time",
+            "effect": 0.0
+          }
+        ],
+        "why_text": "serology (-0.73); grade match (-0.62); freshness (+0.33)",
+        "counterfactual": "would be #1 if: serology confirmed clear and grade A+ instead of A [descriptive]",
+        "flags": [
+          "serology not confirmed"
+        ]
+      }
+    ],
+    "excluded": [
+      {
+        "record_id": "R0004",
+        "reason": "positive serology"
+      }
+    ],
+    "weights_used": {
+      "grade_fit": 0.35,
+      "endothelium": 0.3,
+      "serology": 0.2,
+      "freshness": 0.1,
+      "surgery_compatibility": 0.05
+    },
+    "endothelium_considered": true,
+    "method_used": "ml",
+    "model": "matching-ranker-logistic 2026-10-19",
+    "model_summary": {
+      "evaluation": "10x 5-fold grouped CV over 186 requests",
+      "ml_top3": 0.4301,
+      "mcda_top3": 0.3871,
+      "ml_mrr": 0.3602,
+      "mcda_mrr": 0.3346
+    },
+    "disclaimer": "Decision support only. The final allocation decision rests with the clinician."
+  },
+  "followup_completed": {
+    "graft_id": "G0001",
+    "alert": "red",
+    "next_visit_months": 3,
+    "rules_fired": [
+      "failure risk by 12 months >= 20%",
+      "predicted 24-month ECD < 600",
+      "failure risk by 24 months >= 5%",
+      "low-ECD risk by 24 months >= 30%",
+      "60-month ECD could reach 500 (lower end of 80% band)",
+      "cell loss by 12 months >= 40%"
+    ],
+    "actions": [
+      "Consider regraft assessment: ECD projected below 500 within 3 years",
+      "Repeat specular microscopy (ECD, CV, HEX) at the next visit"
+    ],
+    "predicted_ecd": [
+      {
+        "months": 24,
+        "ecd": 542,
+        "low": 485,
+        "high": 641
+      },
+      {
+        "months": 36,
+        "ecd": 387,
+        "low": 304,
+        "high": 470
+      },
+      {
+        "months": 60,
+        "ecd": 360,
+        "low": 234,
+        "high": 476
+      }
+    ],
+    "band_level": "10-90%",
+    "risk": [
+      {
+        "outcome": "graft_failure",
+        "within_months": 12,
+        "probability": 0.307
+      },
+      {
+        "outcome": "graft_failure",
+        "within_months": 24,
+        "probability": 0.839
+      },
+      {
+        "outcome": "low_ecd",
+        "within_months": 12,
+        "probability": 0.799
+      },
+      {
+        "outcome": "low_ecd",
+        "within_months": 24,
+        "probability": 0.999
+      }
+    ],
+    "reasons": {
+      "trajectory": [
+        {
+          "reason": "early cell loss",
+          "effect_pct": -29.0
+        },
+        {
+          "reason": "procedure",
+          "effect_pct": -5.0
+        },
+        {
+          "reason": "12-month ECD",
+          "effect_pct": -4.5
+        }
+      ],
+      "graft_failure": [
+        {
+          "reason": "early cell loss",
+          "hazard_ratio": 22.52
+        },
+        {
+          "reason": "12-month ECD",
+          "hazard_ratio": 3.83
+        },
+        {
+          "reason": "procedure",
+          "hazard_ratio": 1.08
+        }
+      ],
+      "low_ecd": [
+        {
+          "reason": "early cell loss",
+          "hazard_ratio": 8.87
+        },
+        {
+          "reason": "12-month ECD",
+          "hazard_ratio": 5.16
+        },
+        {
+          "reason": "procedure",
+          "hazard_ratio": 1.11
+        }
+      ]
+    },
+    "counterfactuals": [
+      "risk would be under 10% with: 12-month ECD 1500 instead of 1000 (risk 10%) [descriptive]",
+      "risk would be under 30% with: 12-month ECD 1800 instead of 1000 (risk 20%) [descriptive]"
+    ],
+    "model": "followup-12m-visit",
+    "model_version": "2026-10-20",
+    "rules_version": "placeholder-2026-10-20",
+    "data_source": "simulated",
+    "disclaimer": "Decision support only. Follow-up decisions rest with the treating clinician."
+  },
+  "followup_rejected_invalid": {
+    "status": "rejected",
+    "error": {
+      "code": "INVALID_REQUEST",
+      "field": "procedure",
+      "message": "The request is missing a required field."
+    }
+  },
+  "followup_rejected_model_not_ready": {
+    "status": "rejected",
+    "error": {
+      "code": "MODEL_NOT_READY",
+      "message": "The follow-up model is unavailable. Try again later."
+    }
+  }
+}
