@@ -3,6 +3,8 @@ import { useMutation } from "@tanstack/react-query"
 import { readCellChekReport, REPORT_ACCEPT, type CellChekReport } from "@/api/disease"
 import { ApiError } from "@/lib/api-client"
 import { measurementLabel } from "@/lib/disease-measurements"
+import { reportTissueId } from "@/lib/report-tissue-id"
+import { normaliseTissueId } from "@/lib/tissue-id"
 import { alertError, textInput } from "@/lib/styles"
 import { InputIssues } from "@/components/disease/DiseaseResults"
 import { Spinner } from "@/components/ui/spinner"
@@ -34,6 +36,7 @@ export function ReportReader({ caseId, onRead, onUseCaseId }: {
     }
 
     const report = reading.data
+    const tissueId = reportTissueId(report?.tissueId ?? null)
     const filled = report ? Object.values(report.values).filter((v) => v !== null).length : 0
 
     return (
@@ -80,13 +83,13 @@ export function ReportReader({ caseId, onRead, onUseCaseId }: {
                         </p>
                     )}
                     <InputIssues tone="warning" title="Check these values against the report:" issues={report.warnings} />
-                    {report.tissueId && report.tissueId !== caseId.trim() && (
+                    {tissueId && tissueId !== normaliseTissueId(caseId) && (
                         <button
                             type="button"
-                            onClick={() => onUseCaseId(report.tissueId!)}
+                            onClick={() => onUseCaseId(tissueId)}
                             className="rounded-full border border-border px-3 py-1 text-xs font-medium hover:bg-muted"
                         >
-                            Use {report.tissueId} as case ID
+                            Use {tissueId} as tissue ID
                         </button>
                     )}
                 </div>

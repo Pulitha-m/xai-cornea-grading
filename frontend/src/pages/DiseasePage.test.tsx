@@ -4,6 +4,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest"
 import { uploadImage } from "@/api/analysis"
 import { analyzeDisease, readCellChekReport, type DiseaseAnalyzeResponse } from "@/api/disease"
 import { ApiError } from "@/lib/api-client"
+import { reportTissueId } from "@/lib/report-tissue-id"
 import { makeAuth, makeUser, renderApp } from "@/test/auth-test-utils"
 
 vi.mock(import("@/api/cases"), async (importOriginal) => ({
@@ -221,8 +222,8 @@ describe("DiseasePage", () => {
         expect(screen.getByText(/Not found in the report/)).toHaveTextContent("Donor age")
         expect(screen.getByText("CV (35) was hard to read; check it against the report.")).toBeInTheDocument()
 
-        await user.click(screen.getByRole("button", { name: "Use NEB-2020-09-12673 L as case ID" }))
-        expect(screen.getByLabelText("Case ID")).toHaveValue("NEB-2020-09-12673 L")
+        await user.click(screen.getByRole("button", { name: "Use 12673L as tissue ID" }))
+        expect(screen.getByLabelText("Tissue ID")).toHaveValue("12673L")
 
         await user.clear(screen.getByLabelText(/^SD of cell area/))
         await user.type(screen.getByLabelText(/^SD of cell area/), "176")
@@ -232,9 +233,16 @@ describe("DiseasePage", () => {
         await user.click(screen.getByRole("button", { name: "Analyse" }))
         await screen.findByRole("heading", { name: /Results for case/ })
         expect(analyzeDisease).toHaveBeenCalledWith(expect.objectContaining({
-            caseId: "NEB-2020-09-12673 L",
+            caseId: "12673L",
             measurements: { ECD_CD_cells_per_mm2: 2016, SD: 176, CV: 35, HEX_percent: 48, Donor_Age: null },
         }))
+    })
+
+    it("converts the report's tissue ID to the app's form", () => {
+        expect(reportTissueId("NEB-2020-09-12673 L")).toBe("12673L")
+        expect(reportTissueId("NEB- 2023-05-15063 r")).toBe("15063R")
+        expect(reportTissueId("4499")).toBeNull()
+        expect(reportTissueId(null)).toBeNull()
     })
 
     it("asks for manual entry when the report cannot be read", async () => {
