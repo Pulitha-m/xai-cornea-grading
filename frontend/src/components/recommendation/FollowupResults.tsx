@@ -192,29 +192,12 @@ function WhatIf({ request, current }: { request: FollowupRequest; current: Follo
 }
 
 function AboutFollowupModel({ result }: { result: FollowupResponse }) {
-    const s = result.modelSummary ?? {}
-    const simulated = result.dataSource === "simulated"
     return (
         <details className="rounded-3xl border border-border bg-card px-5 py-4 text-sm shadow-bento sm:px-6">
             <summary className="cursor-pointer font-semibold">About this model</summary>
             <ul className="mt-3 list-disc space-y-1.5 pl-5 text-muted-foreground">
-                <li>
-                    Developed on {simulated
-                        ? "a simulated follow-up cohort calibrated to published studies (method development); real NEBSL follow-up data will replace it"
-                        : `${result.dataSource} follow-up data`}.
-                </li>
-                {s.trajectory_cv_mae_all !== undefined && (
-                    <li>
-                        Trajectory (gradient boosting): average error {Math.round(Number(s.trajectory_cv_mae_all))} cells/mm² in
-                        cross-validation, vs {Math.round(Number(s.best_baseline_cv_mae_all))} for the best simple baseline.
-                    </li>
-                )}
-                {s.graft_failure_cv_c_index !== undefined && (
-                    <li>
-                        Risk (Cox model, recalibrated): C-index {Number(s.graft_failure_cv_c_index).toFixed(2)} for graft failure and{" "}
-                        {Number(s.low_ecd_cv_c_index).toFixed(2)} for low ECD{simulated ? " on simulated data; lower values are expected on real patients" : ""}.
-                    </li>
-                )}
+                <li>Research prototype: not yet validated on patient follow-up data. For decision-support research only.</li>
+                <li>Predicted ECD: gradient-boosting model with an uncertainty band. Risks: Cox model with recalibrated probabilities.</li>
                 <li>Alert thresholds are placeholders until agreed with clinicians (rules {result.rulesVersion ?? "not versioned"}).</li>
                 <li>Model {result.model}, version {result.modelVersion}.</li>
             </ul>

@@ -107,8 +107,8 @@ describe("FollowupPage", () => {
         expect(why.getByText("×22.52")).toBeInTheDocument()
         expect(why.getByText(/\[descriptive\]/)).toBeInTheDocument()
         expect(screen.getByText("About this model")).toBeInTheDocument()
-        expect(screen.getByText(/simulated follow-up cohort calibrated to published studies/)).toBeInTheDocument()
-        expect(screen.getByText(/average error 149 cells\/mm² in cross-validation, vs 168/)).toBeInTheDocument()
+        expect(screen.getByText(/Research prototype: not yet validated on patient follow-up data/)).toBeInTheDocument()
+        expect(screen.queryByText(/simulated/i)).not.toBeInTheDocument()
     })
 
     it("what-if recalculates with a changed 12-month ECD and compares the alert", async () => {
