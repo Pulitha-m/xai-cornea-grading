@@ -14,7 +14,7 @@ from dataclasses import asdict, dataclass
 
 import numpy as np
 
-from pipelines.disease import checks, model
+from pipelines.disease import checks, explain, model
 from pipelines.disease.config import load_config
 
 METHOD = "densenet121_image_numbers_fusion_v2"
@@ -109,15 +109,21 @@ def analyse(gray: np.ndarray, rgb: np.ndarray, values: dict, force: bool = False
     P, PS = prediction.disease_probabilities, prediction.severity_probabilities
     thresholds = config["disease_thresholds"]
     found = [c for j, c in enumerate(diseases) if P[j] >= thresholds[c]]
+    shap = explain.explain_numbers(values, prediction)
     findings = []
     for j, c in enumerate(diseases):
         detected = c in found
+        with_cam = detected and include_gradcam
         findings.append({
             "code": c, "label": LABELS.get(c, c), "probability": float(P[j]), "threshold": float(thresholds[c]),
             "detected": detected,
-            "gradcamPng": model.overlay_png(prepared, prediction.cams[j]) if detected and include_gradcam else None,
+            "gradcamPng": model.overlay_png(prepared, prediction.cams[j]) if with_cam else None,
+            "gradcamFocus": model.gradcam_focus(prediction.cams[j]) if with_cam else None,
+            "shap": shap["disease"][c],
         })
     severity = severities(P, PS, found, values.get("ECD_CD_cells_per_mm2"))
+    for group in severity:
+        group["shap"] = shap["severity"].get(group["group"]) if group["method"] == "model" else None
     overall = max((s["grade"] for s in severity), key=lambda s: SEVERITY_ORDER[s]) if severity else "None"
     used = model.feature_row(values)
     missing = [name for name in checks.MEASUREMENTS if values.get(name) is None]

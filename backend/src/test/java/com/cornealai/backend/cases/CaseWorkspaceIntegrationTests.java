@@ -353,7 +353,7 @@ class CaseWorkspaceIntegrationTests extends IntegrationTestSupport {
     private static DiseaseAnalyzeResponse diseased() {
         return new DiseaseAnalyzeResponse(null, null, "completed", null, null,
                 new InputCheck(true, false, List.of(), List.of()), null, "densenet121_image_numbers_fusion_v2",
-                List.of(new DiseaseFinding("FECD", "FECD", 0.8, 0.23, true, null)), List.of("FECD"), false,
+                List.of(new DiseaseFinding("FECD", "FECD", 0.8, 0.23, true, null, null, null)), List.of("FECD"), false,
                 List.of(), "Mild", Map.of(), Map.of(), List.of(), true);
     }
 

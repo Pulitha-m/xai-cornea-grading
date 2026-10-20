@@ -134,12 +134,61 @@ def test_result_structure(analyze_disease):
         assert 0 <= finding["probability"] <= 1
         assert finding["detected"] == (finding["probability"] >= finding["threshold"])
         assert (finding["gradcamPng"] is not None) == finding["detected"]
+        assert (finding["gradcamFocus"] is not None) == finding["detected"]
     assert body["detected"] == [d["code"] for d in body["diseases"] if d["detected"]]
     assert body["overallSeverity"] in {"None", "Mild", "Mod/Sev"}
     assert body["normal"] == (not body["detected"])
     for group in body["severity"]:
         assert group["grade"] in {"Mild", "Mod/Sev"}
     assert body["measurementsUsed"]["ECD_Deficit"] == 0
+
+
+def _analysis(values):
+    from pipelines.disease import service
+    gray = np.asarray(Image.open(io.BytesIO(specular_like())).convert("L"))
+    return service.analyse(gray, np.repeat(gray[:, :, None], 3, axis=2), values, force=True, include_gradcam=False).result
+
+
+def test_shap_values_add_up_to_the_served_probabilities():
+    result = _analysis(GOOD)
+    for finding in result["diseases"]:
+        shap = finding["shap"]
+        assert [v["input"] for v in shap["values"]] == list(checks.MEASUREMENTS)
+        assert shap["prediction"] == pytest.approx(finding["probability"], abs=1e-6)
+        assert shap["baseline"] + sum(v["contribution"] for v in shap["values"]) == pytest.approx(shap["prediction"], abs=1e-9)
+    for group in result["severity"]:
+        assert group["shap"]["prediction"] == pytest.approx(result["severityProbabilities"][group["group"]], abs=1e-6)
+
+
+def test_value_not_recorded_contributes_nothing():
+    result = _analysis(dict(GOOD, Donor_Age=None, SD=None))
+    for finding in result["diseases"]:
+        by_input = {v["input"]: v for v in finding["shap"]["values"]}
+        assert by_input["Donor_Age"]["imputed"] and by_input["Donor_Age"]["contribution"] == pytest.approx(0, abs=1e-12)
+        assert by_input["SD"]["contribution"] == pytest.approx(0, abs=1e-12)
+
+
+def test_baseline_is_the_same_for_any_values():
+    first, second = _analysis(GOOD), _analysis(dict(GOOD, ECD_CD_cells_per_mm2=1200.0, SD=317.0))
+    for a, b in zip(first["diseases"], second["diseases"]):
+        assert a["shap"]["baseline"] == pytest.approx(b["shap"]["baseline"], abs=1e-9)
+
+
+@pytest.mark.parametrize("y, x, region", [
+    (0, 0, "upper left"), (0, 6, "upper"), (4, 11, "right"), (4, 6, "centre"), (8, 0, "lower left"), (8, 11, "lower right"),
+])
+def test_gradcam_focus_names_the_hottest_region(y, x, region):
+    cam = np.zeros((9, 12), dtype=np.float32)
+    cam[y, x] = 1.0
+    focus = model.gradcam_focus(cam)
+    assert focus["region"] == region
+    assert 0 < focus["coverage"] < 0.1   # one hot cell of 108
+
+
+def test_gradcam_focus_coverage_of_a_diffuse_map():
+    cam = np.ones((9, 12), dtype=np.float32)
+    cam[0, 0] = 0.0   # high everywhere except one corner
+    assert model.gradcam_focus(cam)["coverage"] > 0.9
 
 
 def test_gradcam_is_a_png_of_the_model_input_size():

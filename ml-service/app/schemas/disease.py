@@ -22,6 +22,29 @@ class ImageQuality(BaseModel):
     unusualRejectAbove: float
 
 
+class GradcamFocus(BaseModel):
+    region: str = Field(..., description="Where the map is hottest: centre, upper/lower, left/right or a corner")
+    coverage: float = Field(..., description="Share of the image at or above half the map's maximum")
+
+
+class ShapValue(BaseModel):
+    input: str = Field(..., description="Measurement name (ECD includes its derived ECD_Deficit)")
+    value: float | None = Field(None, description="Value entered; null = not recorded")
+    imputed: bool = Field(..., description="Not recorded: the training median was used, so the contribution is 0")
+    contribution: float = Field(..., description="Exact Shapley value, in probability units")
+
+
+class ShapExplanation(BaseModel):
+    """Effect of the CellChek values on one output, with the image fixed.
+
+    baseline + sum(contribution) = prediction. Baseline = all five values at their training median.
+    """
+
+    baseline: float
+    prediction: float
+    values: list[ShapValue]
+
+
 class DiseaseFinding(BaseModel):
     code: str
     label: str
@@ -29,6 +52,8 @@ class DiseaseFinding(BaseModel):
     threshold: float
     detected: bool
     gradcamPng: str | None = Field(None, description="Base64 PNG: Grad-CAM over the input image (detected only)")
+    gradcamFocus: GradcamFocus | None = None
+    shap: ShapExplanation | None = None
 
 
 class SeverityFinding(BaseModel):
@@ -39,6 +64,7 @@ class SeverityFinding(BaseModel):
     probability: float | None = None
     threshold: float | None = None
     method: str
+    shap: ShapExplanation | None = Field(None, description="For model-graded groups")
 
 
 class DiseaseAnalyzeResponse(BaseModel):
@@ -65,3 +91,16 @@ class DiseaseRejectedResponse(RejectedResponse):
 
     inputCheck: InputCheck | None = None
     imageQuality: ImageQuality | None = None
+
+
+class CellChekReport(BaseModel):
+    """Values read from a CellChek report to pre-fill the form; the clinician checks them."""
+
+    source: str = Field(..., description="image (OCR) or text_export")
+    values: dict[str, float | None] = Field(..., description="The 5 measurements by name; null = not found")
+    notFound: list[str]
+    tissueId: str | None = None
+    eye: str | None = None
+    totalCells: float | None = None
+    totalAreaUm2: float | None = None
+    warnings: list[ErrorDetail]
