@@ -71,13 +71,36 @@ describe("MatchingPage", () => {
         expect(ranking.getByText("R0001")).toBeInTheDocument()
         expect(ranking.getByText("serology not confirmed")).toBeInTheDocument()
         expect(ranking.getByText("stored 2 fewer days")).toBeInTheDocument()
-        expect(screen.getByText(/positive serology/)).toBeInTheDocument()
+        expect(within(screen.getByRole("region", { name: "Not ranked" })).getByText(/positive serology/)).toBeInTheDocument()
 
         const sent = vi.mocked(recommendMatch).mock.calls[0][0]
         expect(sent.request).toEqual({ requestId: "Q0001", requestedGrade: "A", surgeryType: "PK", urgency: "Routine" })
         expect(sent.method).toBe("ml")
         expect(sent.candidates.map((c) => [c.recordId, c.serologyClear, c.ecd, c.cv]))
             .toEqual([["R0001", "Yes", 2800, null], ["R0002", "Unknown", 2800, null], ["R0003", "No", 2800, null]])
+    })
+
+    it("shows the reasons, criterion scores and model notes for a cornea", async () => {
+        vi.mocked(recommendMatch).mockResolvedValue({
+            ...RANKED, endotheliumConsidered: false,
+            modelSummary: { evaluation: "10x 5-fold grouped CV over 186 requests", ml_top3: 0.43, mcda_top3: 0.387 },
+        })
+        renderApp("/recipients", makeAuth({ user: makeUser("DOCTOR") }))
+        const user = userEvent.setup()
+        await user.type(await screen.findByLabelText("Request ID"), "Q0001")
+        await fillRow(user, 1, "R0001", "Yes")
+        await fillRow(user, 2, "R0002")
+        await user.click(screen.getByRole("button", { name: "Rank corneas" }))
+
+        expect(await screen.findByText(/does not transplant the endothelium, so MCDA does not score it/)).toBeInTheDocument()
+        await user.click(screen.getByRole("button", { name: "Details for R0002" }))
+        const details = within(screen.getByRole("region", { name: "Details for R0002" }))
+        expect(details.getByText("freshness")).toBeInTheDocument()
+        expect(details.getByText("-0.20")).toBeInTheDocument()
+        expect(details.getByText(/ML rank #2, MCDA rank #2/)).toBeInTheDocument()
+        expect(details.getByText("grade fit")).toBeInTheDocument()
+        expect(screen.getByText(/top 3 for 43% of requests with the ML ranker and 39% with MCDA/)).toBeInTheDocument()
+        expect(screen.getByText(/not statistically significant/)).toBeInTheDocument()
     })
 
     it("requires a request ID and a tissue ID on every row", async () => {

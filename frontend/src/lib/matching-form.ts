@@ -19,12 +19,17 @@ export interface CandidateRow {
 }
 
 export const NUMBER_COLUMNS = [
-    { key: "ecd", label: "ECD" },
-    { key: "cv", label: "CV %" },
-    { key: "hex", label: "HEX %" },
-    { key: "donorAge", label: "Donor age" },
-    { key: "deathToPreservationH", label: "Death–preservation h" },
-    { key: "daysInStorage", label: "Days stored" },
+    { key: "ecd", short: "ECD", label: "ECD (cells/mm²)", hint: "Endothelial cell density; higher is better." },
+    { key: "cv", short: "CV", label: "CV (%)", hint: "Variation in cell size; lower is better." },
+    { key: "hex", short: "HEX", label: "HEX (%)", hint: "Share of six-sided cells; higher is better." },
+    { key: "donorAge", short: "Donor age", label: "Donor age (years)", hint: "Age of the donor." },
+    {
+        key: "deathToPreservationH",
+        short: "Death to preservation",
+        label: "Death → preservation (hours)",
+        hint: "Hours from the donor's death until the cornea was placed in preservation medium; shorter is better.",
+    },
+    { key: "daysInStorage", short: "Days in storage", label: "Days in storage", hint: "Days since preservation; fresher is better." },
 ] as const
 
 let nextKey = 1

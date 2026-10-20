@@ -1,4 +1,4 @@
-import { screen, within } from "@testing-library/react"
+import { fireEvent, screen, within } from "@testing-library/react"
 import userEvent from "@testing-library/user-event"
 import { beforeEach, describe, expect, it, vi } from "vitest"
 import { recommendFollowup, type FollowupResponse } from "@/api/recommendation"
@@ -36,6 +36,9 @@ const RED: FollowupResponse = {
         lowEcd: [],
     },
     counterfactuals: ["risk would be under 10% with: 12-month ECD 1500 instead of 1000 (risk 8%) [descriptive]"],
+    alertThresholds: { red_failure_risk_12m: 0.2, amber_failure_risk_24m: 0.05, amber_low_ecd_risk_24m: 0.3 },
+    modelSummary: { trajectory_cv_mae_all: 148.7, best_baseline_cv_mae_all: 167.5, graft_failure_cv_c_index: 0.962,
+        low_ecd_cv_c_index: 0.911 },
     model: "followup-12m-visit",
     modelVersion: "2026-10-20",
     rulesVersion: "placeholder-2026-10-20",
@@ -91,14 +94,39 @@ describe("FollowupPage", () => {
             visit3m: { ecd: 2300, cv: 38, hex: 54 }, visit6m: { ecd: 1700, cv: 42, hex: 50 },
             visit12m: { ecd: 1000, cv: 46, hex: 45 }, rejectionBy12m: false,
         })
-        const ecd = within(screen.getByRole("region", { name: "Predicted ECD" }))
-        expect(ecd.getByText("542")).toBeInTheDocument()
-        expect(ecd.getByText("485–641")).toBeInTheDocument()
+        const trajectory = within(screen.getByRole("region", { name: "ECD trajectory" }))
+        expect(trajectory.getByRole("img", { name: /Measured ECD 0 months 2700.*predicted 24 months 542 \(485–641\)/ }))
+            .toBeInTheDocument()
+        expect(trajectory.getByRole("cell", { name: "485–641" })).toBeInTheDocument()
         const risk = within(screen.getByRole("region", { name: "Risk after this visit" }))
-        expect(risk.getByText("84%")).toBeInTheDocument()
-        expect(screen.getByText(/early cell loss \(hazard ×22.52\)/)).toBeInTheDocument()
-        expect(screen.getByText(/\[descriptive\]/)).toBeInTheDocument()
-        expect(screen.getByText(/Models developed on: simulated data \(method development\)/)).toBeInTheDocument()
+        expect(risk.getByRole("cell", { name: "84%" })).toBeInTheDocument()
+        expect(risk.getByRole("meter", { name: "Graft failure within 24 months" })).toHaveAttribute("aria-valuenow", "84")
+        expect(risk.getByText(/at or above 5% amber/)).toBeInTheDocument()
+        const why = within(screen.getByRole("region", { name: "Why" }))
+        expect(why.getAllByText("early cell loss")).toHaveLength(2)          // risk bars and ECD bars
+        expect(why.getByText("×22.52")).toBeInTheDocument()
+        expect(why.getByText(/\[descriptive\]/)).toBeInTheDocument()
+        expect(screen.getByText("About this model")).toBeInTheDocument()
+        expect(screen.getByText(/simulated follow-up cohort calibrated to published studies/)).toBeInTheDocument()
+        expect(screen.getByText(/average error 149 cells\/mm² in cross-validation, vs 168/)).toBeInTheDocument()
+    })
+
+    it("what-if recalculates with a changed 12-month ECD and compares the alert", async () => {
+        vi.mocked(recommendFollowup).mockResolvedValueOnce(RED).mockResolvedValueOnce({
+            ...RED, alert: "green", nextVisitMonths: 12,
+            risk: RED.risk.map((r) => ({ ...r, probability: 0.01 })),
+        })
+        renderApp("/post-transplant", makeAuth({ user: makeUser("DOCTOR") }))
+        const user = await fillAndSubmit()
+
+        const whatIf = within(await screen.findByRole("region", { name: "What if?" }))
+        fireEvent.change(whatIf.getByRole("slider"), { target: { value: "1100" } })
+        await user.click(whatIf.getByRole("button", { name: "Recalculate" }))
+
+        expect(await whatIf.findByText("3 → 12 months")).toBeInTheDocument()
+        expect(whatIf.getByText("84% → 1%")).toBeInTheDocument()
+        expect(vi.mocked(recommendFollowup).mock.calls[1][0].visit12m.ecd).toBe(1100)
+        expect(screen.getByText("Red alert")).toBeInTheDocument()       // the main result is unchanged
     })
 
     it("accepts a missed 3-month visit", async () => {

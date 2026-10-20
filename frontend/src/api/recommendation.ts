@@ -148,6 +148,10 @@ export interface FollowupResponse {
     }
     /** Descriptive: what would change the risk. */
     counterfactuals: string[]
+    /** Configured alert thresholds (placeholders until agreed with clinicians). */
+    alertThresholds: Record<string, number>
+    /** Evaluation numbers of the models (cross-validation). */
+    modelSummary: Record<string, number | string> | null
     model: string
     modelVersion: string
     rulesVersion: string | null

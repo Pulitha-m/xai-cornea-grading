@@ -251,6 +251,16 @@ def apply_rules(p: dict, rules: dict) -> dict:
             "rules_fired": fired, "actions": acts}
 
 
+def alert_thresholds(rules: dict) -> dict:
+    """The configured thresholds, so a client can show each value against its limit."""
+    r, a = rules["red"], rules["amber"]
+    return {"red_failure_risk_12m": r["failure_risk_12m"], "red_ecd_12m_below": r["ecd_12m_below"],
+            "red_predicted_ecd_24m_below": r["predicted_ecd_24m_below"],
+            "amber_failure_risk_24m": a["failure_risk_24m"], "amber_low_ecd_risk_24m": a["low_ecd_risk_24m"],
+            "amber_ecd_60m_lower_band_below": a["ecd_60m_lower_band_below"],
+            "amber_loss_12m_at_least": a["loss_12m_at_least"]}
+
+
 # ---------------------------------------------------------------- one graft
 def recommend_followup(req: dict, model: dict | None = None) -> dict:
     model = model or load_model()
@@ -280,6 +290,8 @@ def recommend_followup(req: dict, model: dict | None = None) -> dict:
                     "graft_failure": risk_reasons(fail, row),
                     "low_ecd": [] if is_low else risk_reasons(low, row)},
         "counterfactuals": counterfactuals,
+        "alert_thresholds": alert_thresholds(model["rules"]),
+        "model_summary": model.get("summary") or None,
         "model": model["name"], "model_version": model["version"],
         "rules_version": model["rules"].get("version"),
         "data_source": model["data_source"],

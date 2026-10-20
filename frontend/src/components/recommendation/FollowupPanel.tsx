@@ -19,6 +19,7 @@ export function FollowupPanel() {
     const [indication, setIndication] = useState(INDICATIONS[0])
     const [rejection, setRejection] = useState(false)
     const [missing, setMissing] = useState<string[]>([])
+    const [sent, setSent] = useState<FollowupRequest | null>(null)
     const ids = useId()
 
     const serverError = recommendation.error instanceof ApiError ? recommendation.error : null
@@ -34,7 +35,10 @@ export function FollowupPanel() {
         event.preventDefault()
         const { request, missing: gaps } = toFollowupRequest(values, procedure, indication, rejection)
         setMissing(gaps)
-        if (request) recommendation.mutate(request)
+        if (request) {
+            setSent(request)
+            recommendation.mutate(request)
+        }
     }
 
     const input = (key: keyof FollowupValues, label: string, unit?: string) => (
@@ -132,7 +136,7 @@ export function FollowupPanel() {
                     </button>
                 </form>
             </Card>
-            {result && <FollowupResults result={result} />}
+            {result && sent && <FollowupResults result={result} request={sent} />}
         </div>
     )
 }

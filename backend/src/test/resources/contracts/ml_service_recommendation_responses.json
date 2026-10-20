@@ -284,6 +284,21 @@
       "risk would be under 10% with: 12-month ECD 1500 instead of 1000 (risk 10%) [descriptive]",
       "risk would be under 30% with: 12-month ECD 1800 instead of 1000 (risk 20%) [descriptive]"
     ],
+    "alert_thresholds": {
+      "red_failure_risk_12m": 0.2,
+      "red_ecd_12m_below": 750.0,
+      "red_predicted_ecd_24m_below": 600.0,
+      "amber_failure_risk_24m": 0.05,
+      "amber_low_ecd_risk_24m": 0.3,
+      "amber_ecd_60m_lower_band_below": 500.0,
+      "amber_loss_12m_at_least": 0.4
+    },
+    "model_summary": {
+      "trajectory_cv_mae_all": 148.7,
+      "best_baseline_cv_mae_all": 167.5,
+      "graft_failure_cv_c_index": 0.962,
+      "low_ecd_cv_c_index": 0.911
+    },
     "model": "followup-12m-visit",
     "model_version": "2026-10-20",
     "rules_version": "placeholder-2026-10-20",

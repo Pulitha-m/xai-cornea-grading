@@ -143,6 +143,8 @@ class FollowupResponse(BaseModel):
     risk: list[RiskEstimate]
     reasons: FollowupReasons
     counterfactuals: list[str] = Field(..., description="Descriptive: what would change the risk")
+    alert_thresholds: dict[str, float] = Field(..., description="Configured alert thresholds (placeholders until agreed)")
+    model_summary: dict[str, float | str] | None = Field(None, description="Evaluation numbers of the models")
     model: str
     model_version: str
     rules_version: str | None

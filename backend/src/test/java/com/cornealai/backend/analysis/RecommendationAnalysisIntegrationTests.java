@@ -121,7 +121,7 @@ class RecommendationAnalysisIntegrationTests extends IntegrationTestSupport {
     @Test
     void emptyResultIsAnInferenceFailure() throws Exception {
         when(mlServiceClient.recommendFollowup(any())).thenReturn(new FollowupResponse(null, "G0001", null, null,
-                null, null, null, null, null, null, null, null, null, null, null, null));
+                null, null, null, null, null, null, null, null, null, null, null, null, null, null));
 
         call(doctor, "/followup", FOLLOWUP_BODY)
                 .andExpect(status().isBadGateway())

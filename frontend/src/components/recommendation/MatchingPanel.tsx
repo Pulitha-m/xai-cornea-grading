@@ -48,7 +48,8 @@ export function MatchingPanel() {
         })
     }
 
-    const select = <T extends string>(id: string, label: string, value: T, options: readonly T[], onChange: (v: T) => void) => (
+    const select = <T extends string>(id: string, label: string, value: T, options: readonly T[], onChange: (v: T) => void,
+        names: Partial<Record<T, string>> = {}) => (
         <div>
             <label htmlFor={`${ids}-${id}`} className="mb-1.5 block text-sm font-medium">{label}</label>
             <select
@@ -60,7 +61,7 @@ export function MatchingPanel() {
                 }}
                 className={textInput}
             >
-                {options.map((o) => <option key={o}>{o}</option>)}
+                {options.map((o) => <option key={o} value={o}>{names[o] ?? o}</option>)}
             </select>
         </div>
     )
@@ -86,7 +87,8 @@ export function MatchingPanel() {
                         {select("grade", "Requested grade", requestedGrade, GRADES, setRequestedGrade)}
                         {select("surgery", "Surgery", surgeryType, SURGERIES, setSurgeryType)}
                         {select("urgency", "Urgency", urgency, ["Routine", "Emergency"] as const, setUrgency)}
-                        {select("method", "Ranking", method, ["ml", "mcda"] as const, setMethod)}
+                        {select("method", "Ranking method", method, ["ml", "mcda"] as const, setMethod,
+                            { ml: "ML ranker (learned)", mcda: "MCDA (clinician weights)" })}
                     </div>
 
                     <div className="-mx-5 overflow-x-auto sm:-mx-6">
@@ -96,8 +98,13 @@ export function MatchingPanel() {
                                 <tr>
                                     <th className={tableHeaderCell}>Tissue ID</th>
                                     <th className={tableHeaderCell}>Grade</th>
-                                    {NUMBER_COLUMNS.map((c) => <th key={c.key} className={tableHeaderCell}>{c.label}</th>)}
-                                    <th className={tableHeaderCell}>Serology clear</th>
+                                    {NUMBER_COLUMNS.map((c) => (
+                                        <th key={c.key} className={tableHeaderCell} title={c.hint}>
+                                            {c.label}
+                                            <span className="sr-only">. {c.hint}</span>
+                                        </th>
+                                    ))}
+                                    <th className={tableHeaderCell} title="Yes = all infection tests negative; No = a positive test (never ranked); Unknown = not yet confirmed.">Serology clear</th>
                                     <th className={tableHeaderCell}><span className="sr-only">Remove</span></th>
                                 </tr>
                             </thead>
@@ -118,7 +125,7 @@ export function MatchingPanel() {
                                         </td>
                                         {NUMBER_COLUMNS.map((c) => (
                                             <td key={c.key} className={tableCell}>
-                                                <input aria-label={`${c.label}, row ${i + 1}`} inputMode="decimal" value={r[c.key]}
+                                                <input aria-label={`${c.short}, row ${i + 1}`} inputMode="decimal" value={r[c.key]}
                                                     onChange={(e) => update(r.key, { [c.key]: e.target.value })} className={cellInput} />
                                             </td>
                                         ))}

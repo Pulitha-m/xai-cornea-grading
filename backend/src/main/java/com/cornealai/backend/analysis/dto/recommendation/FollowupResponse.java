@@ -1,6 +1,7 @@
 package com.cornealai.backend.analysis.dto.recommendation;
 
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
 
 /**
@@ -19,6 +20,8 @@ public record FollowupResponse(
         List<RiskEstimate> risk,
         FollowupReasons reasons,
         List<String> counterfactuals,
+        Map<String, Double> alertThresholds,
+        Map<String, Object> modelSummary,
         String model,
         String modelVersion,
         String rulesVersion,
@@ -28,6 +31,7 @@ public record FollowupResponse(
 
     public FollowupResponse withAnalysisId(UUID id) {
         return new FollowupResponse(id, graftId, alert, nextVisitMonths, rulesFired, actions, predictedEcd, bandLevel,
-                risk, reasons, counterfactuals, model, modelVersion, rulesVersion, dataSource, disclaimer);
+                risk, reasons, counterfactuals, alertThresholds, modelSummary, model, modelVersion, rulesVersion,
+                dataSource, disclaimer);
     }
 }
