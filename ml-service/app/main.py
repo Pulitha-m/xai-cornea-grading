@@ -18,6 +18,7 @@ from app.schemas.analysis import (
 from app.routers import cellular as cellular_router
 from app.routers import disease as disease_router
 from app.routers import grading as grading_router
+from app.routers import recommendation as recommendation_router
 from app.routers.grading import parse_clinical_features
 from pipelines.cellular.config import CellularModelNotReady
 from pipelines.cellular.service import run_cellular_analysis, warm_up as warm_up_cellular
@@ -61,6 +62,7 @@ app = FastAPI(
 app.include_router(cellular_router.router)
 app.include_router(disease_router.router)
 app.include_router(grading_router.router)
+app.include_router(recommendation_router.router)
 
 
 def rejected(status_code: int, code: str, message: str, field: str | None = None,

@@ -225,24 +225,43 @@ def build(src: str, out: str, storage_days: int = STORAGE_DAYS) -> dict:
         np.where(t[["Serology_HBsAg", "Serology_HCV", "Serology_HIV", "Serology_VDRL"]].eq("Negative").all(axis=1), "Yes", "Unknown"))
     t["Available_From"] = t["Preservation_Date"].dt.normalize().fillna(t["Konan_Exam_Date"])
     t["Available_Until"] = t["Available_From"] + pd.Timedelta(days=storage_days)
+    # A tissue can only be offered once it is preserved AND its Konan exam is done.
+    t["Ready_From"] = t[["Available_From", "Konan_Exam_Date"]].max(axis=1)
 
     # ---------- requests (real allocations) ----------
     req = t[t["Requested_Grade"].notna() & t["Request_Date"].notna()].copy()
     req["Request_ID"] = [f"Q{i:04d}" for i in range(1, len(req) + 1)]
+    # Decision date: recipients wait on a list, so the allocation is decided when the
+    # request exists AND the allocated tissue is ready - never after the surgery itself.
+    req["Decision_Date"] = req[["Request_Date", "Ready_From"]].max(axis=1)
+    after_surgery = req["Surgery_Date"].notna() & (req["Decision_Date"] > req["Surgery_Date"])
+    req.loc[after_surgery, "Decision_Date"] = req.loc[after_surgery, "Surgery_Date"]
 
-    # ---------- ranking pairs: each request vs every tissue in inventory on that date ----------
+    # Date each tissue stopped being available because it was allocated to someone.
+    t["Allocated_On"] = t["Record_ID"].map(req.set_index("Record_ID")["Decision_Date"]).fillna(t["Surgery_Date"])
+
+    # ---------- ranking pairs: each request vs every tissue genuinely available on its decision date ----------
     pairs = []
-    tis = t[t["Available_From"].notna()]
+    n_outside_window = 0
+    tis = t[t["Ready_From"].notna()]
     for _, r in req.iterrows():
-        d = r["Request_Date"]
-        pool = tis[(tis["Available_From"] <= d) & (tis["Available_Until"] >= d)]
-        if r["Record_ID"] not in set(pool["Record_ID"]):
-            pool = pd.concat([pool, t[t["Record_ID"] == r["Record_ID"]]])  # keep the real allocation
+        d = r["Decision_Date"]
+        pool = tis[
+            (tis["Ready_From"] <= d)                                    # preserved and examined by then (no future information)
+            & (tis["Available_Until"] >= d)                             # still within the storage window
+            & ~((tis["Allocated_On"] < d) & (tis["Record_ID"] != r["Record_ID"]))  # not already given to someone else
+        ]
+        outside = r["Record_ID"] not in set(pool["Record_ID"])
+        if outside:  # keep the real allocation even if it falls outside the window, and flag it
+            n_outside_window += 1
+            pool = pd.concat([pool, t[t["Record_ID"] == r["Record_ID"]]])
         for _, c in pool.iterrows():
             rg = GRADE_NUM.get(r["Requested_Grade"], np.nan)
+            is_pos = c["Record_ID"] == r["Record_ID"]
             pairs.append({
                 "Request_ID": r["Request_ID"],
-                "Request_Date": d.date(),
+                "Request_Date": r["Request_Date"].date(),
+                "Decision_Date": d.date(),
                 "Recipient_Age": r["Recipient_Age"],
                 "Recipient_Sex": r["Recipient_Sex"],
                 "Recipient_Disease_Group": r["Recipient_Disease_Group"],
@@ -253,26 +272,28 @@ def build(src: str, out: str, storage_days: int = STORAGE_DAYS) -> dict:
                 "Requested_Grade": r["Requested_Grade"],
                 "Recipient_Bed_Size_mm": r["Recipient_Bed_Size_mm"],
                 "Candidate_Record_ID": c["Record_ID"],
-                "Candidate_Tissue_ID": c["Tissue_ID"],
                 "Cand_Tissue_Grade": c["Tissue_Grade"],
                 "Cand_ECD": c["ECD"], "Cand_CV": c["CV"], "Cand_HEX": c["HEX"],
                 "Cand_Donor_Age": c["Donor_Age"],
                 "Cand_Donor_Disease": c["Donor_Disease"],
                 "Cand_Death_to_Preservation_h": c["Death_to_Preservation_h"],
                 "Cand_Serology_Clear": c["Serology_Clear"],
-                "Cand_Days_In_Storage": (d - c["Available_From"]).days if pd.notna(c["Available_From"]) else np.nan,
+                "Cand_Days_In_Storage": max((d - c["Available_From"]).days, 0) if pd.notna(c["Available_From"]) else np.nan,
                 "Grade_Gap": (c["Grade_Num"] - rg) if pd.notna(c["Grade_Num"]) and pd.notna(rg) else np.nan,
                 "Meets_Requested_Grade": ("Yes" if c["Grade_Num"] >= rg else "No") if pd.notna(c["Grade_Num"]) and pd.notna(rg) else np.nan,
-                "Label_Allocated": int(c["Record_ID"] == r["Record_ID"]),
-                "Outcome_Grade_Request_Met": r["Grade_Request_Met"] if c["Record_ID"] == r["Record_ID"] else np.nan,
+                "Label_Allocated": int(is_pos),
+                "Positive_Outside_Window": int(is_pos and outside),
+                "Outcome_Grade_Request_Met": r["Grade_Request_Met"] if is_pos else np.nan,
             })
     pairs = pd.DataFrame(pairs)
 
     # ---------- write ----------
     dict_rows = [
-        ("Tissues", "One row per real donor cornea record (591). Free-text fields normalised; original Tissue_ID kept for traceability."),
+        ("Tissues", "One row per real donor cornea record (591). Free-text fields normalised; NEBSL Tissue_ID removed; the Record_ID to Tissue_ID key is written to a separate file."),
         ("Requests", "Subset of Tissues that have a recipient request with a date and requested grade; each is one real allocation."),
-        ("Ranking_Pairs", f"For each request, every tissue whose availability window ({storage_days} days from preservation) covers the request date. Label_Allocated = 1 for the tissue actually allocated, 0 for other tissues that were in stock. Use with grouped split by Request_ID."),
+        ("Ranking_Pairs", f"For each request, every tissue genuinely available on its Decision_Date: preserved and Konan-examined by then, within {storage_days} days of preservation, and not already allocated to an earlier request. Label_Allocated = 1 for the tissue actually allocated. Use with grouped split by Request_ID."),
+        ("Decision_Date", "Later of the request date and the date the allocated tissue was ready (preserved + examined), capped at the surgery date. Recipients wait on a list, so this is when the choice was actually made."),
+        ("Positive_Outside_Window", "1 if the allocated tissue fell outside the availability rules but was kept so every request has its true allocation."),
         ("Surgery_Type", "PK / DALK / DSEK / DMEK / Lamellar / Patch-Tectonic / Other. Performed procedure if recorded, else planned procedure."),
         ("Recipient_Disease_Group", "Recipient indication grouped into clinical categories (Keratoconus, Failed/Re-graft, Fuchs/Endothelial, Infective keratitis, Perforation, Scar/Opacity, Dystrophy, Trauma/Chemical, Other). Raw text kept in Recipient_Disease."),
         ("Donor_Disease", "Recorded donor endothelial finding from the eye-bank form (Normal / Folds / Guttata / FECD / Other). This is the historical record, not a model output."),
@@ -283,13 +304,23 @@ def build(src: str, out: str, storage_days: int = STORAGE_DAYS) -> dict:
         ("Source", "dataset_final_labeled.xlsx, sheet 'Research Dataset' (591 rows, 79 columns)."),
         ("Real tissue records", len(t)),
         ("Real requests with date + requested grade", len(req)),
-        ("Ranking pairs (request x in-stock candidate)", len(pairs)),
+        ("Ranking pairs (request x available candidate)", len(pairs)),
         ("Positive pairs (actual allocations)", int(pairs["Label_Allocated"].sum())),
         ("Mean candidates per request", round(len(pairs) / max(len(req), 1), 1)),
         ("Inventory window", f"{storage_days} days from preservation date (Konan exam date if preservation date missing)"),
+        ("Candidate rules", "Available on the decision date: ready (preserved + examined) by then, within the window, and not already allocated earlier."),
+        ("Allocated tissues outside the rules (kept, flagged)", n_outside_window),
         ("Synthetic rows", "None. Every row is derived from a real NEBSL record."),
+        ("Identifiers", "NEBSL Tissue_ID removed from this file; Record_ID key saved separately as *_id_key.xlsx."),
         ("Split rule", "Split by Request_ID (grouped) so a request's candidates never appear in both train and test."),
     ]
+    # Keep the Record_ID <-> NEBSL Tissue_ID key in its own file, so the working
+    # dataset carries no NEBSL identifier. Store the key offline / with the data custodian.
+    key_path = str(out).replace(".xlsx", "_id_key.xlsx")
+    t[["Record_ID", "Tissue_ID"]].to_excel(key_path, index=False)
+    t = t.drop(columns=["Tissue_ID"])
+    req = req.drop(columns=["Tissue_ID"])
+
     with pd.ExcelWriter(out, engine="openpyxl") as xw:
         t.drop(columns=["Grade_Num"]).to_excel(xw, sheet_name="Tissues", index=False)
         req.drop(columns=["Grade_Num"]).to_excel(xw, sheet_name="Requests", index=False)

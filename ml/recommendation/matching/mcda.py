@@ -1,10 +1,18 @@
-"""MCDA baseline for ranking candidate donor tissues against a recipient request.
+"""MCDA ranking of candidate donor tissues against a recipient request.
 
 Each candidate gets a score in [0, 1] per criterion; the final score is a weighted sum.
-Weights come from config.yaml (matching.weights); they are placeholders until clinicians set them (e.g. through AHP pairwise
-comparison) and must be recorded with every run.
+Criteria and weights (config.yaml, matching.weights) are the clinical priority weights
+proposed by NEBSL clinicians (weights_version records which set was used):
+
+    grade_fit              tissue grade match (A+ / A / B)            35%
+    endothelium            endothelial quality (ECD, CV, HEX)         30%
+    serology               serology status (confirmed clear vs not)   20%
+    freshness              storage duration                           10%
+    surgery_compatibility  tissue suits the planned surgery            5%
 
 Hard rule: tissue with any positive serology is excluded before scoring.
+Donor age and preservation time are still computed (the ML ranker uses them as
+features) but carry no MCDA weight.
 """
 from dataclasses import asdict, dataclass
 
@@ -21,9 +29,9 @@ ENDOTHELIAL_PROCEDURES = {"PK", "DSEK", "DMEK"}
 class Weights:
     grade_fit: float = 0.35
     endothelium: float = 0.30
-    freshness: float = 0.15
-    donor_age: float = 0.10
-    preservation_time: float = 0.10
+    serology: float = 0.20
+    freshness: float = 0.10
+    surgery_compatibility: float = 0.05
 
     def normalised(self) -> dict[str, float]:
         w = asdict(self)
@@ -66,6 +74,25 @@ def preservation_time(hours: pd.Series) -> pd.Series:
     return _clip01((8 - hours) / 7).fillna(0.5)     # ≤1 h → 1, 8 h → 0
 
 
+def serology(status: pd.Series) -> pd.Series:
+    """Confirmed clear = 1, not confirmed = 0.5. Positive tissue is excluded, never scored."""
+    return status.map({"Yes": 1.0, "Unknown": 0.5}).fillna(0.5)
+
+
+def surgery_compatibility(df: pd.DataFrame) -> pd.Series:
+    """Does the tissue suit the planned surgery?
+
+    Endothelial surgeries (PK, DSEK, DMEK) transplant the donor endothelium, so the
+    tissue must have a measured endothelium (ECD): 1 if measured, 0 if not.
+    Other procedures (DALK, lamellar, patch/tectonic) do not depend on it: 1.
+    (Graft-versus-bed size is not used: graft size is chosen during surgery, so it
+    is not known when the cornea is allocated.)
+    """
+    endo = df["Surgery_Type"].isin(ENDOTHELIAL_PROCEDURES)
+    measured = df["Cand_ECD"].notna()
+    return pd.Series(1.0, index=df.index).where(~endo | measured, 0.0)
+
+
 def score(pairs: pd.DataFrame, weights: Weights = Weights()) -> pd.DataFrame:
     """Return ``pairs`` with per-criterion scores, ``MCDA_Score`` and ``MCDA_Rank``.
 
@@ -79,6 +106,8 @@ def score(pairs: pd.DataFrame, weights: Weights = Weights()) -> pd.DataFrame:
     df["s_freshness"] = freshness(df["Cand_Days_In_Storage"])
     df["s_donor_age"] = donor_age(df["Cand_Donor_Age"])
     df["s_preservation_time"] = preservation_time(df["Cand_Death_to_Preservation_h"])
+    df["s_serology"] = serology(df["Cand_Serology_Clear"])
+    df["s_surgery_compatibility"] = surgery_compatibility(df)
 
     w = weights.normalised()
     # Endothelium does not matter for anterior lamellar / tectonic grafts:
@@ -90,9 +119,9 @@ def score(pairs: pd.DataFrame, weights: Weights = Weights()) -> pd.DataFrame:
     df["MCDA_Score"] = (
         w_grade * df["s_grade_fit"]
         + w_endo * df["s_endothelium"]
+        + w["serology"] * df["s_serology"]
         + w["freshness"] * df["s_freshness"]
-        + w["donor_age"] * df["s_donor_age"]
-        + w["preservation_time"] * df["s_preservation_time"]
+        + w["surgery_compatibility"] * df["s_surgery_compatibility"]
     )
     df.loc[df["Excluded"], "MCDA_Score"] = np.nan
     df["MCDA_Rank"] = df.groupby("Request_ID")["MCDA_Score"].rank(ascending=False, method="first")
@@ -104,9 +133,9 @@ def explain(row: pd.Series, weights: Weights = Weights()) -> str:
     parts = {
         "grade fit": row["s_grade_fit"],
         "endothelium": row["s_endothelium"],
+        "serology": row["s_serology"],
         "freshness": row["s_freshness"],
-        "donor age": row["s_donor_age"],
-        "preservation time": row["s_preservation_time"],
+        "surgery compatibility": row["s_surgery_compatibility"],
     }
     top = sorted(parts.items(), key=lambda kv: kv[1], reverse=True)[:2]
     flags = []

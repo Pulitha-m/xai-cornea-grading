@@ -11,8 +11,10 @@ import { CasesPage } from "@/pages/CasesPage"
 import { CellularPage } from "@/pages/CellularPage"
 import { ComingSoonPage } from "@/pages/ComingSoonPage"
 import { DiseasePage } from "@/pages/DiseasePage"
+import { FollowupPage } from "@/pages/FollowupPage"
 import { GradingPage } from "@/pages/GradingPage"
 import { LoginPage } from "@/pages/LoginPage"
+import { MatchingPage } from "@/pages/MatchingPage"
 import { NotFoundPage } from "@/pages/NotFoundPage"
 import { UnauthorizedPage } from "@/pages/UnauthorizedPage"
 import { AdminDashboard } from "@/pages/dashboards/AdminDashboard"
@@ -75,6 +77,13 @@ export const routes: RouteObject[] = [
                     {
                         element: <RoleGuard allow={["DOCTOR", "NURSE"]} permission="analysis:run" />,
                         children: [{ path: DISEASE_PATH, element: <DiseasePage /> }],
+                    },
+                    {
+                        element: <RoleGuard allow={["DOCTOR", "NURSE"]} permission="analysis:run" />,
+                        children: [
+                            { path: MATCHING_PATH, element: <MatchingPage /> },
+                            { path: FOLLOWUP_PATH, element: <FollowupPage /> },
+                        ],
                     },
                     ...PLANNED_MODULES.map(
                         (module): RouteObject => ({
