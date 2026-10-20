@@ -4,6 +4,7 @@ import {
     ClipboardListIcon,
     FileTextIcon,
     GaugeIcon,
+    HexagonIcon,
     LayoutDashboardIcon,
     MicroscopeIcon,
     PackageIcon,
@@ -30,6 +31,7 @@ export const DASHBOARD_PATHS: Record<Role, string> = {
 }
 
 export const ANALYSIS_PATH = "/analysis"
+export const CELLULAR_PATH = "/cellular"
 export const DISEASE_PATH = "/disease"
 export const GRADING_PATH = "/grading"
 
@@ -58,6 +60,13 @@ export const NAV_ITEMS: NavItem[] = [
         label: "AI analysis",
         to: ANALYSIS_PATH,
         icon: BrainCircuitIcon,
+        roles: ["DOCTOR", "NURSE"],
+        permission: "analysis:run",
+    },
+    {
+        label: "Cellular analysis",
+        to: CELLULAR_PATH,
+        icon: HexagonIcon,
         roles: ["DOCTOR", "NURSE"],
         permission: "analysis:run",
     },

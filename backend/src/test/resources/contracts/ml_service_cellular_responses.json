@@ -1,0 +1,106 @@
+{
+  "_comment": "Captured from the real ml-service POST /cellular/analyze (a validation specular microscopy image, the ONNX models and the domain validator). The three overlay images are replaced by an 8 x 8 grey JPEG: no patient image in git. Regenerate when the ml-service cellular schema changes.",
+  "completed": {
+    "caseId": "case-1",
+    "status": "completed",
+    "imageValidation": {
+      "domainStatus": "VALID_CORNEAL_IMAGE",
+      "qualityAssessed": true,
+      "width": 1296,
+      "height": 972,
+      "format": "JPEG"
+    },
+    "method": "roi_efficientnet_b0_stardist_onnx_v1",
+    "umPerPx": 0.796,
+    "validatedImageSize": true,
+    "biomarkers": {
+      "cellCount": 1421,
+      "ecd": 2824.4812,
+      "meanAreaUm2": 354.0473,
+      "sdAreaUm2": 97.4226,
+      "coefficientOfVariation": 27.5168,
+      "hexagonality": 64.5929,
+      "cellsWithSides": 1093,
+      "meanCompactness": 0.887,
+      "sdCompactness": 0.0352,
+      "cvCompactness": 3.9676,
+      "areaPercentilesUm2": {
+        "p5": 214.1622,
+        "p25": 288.9289,
+        "p50": 347.2216,
+        "p75": 406.7815,
+        "p95": 524.634
+      },
+      "sideDistributionPct": {
+        "<=4": 1.0064,
+        "5": 20.1281,
+        "6": 64.5929,
+        "7": 13.9067,
+        ">=8": 0.366
+      },
+      "flaggedCells": 1
+    },
+    "roi": {
+      "method": "cnn",
+      "shareOfImage": 0.7203,
+      "shareOfLitArea": 0.7827,
+      "qualityScore": 0.7762
+    },
+    "qualityFlags": [],
+    "reliable": true,
+    "uncertainty": {
+      "method": "95 % CI, bootstrap over 64 px blocks of cells (2000 resamples); covers sampling, not segmentation error",
+      "ecdCi95": [
+        2785.046,
+        2865.388
+      ],
+      "cvCi95": [
+        25.979,
+        29.088
+      ],
+      "hexCi95": [
+        61.396,
+        67.678
+      ]
+    },
+    "evidence": {
+      "mostExtremeCellsPct": 5.0,
+      "theirShareOfAreaVariancePct": 36.4
+    },
+    "reliability": {
+      "rule": "red = implausible size / shape; yellow = low StarDist confidence; green = otherwise",
+      "green": 1351,
+      "yellow": 64,
+      "red": 6,
+      "medianConfidence": 0.904
+    },
+    "images": {
+      "overlayJpeg": "/9j/4AAQSkZJRgABAQAAAQABAAD/2wBDAAgGBgcGBQgHBwcJCQgKDBQNDAsLDBkSEw8UHRofHh0aHBwgJC4nICIsIxwcKDcpLDAxNDQ0Hyc5PTgyPC4zNDL/wAALCAAIAAgBAREA/8QAHwAAAQUBAQEBAQEAAAAAAAAAAAECAwQFBgcICQoL/8QAtRAAAgEDAwIEAwUFBAQAAAF9AQIDAAQRBRIhMUEGE1FhByJxFDKBkaEII0KxwRVS0fAkM2JyggkKFhcYGRolJicoKSo0NTY3ODk6Q0RFRkdISUpTVFVWV1hZWmNkZWZnaGlqc3R1dnd4eXqDhIWGh4iJipKTlJWWl5iZmqKjpKWmp6ipqrKztLW2t7i5usLDxMXGx8jJytLT1NXW19jZ2uHi4+Tl5ufo6erx8vP09fb3+Pn6/9oACAEBAAA/ACv/2Q==",
+      "reliabilityJpeg": "/9j/4AAQSkZJRgABAQAAAQABAAD/2wBDAAgGBgcGBQgHBwcJCQgKDBQNDAsLDBkSEw8UHRofHh0aHBwgJC4nICIsIxwcKDcpLDAxNDQ0Hyc5PTgyPC4zNDL/wAALCAAIAAgBAREA/8QAHwAAAQUBAQEBAQEAAAAAAAAAAAECAwQFBgcICQoL/8QAtRAAAgEDAwIEAwUFBAQAAAF9AQIDAAQRBRIhMUEGE1FhByJxFDKBkaEII0KxwRVS0fAkM2JyggkKFhcYGRolJicoKSo0NTY3ODk6Q0RFRkdISUpTVFVWV1hZWmNkZWZnaGlqc3R1dnd4eXqDhIWGh4iJipKTlJWWl5iZmqKjpKWmp6ipqrKztLW2t7i5usLDxMXGx8jJytLT1NXW19jZ2uHi4+Tl5ufo6erx8vP09fb3+Pn6/9oACAEBAAA/ACv/2Q==",
+      "cvEvidenceJpeg": "/9j/4AAQSkZJRgABAQAAAQABAAD/2wBDAAgGBgcGBQgHBwcJCQgKDBQNDAsLDBkSEw8UHRofHh0aHBwgJC4nICIsIxwcKDcpLDAxNDQ0Hyc5PTgyPC4zNDL/wAALCAAIAAgBAREA/8QAHwAAAQUBAQEBAQEAAAAAAAAAAAECAwQFBgcICQoL/8QAtRAAAgEDAwIEAwUFBAQAAAF9AQIDAAQRBRIhMUEGE1FhByJxFDKBkaEII0KxwRVS0fAkM2JyggkKFhcYGRolJicoKSo0NTY3ODk6Q0RFRkdISUpTVFVWV1hZWmNkZWZnaGlqc3R1dnd4eXqDhIWGh4iJipKTlJWWl5iZmqKjpKWmp6ipqrKztLW2t7i5usLDxMXGx8jJytLT1NXW19jZ2uHi4+Tl5ufo6erx8vP09fb3+Pn6/9oACAEBAAA/ACv/2Q=="
+    },
+    "seconds": 6.5,
+    "message": "Research tool for a specialist, not a clinical measurement. Validated on 1296 × 972 images from one specular microscope: against the instrument's counts, mean cell area and CV met their targets, ECD (mean error 5.8 %) and HEX (11.6 %) did not. Check the overlays and the flagged cells."
+  },
+  "rejected_domain": {
+    "status": "rejected",
+    "error": {
+      "code": "INVALID_IMAGE_DOMAIN",
+      "field": "image",
+      "message": "Upload a specular microscopy image showing corneal endothelial cells."
+    }
+  },
+  "rejected_decode": {
+    "status": "rejected",
+    "error": {
+      "code": "IMAGE_DECODE_FAILED",
+      "field": "image",
+      "message": "The image could not be decoded. Upload an uncorrupted JPEG or PNG."
+    }
+  },
+  "_status": {
+    "completed": 200,
+    "rejected_domain": 422,
+    "rejected_decode": 422
+  }
+}
