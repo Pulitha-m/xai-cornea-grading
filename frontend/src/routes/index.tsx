@@ -3,8 +3,9 @@ import { HomeRedirect } from "@/components/auth/HomeRedirect"
 import { ProtectedRoute } from "@/components/auth/ProtectedRoute"
 import { RoleGuard } from "@/components/auth/RoleGuard"
 import { AppLayout } from "@/components/layout/AppLayout"
-import { ANALYSIS_PATH, CASES_PATH, CELLULAR_PATH, DISEASE_PATH, GRADING_PATH, PLANNED_MODULES } from "@/lib/roles"
+import { ANALYSIS_PATH, AUDIT_PATH, CASES_PATH, CELLULAR_PATH, DISEASE_PATH, GRADING_PATH, PLANNED_MODULES } from "@/lib/roles"
 import { AnalysisPage } from "@/pages/AnalysisPage"
+import { AuditLogPage } from "@/pages/AuditLogPage"
 import { CaseWorkspacePage } from "@/pages/CaseWorkspacePage"
 import { CasesPage } from "@/pages/CasesPage"
 import { CellularPage } from "@/pages/CellularPage"
@@ -31,6 +32,10 @@ export const routes: RouteObject[] = [
                     {
                         element: <RoleGuard allow={["ADMIN"]} />,
                         children: [{ path: "/admin/dashboard", element: <AdminDashboard /> }],
+                    },
+                    {
+                        element: <RoleGuard allow={["ADMIN"]} permission="audit:read" />,
+                        children: [{ path: AUDIT_PATH, element: <AuditLogPage /> }],
                     },
                     {
                         element: <RoleGuard allow={["MANAGER"]} />,

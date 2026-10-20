@@ -1,7 +1,17 @@
 import { Fragment, useState } from "react"
 import { useQuery } from "@tanstack/react-query"
+import type { AnalyzeResponse } from "@/api/analysis"
 import { getCaseRun, listCaseRuns, MODULE_LABELS, type CaseImage, type RunSummary } from "@/api/cases"
+import type { CellularAnalyzeResponse } from "@/api/cellular"
+import type { DiseaseAnalyzeResponse } from "@/api/disease"
+import type { GradingAnalyzeResponse } from "@/api/grading"
+import { AnalysisResults } from "@/components/analysis/AnalysisResults"
+import { CellularResults } from "@/components/cellular/CellularResults"
 import { Card } from "@/components/dashboard/PageHeader"
+import { DiseaseResults } from "@/components/disease/DiseaseResults"
+import { GradingResults } from "@/components/grading/GradingResults"
+import { measurementLabel } from "@/lib/disease-measurements"
+import { featureLabel, formatFeatureValue } from "@/lib/grading-features"
 import { EmptyState } from "@/components/ui/empty-state"
 import { Spinner } from "@/components/ui/spinner"
 import { StatusBadge, type StatusTone } from "@/components/ui/status-badge"
@@ -106,20 +116,59 @@ function RunDetailView({ caseId, run }: { caseId: string; run: RunSummary }) {
     })
     if (detail.isPending) return <Spinner />
     if (detail.isError) return <p role="alert" className={alertError}>{detail.error.message}</p>
+    const { inputs, result } = detail.data
     return (
-        <div className="grid gap-4 lg:grid-cols-2">
-            <section>
-                <h3 className="mb-1 text-2xs font-semibold tracking-wide text-muted-foreground uppercase">Inputs</h3>
-                <pre className="max-h-72 overflow-auto rounded-2xl bg-sunken p-3 text-xs">
-                    {detail.data.inputs ? JSON.stringify(detail.data.inputs, null, 2) : "No inputs (image only)."}
-                </pre>
-            </section>
-            <section>
-                <h3 className="mb-1 text-2xs font-semibold tracking-wide text-muted-foreground uppercase">Saved result</h3>
-                <pre className="max-h-72 overflow-auto rounded-2xl bg-sunken p-3 text-xs">
-                    {detail.data.result ? JSON.stringify(detail.data.result, null, 2) : "No result: the run did not complete."}
-                </pre>
-            </section>
+        <div className="space-y-4">
+            {inputs && <RunInputs module={run.module} inputs={inputs} />}
+            {result ? (
+                <RunReport module={run.module} result={result} />
+            ) : (
+                <p className={alertError}>
+                    No result: the run did not complete{run.errorCode ? ` (${run.errorCode})` : ""}.
+                </p>
+            )}
         </div>
+    )
+}
+
+/** The saved result as the same report shown after an analysis, with its images restored by the server. */
+function RunReport({ module, result }: { module: RunSummary["module"]; result: Record<string, unknown> }) {
+    switch (module) {
+        case "cellular":
+            return <CellularResults result={result as unknown as CellularAnalyzeResponse} />
+        case "grading":
+            return <GradingResults result={result as unknown as GradingAnalyzeResponse} />
+        case "disease":
+            return <DiseaseResults result={result as unknown as DiseaseAnalyzeResponse} />
+        case "combined":
+            return <AnalysisResults result={result as unknown as AnalyzeResponse} />
+    }
+}
+
+/** The values the run was given, labelled as on the entry forms; blank ones read "Not recorded". */
+function RunInputs({ module, inputs }: { module: RunSummary["module"]; inputs: Record<string, unknown> }) {
+    const label = module === "disease" ? measurementLabel : featureLabel
+    const value = (name: string, raw: unknown) => {
+        if (raw === null || raw === undefined) return null
+        if (module === "disease") return typeof raw === "number" ? raw.toLocaleString("en-GB") : String(raw)
+        return formatFeatureValue(name, raw as number | string)
+    }
+    return (
+        <section aria-label="Inputs for this run" className="rounded-2xl border border-border bg-sunken p-4">
+            <h3 className="mb-3 text-2xs font-semibold tracking-wide text-muted-foreground uppercase">Inputs for this run</h3>
+            <dl className="grid gap-x-6 gap-y-2 text-sm sm:grid-cols-2 lg:grid-cols-3">
+                {Object.entries(inputs).map(([name, raw]) => {
+                    const shown = value(name, raw)
+                    return (
+                        <div key={name} className="flex justify-between gap-3 border-b border-muted py-1">
+                            <dt className="text-muted-foreground">{label(name)}</dt>
+                            <dd className={shown === null ? "text-muted-foreground" : "font-medium tabular-nums"}>
+                                {shown ?? "Not recorded"}
+                            </dd>
+                        </div>
+                    )
+                })}
+            </dl>
+        </section>
     )
 }

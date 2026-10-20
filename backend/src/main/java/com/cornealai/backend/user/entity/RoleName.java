@@ -15,9 +15,9 @@ import static com.cornealai.backend.security.Permission.*;
  */
 public enum RoleName {
 
-    ADMIN(EnumSet.of(USERS_READ, USERS_MANAGE, ROLES_ASSIGN)),
+    ADMIN(EnumSet.of(USERS_READ, USERS_MANAGE, ROLES_ASSIGN, AUDIT_READ)),
     MANAGER(EnumSet.of(USERS_READ)),
-    DOCTOR(EnumSet.of(ANALYSIS_RUN)),
+    DOCTOR(EnumSet.of(ANALYSIS_RUN, CASE_SIGNOFF, SEROLOGY_ACCESS)),
     NURSE(EnumSet.of(ANALYSIS_RUN)),
     SUPPORT_STAFF(EnumSet.noneOf(Permission.class));
 

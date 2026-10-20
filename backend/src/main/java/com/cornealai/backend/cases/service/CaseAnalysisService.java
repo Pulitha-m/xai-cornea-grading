@@ -8,6 +8,7 @@ import com.cornealai.backend.analysis.entity.AnalysisImage;
 import com.cornealai.backend.analysis.service.CellularAnalysisService;
 import com.cornealai.backend.analysis.service.DiseaseAnalysisService;
 import com.cornealai.backend.analysis.service.GradingAnalysisService;
+import com.cornealai.backend.audit.AuditService;
 import com.cornealai.backend.cases.dto.CaseDtos.CaseAnalysisRequest;
 import com.cornealai.backend.cases.dto.CaseDtos.CaseAnalysisResponse;
 import com.cornealai.backend.cases.dto.CaseDtos.ConsistencyFlag;
@@ -48,11 +49,13 @@ public class CaseAnalysisService {
     private final CellularAnalysisService cellular;
     private final GradingAnalysisService grading;
     private final DiseaseAnalysisService disease;
+    private final AuditService audit;
     private final ObjectMapper objectMapper;
 
     public CaseAnalysisService(DonorCaseService donorCases, CaseService caseService, CaseAnalysisRepository analyses,
                                CellularAnalysisService cellular, GradingAnalysisService grading,
-                               DiseaseAnalysisService disease, ObjectMapper objectMapper) {
+                               DiseaseAnalysisService disease, AuditService audit, ObjectMapper objectMapper) {
+        this.audit = audit;
         this.donorCases = donorCases;
         this.caseService = caseService;
         this.analyses = analyses;
@@ -81,6 +84,7 @@ public class CaseAnalysisService {
         analysis.setRequestedBy(userId);
         analysis.setModules(String.join(",", modules));
         analyses.saveAndFlush(analysis);  // the module runs reference it
+        audit.record(userId, AuditService.CASE_ANALYSIS, "case", caseId, String.join(",", modules));
 
         Map<String, ModuleOutcome> outcomes = new LinkedHashMap<>();
         GradingAnalyzeResponse graded = null;

@@ -3,9 +3,11 @@ import { useMutation, useQuery } from "@tanstack/react-query"
 import { ClipboardListIcon } from "lucide-react"
 import { Link, useNavigate } from "react-router-dom"
 import { openCase, recentCases } from "@/api/cases"
+import { CandidatesCard } from "@/components/cases/CandidatesCard"
 import { Card, PageHeader } from "@/components/dashboard/PageHeader"
 import { EmptyState } from "@/components/ui/empty-state"
 import { Spinner } from "@/components/ui/spinner"
+import { useAuth } from "@/hooks/use-auth"
 import { CASES_PATH } from "@/lib/roles"
 import { alertError, primaryButton, tableCell, tableHead, tableHeaderCell, tableRow, textInput } from "@/lib/styles"
 import { normaliseTissueId, TISSUE_ID_HELP, TISSUE_ID_PLACEHOLDER, tissueIdError } from "@/lib/tissue-id"
@@ -13,6 +15,8 @@ import { normaliseTissueId, TISSUE_ID_HELP, TISSUE_ID_PLACEHOLDER, tissueIdError
 /** Open a donor case by tissue ID (created on first use), or pick a recently updated one. */
 export function CasesPage() {
     const navigate = useNavigate()
+    const { user } = useAuth()
+    const canSeeCandidates = user?.permissions.includes("serology:access") ?? false
     const [tissueId, setTissueId] = useState("")
     const [fieldError, setFieldError] = useState<string | null>(null)
     const inputId = useId()
@@ -112,6 +116,8 @@ export function CasesPage() {
                         </div>
                     )}
                 </Card>
+
+                {canSeeCandidates && <CandidatesCard />}
             </div>
         </>
     )

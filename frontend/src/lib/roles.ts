@@ -32,6 +32,7 @@ export const DASHBOARD_PATHS: Record<Role, string> = {
 
 export const ANALYSIS_PATH = "/analysis"
 export const CASES_PATH = "/cases"
+export const AUDIT_PATH = "/audit"
 export const CELLULAR_PATH = "/cellular"
 export const DISEASE_PATH = "/disease"
 export const GRADING_PATH = "/grading"
@@ -53,6 +54,7 @@ export interface NavItem {
 /** Navigation shown in the app shell; filtered per user so hidden items are never rendered. */
 export const NAV_ITEMS: NavItem[] = [
     { label: "Admin dashboard", to: DASHBOARD_PATHS.ADMIN, icon: LayoutDashboardIcon, roles: ["ADMIN"] },
+    { label: "Audit log", to: AUDIT_PATH, icon: ShieldCheckIcon, roles: ["ADMIN"], permission: "audit:read" },
     { label: "Manager dashboard", to: DASHBOARD_PATHS.MANAGER, icon: LayoutDashboardIcon, roles: ["MANAGER"] },
     { label: "Doctor dashboard", to: DASHBOARD_PATHS.DOCTOR, icon: LayoutDashboardIcon, roles: ["DOCTOR"] },
     { label: "Nurse dashboard", to: DASHBOARD_PATHS.NURSE, icon: LayoutDashboardIcon, roles: ["NURSE"] },
@@ -130,13 +132,6 @@ export const PLANNED_MODULES: PlannedModule[] = [
         icon: FileTextIcon,
         roles: ["ADMIN", "MANAGER", "DOCTOR"],
         description: "Clinical and operational reporting across cases and branches.",
-    },
-    {
-        label: "Audit log",
-        to: "/audit",
-        icon: ShieldCheckIcon,
-        roles: ["ADMIN"],
-        description: "A searchable record of who did what, and when, across the system.",
     },
 ]
 

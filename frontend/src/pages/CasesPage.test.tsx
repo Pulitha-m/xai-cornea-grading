@@ -5,7 +5,9 @@ import {
     analyzeCase,
     getCase,
     listCaseImages,
+    listCandidates,
     listCaseRuns,
+    listSignoffs,
     openCase,
     recentCases,
     updateCaseDetails,
@@ -26,6 +28,11 @@ vi.mock(import("@/api/cases"), async (importOriginal) => ({
     analyzeCase: vi.fn(),
     listCaseRuns: vi.fn(),
     getCaseRun: vi.fn(),
+    listSignoffs: vi.fn(),
+    signOff: vi.fn(),
+    getSerology: vi.fn(),
+    updateSerology: vi.fn(),
+    listCandidates: vi.fn(),
 }))
 
 const SLIT_LAMP = Object.fromEntries(FEATURES.filter((f) => f.group !== "konan").map((f) => [f.name, null]))
@@ -39,6 +46,7 @@ const CASE: DonorCase = {
         slitLamp: SLIT_LAMP,
     },
     imageCount: 1,
+    latestSignoff: null,
     createdAt: "2026-10-20T08:00:00Z",
     updatedAt: "2026-10-20T08:00:00Z",
 }
@@ -50,6 +58,8 @@ beforeEach(() => {
     vi.mocked(getCase).mockResolvedValue(CASE)
     vi.mocked(listCaseImages).mockResolvedValue([IMAGE])
     vi.mocked(listCaseRuns).mockResolvedValue([])
+    vi.mocked(listSignoffs).mockResolvedValue([])
+    vi.mocked(listCandidates).mockResolvedValue([])
 })
 
 describe("Donor cases", () => {

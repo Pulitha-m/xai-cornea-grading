@@ -7,8 +7,12 @@ import { CaseAnalysisPanel } from "@/components/cases/CaseAnalysisPanel"
 import { CaseDetailsForm } from "@/components/cases/CaseDetailsForm"
 import { CaseHistory } from "@/components/cases/CaseHistory"
 import { CaseImages } from "@/components/cases/CaseImages"
+import { SerologyCard } from "@/components/cases/SerologyCard"
+import { SignoffPanel } from "@/components/cases/SignoffPanel"
 import { PageHeader } from "@/components/dashboard/PageHeader"
 import { Spinner } from "@/components/ui/spinner"
+import { StatusBadge } from "@/components/ui/status-badge"
+import { useAuth } from "@/hooks/use-auth"
 import { CASES_PATH } from "@/lib/roles"
 import { alertError } from "@/lib/styles"
 import { cn } from "cn"
@@ -18,12 +22,15 @@ const TABS = [
     { id: "images", label: "Images" },
     { id: "analyse", label: "Analyse" },
     { id: "history", label: "History" },
+    { id: "signoff", label: "Sign-off" },
 ] as const
 type Tab = (typeof TABS)[number]["id"]
 
 /** One donor case: details entered once, its images, analyses on them, and every saved result. */
 export function CaseWorkspacePage() {
     const { caseId = "" } = useParams()
+    const { user } = useAuth()
+    const canSeeSerology = user?.permissions.includes("serology:access") ?? false
     const [tab, setTab] = useState<Tab>("details")
     const donorCase = useQuery({ queryKey: ["case", caseId], queryFn: () => getCase(caseId) })
     const images = useQuery({ queryKey: ["case", caseId, "images"], queryFn: () => listCaseImages(caseId) })
@@ -52,7 +59,15 @@ export function CaseWorkspacePage() {
                 }
                 title={`Tissue ${c.tissueId}`}
                 description={`${c.tissueId.endsWith("R") ? "Right" : "Left"} eye · ${c.imageCount} ${c.imageCount === 1 ? "image" : "images"} · opened ${new Date(c.createdAt).toLocaleDateString("en-GB")}`}
-            />
+            >
+                {c.latestSignoff ? (
+                    <StatusBadge tone="success">
+                        Signed off: grade {c.latestSignoff.confirmedGrade} · {c.latestSignoff.diseaseFinding}
+                    </StatusBadge>
+                ) : (
+                    <StatusBadge tone="warning">Not signed off</StatusBadge>
+                )}
+            </PageHeader>
 
             <div role="tablist" aria-label="Case sections" className="mb-6 flex flex-wrap gap-2">
                 {TABS.map((t) => (
@@ -75,10 +90,16 @@ export function CaseWorkspacePage() {
             </div>
 
             <div role="tabpanel" id={`case-panel-${tab}`} aria-labelledby={`case-tab-${tab}`}>
-                {tab === "details" && <CaseDetailsForm key={c.updatedAt} donorCase={c} />}
+                {tab === "details" && (
+                    <div className="space-y-6">
+                        <CaseDetailsForm key={c.updatedAt} donorCase={c} />
+                        {canSeeSerology && <SerologyCard caseId={c.id} />}
+                    </div>
+                )}
                 {tab === "images" && (images.isPending ? <Spinner /> : <CaseImages caseId={c.id} images={imageList} />)}
                 {tab === "analyse" && (images.isPending ? <Spinner /> : <CaseAnalysisPanel donorCase={c} images={imageList} />)}
                 {tab === "history" && <CaseHistory caseId={c.id} images={imageList} />}
+                {tab === "signoff" && <SignoffPanel donorCase={c} />}
             </div>
         </>
     )

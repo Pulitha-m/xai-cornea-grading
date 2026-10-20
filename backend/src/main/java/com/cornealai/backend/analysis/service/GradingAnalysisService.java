@@ -16,6 +16,7 @@ import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import tools.jackson.databind.ObjectMapper;
 
+import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 
@@ -32,6 +33,7 @@ public class GradingAnalysisService {
 
     private final GradingAnalysisRunRepository runs;
     private final ImageService imageService;
+    private final RunArtifactService artifacts;
     private final DonorCaseService donorCases;
     private final MlServiceClient mlServiceClient;
     private final ObjectMapper objectMapper;
@@ -39,12 +41,14 @@ public class GradingAnalysisService {
     public GradingAnalysisService(
             GradingAnalysisRunRepository runs,
             ImageService imageService,
+            RunArtifactService artifacts,
             DonorCaseService donorCases,
             MlServiceClient mlServiceClient,
             ObjectMapper objectMapper
     ) {
         this.runs = runs;
         this.imageService = imageService;
+        this.artifacts = artifacts;
         this.donorCases = donorCases;
         this.mlServiceClient = mlServiceClient;
         this.objectMapper = objectMapper;
@@ -92,6 +96,12 @@ public class GradingAnalysisService {
             run.setGrade(response.grade());
             run.setResultJson(objectMapper.writeValueAsString(response.withoutImageMaps()));
             runs.save(run);
+            var map = response.explanation() == null ? null : response.explanation().imageMap();
+            if (map != null) {
+                artifacts.store("grading", run.getId(), donorCase.getId(), List.of(
+                        new RunArtifactService.Image("/explanation/imageMap/supportingPng", map.supportingPng()),
+                        new RunArtifactService.Image("/explanation/imageMap/opposingPng", map.opposingPng())));
+            }
             return response;
         } catch (AnalysisRejectedException e) {
             record(run, "rejected", e.getCode());

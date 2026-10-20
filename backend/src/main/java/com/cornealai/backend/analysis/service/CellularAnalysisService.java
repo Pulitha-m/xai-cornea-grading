@@ -17,6 +17,7 @@ import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import tools.jackson.databind.ObjectMapper;
 
+import java.util.List;
 import java.util.UUID;
 
 /**
@@ -32,6 +33,7 @@ public class CellularAnalysisService {
 
     private final CellularAnalysisRunRepository runs;
     private final ImageService imageService;
+    private final RunArtifactService artifacts;
     private final DonorCaseService donorCases;
     private final MlServiceClient mlServiceClient;
     private final ObjectMapper objectMapper;
@@ -39,12 +41,14 @@ public class CellularAnalysisService {
     public CellularAnalysisService(
             CellularAnalysisRunRepository runs,
             ImageService imageService,
+            RunArtifactService artifacts,
             DonorCaseService donorCases,
             MlServiceClient mlServiceClient,
             ObjectMapper objectMapper
     ) {
         this.runs = runs;
         this.imageService = imageService;
+        this.artifacts = artifacts;
         this.donorCases = donorCases;
         this.mlServiceClient = mlServiceClient;
         this.objectMapper = objectMapper;
@@ -92,6 +96,12 @@ public class CellularAnalysisService {
             run.setReliable(response.reliable());
             run.setResultJson(objectMapper.writeValueAsString(response.withoutImages()));
             runs.save(run);
+            if (response.images() != null) {
+                artifacts.store("cellular", run.getId(), donorCase.getId(), List.of(
+                        new RunArtifactService.Image("/images/overlayJpeg", response.images().overlayJpeg()),
+                        new RunArtifactService.Image("/images/reliabilityJpeg", response.images().reliabilityJpeg()),
+                        new RunArtifactService.Image("/images/cvEvidenceJpeg", response.images().cvEvidenceJpeg())));
+            }
             return response;
         } catch (AnalysisRejectedException e) {
             record(run, "rejected", e.getCode());

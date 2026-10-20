@@ -5,6 +5,7 @@ import jakarta.validation.constraints.Max;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotEmpty;
 import jakarta.validation.constraints.NotNull;
+import jakarta.validation.constraints.Pattern;
 import jakarta.validation.constraints.Positive;
 import jakarta.validation.constraints.PositiveOrZero;
 import jakarta.validation.constraints.Size;
@@ -50,8 +51,69 @@ public final class CaseDtos {
             String tissueId,
             CaseDetails details,
             long imageCount,
+            SignoffSummary latestSignoff,
             Instant createdAt,
             Instant updatedAt
+    ) {
+    }
+
+    /** What a specialist confirmed. Grades as the eye bank grades them; findings as recommendation uses them. */
+    public record SignoffRequest(
+            @NotBlank @Pattern(regexp = "A\\+|A|B|C") String confirmedGrade,
+            @NotBlank @Pattern(regexp = "Normal|Folds|Guttata|FECD|Other") String diseaseFinding,
+            @Positive Double ecd,
+            @Positive Double cv,
+            @Positive @DecimalMax("100") Double hexPercent,
+            @Size(max = 2000) String notes,
+            UUID caseAnalysisId
+    ) {
+    }
+
+    public record Signoff(
+            UUID id,
+            String confirmedGrade,
+            String diseaseFinding,
+            Double ecd,
+            Double cv,
+            Double hexPercent,
+            String notes,
+            Long signedBy,
+            String signedByName,
+            UUID caseAnalysisId,
+            Instant createdAt
+    ) {
+    }
+
+    /** The current sign-off, shown with the case (no notes). */
+    public record SignoffSummary(String confirmedGrade, String diseaseFinding, String signedByName, Instant createdAt) {
+    }
+
+    /** Serology results: each "Negative", "Positive" or "Unknown" (null = not recorded). Doctors only. */
+    public record Serology(
+            @Pattern(regexp = "Negative|Positive|Unknown") String hiv,
+            @Pattern(regexp = "Negative|Positive|Unknown") String hbv,
+            @Pattern(regexp = "Negative|Positive|Unknown") String hcv,
+            @Pattern(regexp = "Negative|Positive|Unknown") String syphilis,
+            Boolean serologyClear
+    ) {
+    }
+
+    /**
+     * A signed-off cornea as a recommendation candidate, in the recommendation module's MatchCandidate
+     * fields. {@code recordId} is the case UUID (sent onwards); {@code tissueId} is for display only.
+     */
+    public record MatchCandidateView(
+            String recordId,
+            String tissueId,
+            String grade,
+            Double ecd,
+            Double cv,
+            Double hex,
+            Double donorAge,
+            Double deathToPreservationH,
+            Double daysInStorage,
+            String serologyClear,
+            String diseaseFinding
     ) {
     }
 

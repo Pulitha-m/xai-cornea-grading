@@ -5,6 +5,7 @@ import com.cornealai.backend.analysis.dto.ImageUploadResponse;
 import com.cornealai.backend.analysis.entity.AnalysisImage;
 import com.cornealai.backend.analysis.repository.AnalysisImageRepository;
 import com.cornealai.backend.analysis.service.ImageService;
+import com.cornealai.backend.audit.AuditService;
 import com.cornealai.backend.cases.SlitLampFindings;
 import com.cornealai.backend.cases.TissueNumber;
 import com.cornealai.backend.cases.dto.CaseDtos.CaseDetails;
@@ -34,10 +35,15 @@ public class CaseService {
     private final DonorCaseRepository cases;
     private final AnalysisImageRepository images;
     private final ImageService imageService;
+    private final SignoffService signoffs;
+    private final AuditService audit;
     private final ObjectMapper objectMapper;
 
     public CaseService(DonorCaseService donorCases, DonorCaseRepository cases, AnalysisImageRepository images,
-                       ImageService imageService, ObjectMapper objectMapper) {
+                       ImageService imageService, SignoffService signoffs, AuditService audit,
+                       ObjectMapper objectMapper) {
+        this.signoffs = signoffs;
+        this.audit = audit;
         this.donorCases = donorCases;
         this.cases = cases;
         this.images = images;
@@ -49,28 +55,36 @@ public class CaseService {
     public Opened open(String tissueId, Long userId) {
         TissueNumber tissue = TissueNumber.parse(tissueId);
         boolean existed = donorCases.find(tissue).isPresent();
-        return new Opened(toResponse(donorCases.findOrCreate(tissue, userId)), !existed);
+        DonorCase donorCase = donorCases.findOrCreate(tissue, userId);
+        audit.record(userId, AuditService.CASE_VIEW, "case", donorCase.getId(), existed ? "opened" : "created");
+        return new Opened(toResponse(donorCase), !existed);
     }
 
     public record Opened(CaseResponse body, boolean created) {
     }
 
-    public CaseResponse findByTissueId(String tissueId) {
-        return donorCases.find(TissueNumber.parse(tissueId)).map(this::toResponse)
+    public CaseResponse findByTissueId(String tissueId, Long userId) {
+        DonorCase donorCase = donorCases.find(TissueNumber.parse(tissueId))
                 .orElseThrow(() -> new AnalysisRejectedException(HttpStatus.NOT_FOUND, "CASE_NOT_FOUND", "tissueId",
                         "No case has this tissue ID yet."));
+        audit.record(userId, AuditService.CASE_VIEW, "case", donorCase.getId(), "found by tissue ID");
+        return toResponse(donorCase);
     }
 
-    public CaseResponse get(UUID caseId) {
-        return toResponse(donorCases.require(caseId));
+    public CaseResponse get(UUID caseId, Long userId) {
+        CaseResponse response = toResponse(donorCases.require(caseId));
+        audit.record(userId, AuditService.CASE_VIEW, "case", caseId, null);
+        return response;
     }
 
-    public List<CaseResponse> recent() {
-        return cases.findTop20ByOrderByUpdatedAtDesc().stream().map(this::toResponse).toList();
+    public List<CaseResponse> recent(Long userId) {
+        List<CaseResponse> found = cases.findTop20ByOrderByUpdatedAtDesc().stream().map(this::toResponse).toList();
+        audit.record(userId, AuditService.CASE_LIST, null, null, found.size() + " cases");
+        return found;
     }
 
     /** Replaces the case details (absent = not recorded). Validated before anything is changed. */
-    public CaseResponse updateDetails(UUID caseId, CaseDetails details) {
+    public CaseResponse updateDetails(UUID caseId, CaseDetails details, Long userId) {
         String slitLampJson = objectMapper.writeValueAsString(SlitLampFindings.normalise(details.slitLamp()));
         DonorCase donorCase = donorCases.require(caseId);
         donorCase.setDonorAgeYears(details.donorAgeYears());
@@ -83,7 +97,9 @@ public class CaseService {
         donorCase.setTotalCellCount(details.totalCellCount());
         donorCase.setTotalAreaUm2(details.totalAreaUm2());
         donorCase.setSlitLampJson(slitLampJson);
-        return toResponse(cases.saveAndFlush(donorCase));
+        CaseResponse response = toResponse(cases.saveAndFlush(donorCase));
+        audit.record(userId, AuditService.CASE_UPDATE, "case", caseId, "details");
+        return response;
     }
 
     public ImageUploadResponse uploadImage(UUID caseId, byte[] data, Long userId) {
@@ -109,8 +125,10 @@ public class CaseService {
     }
 
     /** The decrypted, verified image bytes for viewing. */
-    public byte[] imageContent(AnalysisImage image) {
-        return imageService.readVerified(image);
+    public byte[] imageContent(AnalysisImage image, Long userId) {
+        byte[] data = imageService.readVerified(image);
+        audit.record(userId, AuditService.IMAGE_VIEW, "image", image.getId(), null);
+        return data;
     }
 
     /** The 24 grading features, in model order, from the case details (null = not recorded). */
@@ -142,7 +160,8 @@ public class CaseService {
                 c.getPreservationDate(), c.getEcd(), c.getCv(), c.getHexPercent(), c.getSd(), c.getTotalCellCount(),
                 c.getTotalAreaUm2(), slitLamp(c));
         return new CaseResponse(c.getId(), donorCases.tissueNumberOf(c).value(), details,
-                images.countByDonorCaseId(c.getId()), c.getCreatedAt(), c.getUpdatedAt());
+                images.countByDonorCaseId(c.getId()), signoffs.latest(c.getId()).orElse(null), c.getCreatedAt(),
+                c.getUpdatedAt());
     }
 
     private Map<String, Object> slitLamp(DonorCase c) {

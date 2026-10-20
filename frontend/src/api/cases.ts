@@ -40,8 +40,71 @@ export interface DonorCase {
     tissueId: string
     details: CaseDetails
     imageCount: number
+    /** The current specialist sign-off, if any (notes are only in the sign-off list). */
+    latestSignoff: SignoffSummary | null
     createdAt: string
     updatedAt: string
+}
+
+export const GRADES = ["A+", "A", "B", "C"] as const
+/** Disease findings as the recommendation module uses them. */
+export const DISEASE_FINDINGS = ["Normal", "Folds", "Guttata", "FECD", "Other"] as const
+
+export interface SignoffSummary {
+    confirmedGrade: string
+    diseaseFinding: string
+    signedByName: string | null
+    createdAt: string
+}
+
+export interface SignoffRequest {
+    confirmedGrade: string
+    diseaseFinding: string
+    ecd: number | null
+    cv: number | null
+    hexPercent: number | null
+    notes: string | null
+    caseAnalysisId: string | null
+}
+
+export interface Signoff extends Omit<SignoffRequest, "caseAnalysisId"> {
+    id: string
+    signedBy: number
+    signedByName: string | null
+    caseAnalysisId: string | null
+    createdAt: string
+}
+
+export type SerologyResult = "Negative" | "Positive" | "Unknown"
+export const SEROLOGY_TESTS = [
+    { key: "hiv", label: "HIV" },
+    { key: "hbv", label: "Hepatitis B (HBsAg)" },
+    { key: "hcv", label: "Hepatitis C" },
+    { key: "syphilis", label: "Syphilis" },
+] as const
+
+export interface Serology {
+    hiv: SerologyResult | null
+    hbv: SerologyResult | null
+    hcv: SerologyResult | null
+    syphilis: SerologyResult | null
+    /** Derived: true only when all four are negative, false when any is positive, else null. */
+    serologyClear: boolean | null
+}
+
+/** A signed-off cornea in the recommendation module's candidate fields (confirmed values only). */
+export interface MatchCandidate {
+    recordId: string
+    tissueId: string
+    grade: string
+    ecd: number | null
+    cv: number | null
+    hex: number | null
+    donorAge: number | null
+    deathToPreservationH: number | null
+    daysInStorage: number | null
+    serologyClear: "Yes" | "No" | "Unknown"
+    diseaseFinding: string
 }
 
 export interface CaseImage {
@@ -143,4 +206,27 @@ export function getCaseRun(caseId: string, module: RunSummary["module"], runId: 
     return apiRequest<RunDetail>(
         `/api/cases/${encodeURIComponent(caseId)}/runs/${encodeURIComponent(module)}/${encodeURIComponent(runId)}`,
     )
+}
+
+export function listSignoffs(caseId: string): Promise<Signoff[]> {
+    return apiRequest<Signoff[]>(`/api/cases/${encodeURIComponent(caseId)}/signoffs`)
+}
+
+/** Doctors only (case:signoff). Append-only: a correction is a new sign-off. */
+export function signOff(caseId: string, request: SignoffRequest): Promise<Signoff> {
+    return apiRequest<Signoff>(`/api/cases/${encodeURIComponent(caseId)}/signoffs`, { method: "POST", body: request })
+}
+
+/** Doctors only (serology:access); every read and change is audited. */
+export function getSerology(caseId: string): Promise<Serology> {
+    return apiRequest<Serology>(`/api/cases/${encodeURIComponent(caseId)}/serology`)
+}
+
+export function updateSerology(caseId: string, serology: Omit<Serology, "serologyClear">): Promise<Serology> {
+    return apiRequest<Serology>(`/api/cases/${encodeURIComponent(caseId)}/serology`, { method: "PUT", body: serology })
+}
+
+/** Signed-off corneas as recommendation candidates (doctors only: they carry serology status). */
+export function listCandidates(): Promise<MatchCandidate[]> {
+    return apiRequest<MatchCandidate[]>("/api/cases/candidates")
 }

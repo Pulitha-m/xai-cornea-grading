@@ -9,6 +9,9 @@ import com.cornealai.backend.analysis.repository.AnalysisRunRepository;
 import com.cornealai.backend.analysis.repository.CellularAnalysisRunRepository;
 import com.cornealai.backend.analysis.repository.DiseaseAnalysisRunRepository;
 import com.cornealai.backend.analysis.repository.GradingAnalysisRunRepository;
+import com.cornealai.backend.analysis.service.RunArtifactService;
+import com.cornealai.backend.audit.AuditService;
+import tools.jackson.databind.node.ObjectNode;
 import com.cornealai.backend.cases.dto.CaseDtos.RunDetail;
 import com.cornealai.backend.cases.dto.CaseDtos.RunSummary;
 import org.springframework.http.HttpStatus;
@@ -32,11 +35,16 @@ public class CaseHistoryService {
     private final GradingAnalysisRunRepository gradingRuns;
     private final DiseaseAnalysisRunRepository diseaseRuns;
     private final AnalysisRunRepository combinedRuns;
+    private final RunArtifactService artifacts;
+    private final AuditService audit;
     private final ObjectMapper objectMapper;
 
     public CaseHistoryService(DonorCaseService donorCases, CellularAnalysisRunRepository cellularRuns,
                               GradingAnalysisRunRepository gradingRuns, DiseaseAnalysisRunRepository diseaseRuns,
-                              AnalysisRunRepository combinedRuns, ObjectMapper objectMapper) {
+                              AnalysisRunRepository combinedRuns, RunArtifactService artifacts, AuditService audit,
+                              ObjectMapper objectMapper) {
+        this.artifacts = artifacts;
+        this.audit = audit;
         this.donorCases = donorCases;
         this.cellularRuns = cellularRuns;
         this.gradingRuns = gradingRuns;
@@ -56,8 +64,22 @@ public class CaseHistoryService {
         return all;
     }
 
-    /** One run of this case; 404 when it does not exist or belongs to another case. */
-    public RunDetail run(UUID caseId, String module, UUID runId) {
+    /**
+     * One run of this case as a full report: its inputs and stored result, with the result images put
+     * back (decrypted) and the case shown by tissue ID. 404 when it does not exist or belongs to another case.
+     */
+    public RunDetail run(UUID caseId, String module, UUID runId, Long userId) {
+        RunDetail stored = storedRun(caseId, module, runId);
+        JsonNode result = stored.result();
+        if (result instanceof ObjectNode report) {
+            report.put("caseId", donorCases.tissueNumberOf(donorCases.require(caseId)).value());
+            result = artifacts.restore(module, runId, report);
+        }
+        audit.record(userId, AuditService.RUN_VIEW, module + "_run", runId, null);
+        return new RunDetail(stored.summary(), stored.inputs(), result);
+    }
+
+    private RunDetail storedRun(UUID caseId, String module, UUID runId) {
         return switch (module) {
             case "cellular" -> cellularRuns.findById(runId).filter(r -> caseId.equals(r.getDonorCaseId()))
                     .map(r -> new RunDetail(summary(r), null, json(r.getResultJson())))

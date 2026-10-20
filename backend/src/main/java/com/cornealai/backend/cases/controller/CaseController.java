@@ -9,11 +9,16 @@ import com.cornealai.backend.cases.dto.CaseDtos.CaseDetails;
 import com.cornealai.backend.cases.dto.CaseDtos.CaseImage;
 import com.cornealai.backend.cases.dto.CaseDtos.CaseResponse;
 import com.cornealai.backend.cases.dto.CaseDtos.CreateCaseRequest;
+import com.cornealai.backend.cases.dto.CaseDtos.MatchCandidateView;
+import com.cornealai.backend.cases.dto.CaseDtos.Serology;
+import com.cornealai.backend.cases.dto.CaseDtos.Signoff;
+import com.cornealai.backend.cases.dto.CaseDtos.SignoffRequest;
 import com.cornealai.backend.cases.dto.CaseDtos.RunDetail;
 import com.cornealai.backend.cases.dto.CaseDtos.RunSummary;
 import com.cornealai.backend.cases.service.CaseAnalysisService;
 import com.cornealai.backend.cases.service.CaseHistoryService;
 import com.cornealai.backend.cases.service.CaseService;
+import com.cornealai.backend.cases.service.SignoffService;
 import com.cornealai.backend.security.AppUserDetails;
 import jakarta.validation.Valid;
 import org.springframework.http.CacheControl;
@@ -42,8 +47,11 @@ public class CaseController {
     private final CaseService cases;
     private final CaseAnalysisService analyses;
     private final CaseHistoryService history;
+    private final SignoffService signoffService;
 
-    public CaseController(CaseService cases, CaseAnalysisService analyses, CaseHistoryService history) {
+    public CaseController(CaseService cases, CaseAnalysisService analyses, CaseHistoryService history,
+                          SignoffService signoffService) {
+        this.signoffService = signoffService;
         this.cases = cases;
         this.analyses = analyses;
         this.history = history;
@@ -59,18 +67,20 @@ public class CaseController {
 
     /** {@code ?tissueId=12656R} finds one case; without it, the 20 most recently updated cases. */
     @GetMapping
-    public List<CaseResponse> find(@RequestParam(required = false) String tissueId) {
-        return tissueId == null ? cases.recent() : List.of(cases.findByTissueId(tissueId));
+    public List<CaseResponse> find(@RequestParam(required = false) String tissueId,
+                                   @AuthenticationPrincipal AppUserDetails user) {
+        return tissueId == null ? cases.recent(user.getId()) : List.of(cases.findByTissueId(tissueId, user.getId()));
     }
 
     @GetMapping("/{caseId}")
-    public CaseResponse get(@PathVariable UUID caseId) {
-        return cases.get(caseId);
+    public CaseResponse get(@PathVariable UUID caseId, @AuthenticationPrincipal AppUserDetails user) {
+        return cases.get(caseId, user.getId());
     }
 
     @PutMapping(path = "/{caseId}/details", consumes = MediaType.APPLICATION_JSON_VALUE)
-    public CaseResponse updateDetails(@PathVariable UUID caseId, @Valid @RequestBody CaseDetails details) {
-        return cases.updateDetails(caseId, details);
+    public CaseResponse updateDetails(@PathVariable UUID caseId, @Valid @RequestBody CaseDetails details,
+                                      @AuthenticationPrincipal AppUserDetails user) {
+        return cases.updateDetails(caseId, details, user.getId());
     }
 
     @PostMapping(path = "/{caseId}/images", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
@@ -94,14 +104,15 @@ public class CaseController {
 
     /** The decrypted image, for viewing only: never cached, never sniffed as another type. */
     @GetMapping("/{caseId}/images/{imageId}/content")
-    public ResponseEntity<byte[]> imageContent(@PathVariable UUID caseId, @PathVariable UUID imageId) {
+    public ResponseEntity<byte[]> imageContent(@PathVariable UUID caseId, @PathVariable UUID imageId,
+                                               @AuthenticationPrincipal AppUserDetails user) {
         AnalysisImage image = cases.requireImage(caseId, imageId);
         return ResponseEntity.ok()
                 .contentType(MediaType.parseMediaType(image.getContentType()))
                 .cacheControl(CacheControl.noStore())
                 .header("X-Content-Type-Options", "nosniff")
                 .header("Content-Disposition", "inline")
-                .body(cases.imageContent(image));
+                .body(cases.imageContent(image, user.getId()));
     }
 
     @PostMapping(path = "/{caseId}/analyses", consumes = MediaType.APPLICATION_JSON_VALUE)
@@ -116,7 +127,45 @@ public class CaseController {
     }
 
     @GetMapping("/{caseId}/runs/{module}/{runId}")
-    public RunDetail run(@PathVariable UUID caseId, @PathVariable String module, @PathVariable UUID runId) {
-        return history.run(caseId, module, runId);
+    public RunDetail run(@PathVariable UUID caseId, @PathVariable String module, @PathVariable UUID runId,
+                         @AuthenticationPrincipal AppUserDetails user) {
+        return history.run(caseId, module, runId, user.getId());
+    }
+
+    // ---------------------------------------------------------------- sign-off, serology, candidates
+
+    /** All sign-offs of the case, newest first; any clinician may read them. */
+    @GetMapping("/{caseId}/signoffs")
+    public List<Signoff> signoffs(@PathVariable UUID caseId, @AuthenticationPrincipal AppUserDetails user) {
+        return signoffService.signoffs(caseId, user.getId());
+    }
+
+    /** A specialist confirms the grade and findings (doctors only). Append-only. */
+    @PostMapping(path = "/{caseId}/signoffs", consumes = MediaType.APPLICATION_JSON_VALUE)
+    @PreAuthorize("hasAuthority('case:signoff')")
+    public ResponseEntity<Signoff> signOff(@PathVariable UUID caseId, @Valid @RequestBody SignoffRequest request,
+                                           @AuthenticationPrincipal AppUserDetails user) {
+        return ResponseEntity.status(HttpStatus.CREATED).body(signoffService.signOff(caseId, request, user.getId()));
+    }
+
+    /** Serology results (doctors only; every read and change is audited). */
+    @GetMapping("/{caseId}/serology")
+    @PreAuthorize("hasAuthority('serology:access')")
+    public Serology serology(@PathVariable UUID caseId, @AuthenticationPrincipal AppUserDetails user) {
+        return signoffService.serology(caseId, user.getId());
+    }
+
+    @PutMapping(path = "/{caseId}/serology", consumes = MediaType.APPLICATION_JSON_VALUE)
+    @PreAuthorize("hasAuthority('serology:access')")
+    public Serology updateSerology(@PathVariable UUID caseId, @Valid @RequestBody Serology request,
+                                   @AuthenticationPrincipal AppUserDetails user) {
+        return signoffService.updateSerology(caseId, request, user.getId());
+    }
+
+    /** Signed-off corneas as recommendation candidates (confirmed values; carries serology status). */
+    @GetMapping("/candidates")
+    @PreAuthorize("hasAuthority('serology:access')")
+    public List<MatchCandidateView> candidates(@AuthenticationPrincipal AppUserDetails user) {
+        return signoffService.candidates(user.getId());
     }
 }

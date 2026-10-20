@@ -16,6 +16,8 @@ import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import tools.jackson.databind.ObjectMapper;
 
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 
@@ -31,6 +33,7 @@ public class DiseaseAnalysisService {
 
     private final DiseaseAnalysisRunRepository runs;
     private final ImageService imageService;
+    private final RunArtifactService artifacts;
     private final DonorCaseService donorCases;
     private final MlServiceClient mlServiceClient;
     private final ObjectMapper objectMapper;
@@ -38,12 +41,14 @@ public class DiseaseAnalysisService {
     public DiseaseAnalysisService(
             DiseaseAnalysisRunRepository runs,
             ImageService imageService,
+            RunArtifactService artifacts,
             DonorCaseService donorCases,
             MlServiceClient mlServiceClient,
             ObjectMapper objectMapper
     ) {
         this.runs = runs;
         this.imageService = imageService;
+        this.artifacts = artifacts;
         this.donorCases = donorCases;
         this.mlServiceClient = mlServiceClient;
         this.objectMapper = objectMapper;
@@ -90,6 +95,14 @@ public class DiseaseAnalysisService {
             run.setStatus(response.status());
             run.setResultJson(objectMapper.writeValueAsString(response.withoutGradcam()));
             runs.save(run);
+            if (response.diseases() != null) {
+                List<RunArtifactService.Image> maps = new ArrayList<>();
+                for (int i = 0; i < response.diseases().size(); i++) {
+                    maps.add(new RunArtifactService.Image("/diseases/" + i + "/gradcamPng",
+                            response.diseases().get(i).gradcamPng()));
+                }
+                artifacts.store("disease", run.getId(), donorCase.getId(), maps);
+            }
             return response;
         } catch (AnalysisRejectedException e) {
             record(run, "rejected", e.getCode());
