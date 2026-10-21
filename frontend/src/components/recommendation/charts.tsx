@@ -7,8 +7,8 @@ import type { PredictedEcd } from "@/api/recommendation"
  * text next to the marks, so colour never carries meaning alone.
  */
 const SERIES = "#0369a1"            // app accent: the graft's trajectory
-const FAVOURABLE = "#2a78d6"        // diverging pole: lowers risk / pushes a cornea up
-const UNFAVOURABLE = "#e34948"      // diverging pole: raises risk / pushes a cornea down
+export const FAVOURABLE = "#2a78d6"        // diverging pole: lowers risk / pushes a cornea up
+export const UNFAVOURABLE = "#e34948"      // diverging pole: raises risk / pushes a cornea down
 const GRID = "#e2e8f0"
 const AXIS = "#cbd5e1"
 const MUTED = "#64748b"
