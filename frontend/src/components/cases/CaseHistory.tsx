@@ -8,7 +8,7 @@ import type { GradingAnalyzeResponse } from "@/api/grading"
 import { AnalysisResults } from "@/components/analysis/AnalysisResults"
 import { CellularResults } from "@/components/cellular/CellularResults"
 import { Card } from "@/components/dashboard/PageHeader"
-import { DiseaseResults } from "@/components/disease/DiseaseResults"
+import { CaseDiseaseResults } from "@/components/cases/CaseImages"
 import { GradingResults } from "@/components/grading/GradingResults"
 import { measurementLabel } from "@/lib/disease-measurements"
 import { featureLabel, formatFeatureValue } from "@/lib/grading-features"
@@ -97,7 +97,7 @@ export function RunDetailView({ caseId, run }: { caseId: string; run: RunSummary
         <div className="space-y-4">
             {inputs && <RunInputs module={run.module} inputs={inputs} />}
             {result ? (
-                <RunReport module={run.module} result={result} />
+                <RunReport caseId={caseId} run={run} result={result} />
             ) : (
                 <p className={alertError}>
                     No result: the run did not complete{run.errorCode ? ` (${run.errorCode})` : ""}.
@@ -108,14 +108,14 @@ export function RunDetailView({ caseId, run }: { caseId: string; run: RunSummary
 }
 
 /** The saved result as the same report shown after an analysis, with its images restored by the server. */
-function RunReport({ module, result }: { module: RunSummary["module"]; result: Record<string, unknown> }) {
-    switch (module) {
+function RunReport({ caseId, run, result }: { caseId: string; run: RunSummary; result: Record<string, unknown> }) {
+    switch (run.module) {
         case "cellular":
             return <CellularResults result={result as unknown as CellularAnalyzeResponse} />
         case "grading":
             return <GradingResults result={result as unknown as GradingAnalyzeResponse} />
         case "disease":
-            return <DiseaseResults result={result as unknown as DiseaseAnalyzeResponse} />
+            return <CaseDiseaseResults caseId={caseId} imageId={run.imageId} result={result as unknown as DiseaseAnalyzeResponse} />
         case "combined":
             return <AnalysisResults result={result as unknown as AnalyzeResponse} />
     }

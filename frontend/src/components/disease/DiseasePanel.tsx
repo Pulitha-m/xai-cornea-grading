@@ -168,10 +168,6 @@ export function DiseasePanel() {
                                 clearResult()
                             }}
                         />
-                        <p className="text-xs text-muted-foreground">
-                            Leave a value blank if it is unknown — it is never read as zero. Blank values are filled
-                            with the training median; with three or more missing, no result is produced.
-                        </p>
                         <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
                             {MEASUREMENTS.map((m) => (
                                 <MeasurementField

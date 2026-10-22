@@ -1,6 +1,7 @@
 import {
     ActivityIcon,
     BrainCircuitIcon,
+    CircleCheckIcon,
     ClipboardListIcon,
     FileTextIcon,
     GaugeIcon,
@@ -127,6 +128,13 @@ export const PLANNED_MODULES: PlannedModule[] = [
         icon: PackageIcon,
         roles: ["ADMIN", "MANAGER", "NURSE", "SUPPORT_STAFF"],
         description: "Storage status, availability and inter-branch transfers of donor tissue.",
+    },
+    {
+        label: "Transplant suitability",
+        to: "/suitability",
+        icon: CircleCheckIcon,
+        roles: ["DOCTOR", "NURSE"],
+        description: "An overall decision on whether donor tissue is suitable for transplant, combining the analysis results.",
     },
     {
         label: "Reports",

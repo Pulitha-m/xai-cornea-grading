@@ -1,8 +1,11 @@
-import { useEffect, useId, useMemo, useState, type ChangeEvent } from "react"
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
+import { useId, useState, type ChangeEvent } from "react"
+import { useMutation, useQueryClient } from "@tanstack/react-query"
 import { IMAGE_ACCEPT, IMAGE_MAX_BYTES } from "@/api/analysis"
-import { fetchCaseImage, uploadCaseImage, type CaseImage } from "@/api/cases"
+import { uploadCaseImage, type CaseImage } from "@/api/cases"
+import type { DiseaseAnalyzeResponse } from "@/api/disease"
 import { Card } from "@/components/dashboard/PageHeader"
+import { DiseaseResults } from "@/components/disease/DiseaseResults"
+import { useCaseImageUrl } from "@/hooks/use-case-image-url"
 import { EmptyState } from "@/components/ui/empty-state"
 import { Spinner } from "@/components/ui/spinner"
 import { checkImageFile } from "@/lib/image-file"
@@ -78,21 +81,14 @@ export function CaseImages({ caseId, images }: { caseId: string; images: CaseIma
 
 /** Fetches the decrypted image with the session token and shows it through a short-lived object URL. */
 export function CaseImageView({ caseId, image, alt }: { caseId: string; image: CaseImage; alt: string }) {
-    const blob = useQuery({
-        queryKey: ["case", caseId, "image", image.id],
-        queryFn: () => fetchCaseImage(caseId, image.id),
-        staleTime: Infinity,
-        gcTime: 60_000,
-    })
-    const url = useMemo(
-        () => (blob.data && typeof URL.createObjectURL === "function" ? URL.createObjectURL(blob.data) : null),
-        [blob.data],
-    )
-    useEffect(() => () => {
-        if (url) URL.revokeObjectURL(url)
-    }, [url])
-
-    if (blob.isError) return <p className="p-3 text-xs text-destructive">The image could not be loaded.</p>
+    const { url, isError } = useCaseImageUrl(caseId, image.id)
+    if (isError) return <p className="p-3 text-xs text-destructive">The image could not be loaded.</p>
     if (!url) return <div className="flex h-40 items-center justify-center"><Spinner /></div>
     return <img src={url} alt={alt} className="h-40 w-full object-contain" />
+}
+
+/** The disease report of a case run, with the run's image available as "Show original". */
+export function CaseDiseaseResults({ caseId, imageId, result }: { caseId: string; imageId: string; result: DiseaseAnalyzeResponse }) {
+    const { url } = useCaseImageUrl(caseId, imageId)
+    return <DiseaseResults result={result} originalUrl={url} />
 }

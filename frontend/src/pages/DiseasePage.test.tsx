@@ -136,12 +136,15 @@ describe("DiseasePage", () => {
 
         const user = await fillAndAnalyse({})
 
-        const gradcam = within(await screen.findByRole("region", { name: "Grad-CAM explanations" }))
+        const gradcam = within(await screen.findByRole("region", { name: "Why these results: image analysis" }))
         expect(gradcam.getByText("How to read these maps")).toBeInTheDocument()
-        expect(gradcam.getByText(/Strongest in the/)).toHaveTextContent(
-            "Strongest in the lower right of the image; 9% of the image highlighted (focused).")
+        expect(gradcam.getByText(/of image/)).toHaveTextContent("Lower right · 9% of image (focused)")
         expect(gradcam.getByText(/Guttae: dark, round or oval spots/)).toBeInTheDocument()
-        expect(gradcam.getByText(/test AUC numbers only 0.87, image only 0.83/)).toBeInTheDocument()
+        expect(gradcam.getByText("Found · 82%")).toBeInTheDocument()
+        expect(gradcam.getByTestId("focus-outline")).toHaveStyle({ top: "66.666%", left: "66.666%" })
+        await user.click(gradcam.getByRole("button", { name: "Mark region" }))
+        expect(gradcam.queryByTestId("focus-outline")).not.toBeInTheDocument()
+        expect(gradcam.queryByText(/test AUC numbers only/)).not.toBeInTheDocument()
 
         await user.click(gradcam.getByRole("button", { name: "Show original" }))
         expect(gradcam.getByRole("img", { name: /Original image/ })).toHaveAttribute("src", "blob:original")
@@ -156,19 +159,20 @@ describe("DiseasePage", () => {
 
         const user = await fillAndAnalyse({})
 
-        const shap = within(await screen.findByRole("region", { name: /How the CellChek values affected the result/ }))
+        const shap = within(await screen.findByRole("region", { name: "Which CellChek values drove this result" }))
         expect(shap.getByRole("button", { name: /Fuchs/ })).toHaveAttribute("aria-pressed", "true")
-        expect(shap.getByText(/this image with typical values/)).toHaveTextContent("13%")
-        expect(shap.getByText(/this image with typical values/)).toHaveTextContent("82%")
+        expect(shap.getByText(/With average values/)).toHaveTextContent("13%")
+        expect(shap.getByText(/With these values/)).toHaveTextContent("82%")
+        expect(shap.getByTestId("shap-summary")).toHaveTextContent("Raised mainly by ECD (1,667 cells/mm²).")
         const ecdRow = shap.getByRole("row", { name: /ECD/ })
         expect(ecdRow).toHaveTextContent("1,667 cells/mm²")
-        expect(ecdRow).toHaveTextContent("+69")
-        expect(shap.getByRole("row", { name: /Coefficient of variation/ })).toHaveTextContent("+<1")
-        expect(shap.getByRole("row", { name: /Hexagonality/ })).toHaveTextContent("−1")
-        expect(shap.getByRole("row", { name: /Donor age/ })).toHaveTextContent("not recorded (median used)")
+        expect(ecdRow).toHaveTextContent("Raised strongly")
+        expect(shap.getByRole("row", { name: /Coefficient of variation/ })).toHaveTextContent("Little effect")
+        expect(shap.getByRole("row", { name: /Hexagonality/ })).toHaveTextContent("Little effect")
+        expect(shap.getByRole("row", { name: /Donor age/ })).toHaveTextContent("Not recorded")
 
         await user.click(shap.getByRole("button", { name: "Severity: FECD group" }))
-        expect(shap.getByText(/this image with typical values/)).toHaveTextContent("50%")
+        expect(shap.getByText(/With average values/)).toHaveTextContent("50%")
         expect(shap.getByRole("button", { name: "Guttata" })).toBeInTheDocument()
     })
 
