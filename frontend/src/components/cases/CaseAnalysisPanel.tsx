@@ -3,7 +3,7 @@ import { useMutation, useQueryClient } from "@tanstack/react-query"
 import { analyzeCase, CASE_MODULES, MODULE_LABELS, type CaseImage, type CaseModule, type DonorCase, type ModuleOutcome } from "@/api/cases"
 import { CellularResults } from "@/components/cellular/CellularResults"
 import { Card } from "@/components/dashboard/PageHeader"
-import { DiseaseResults } from "@/components/disease/DiseaseResults"
+import { CaseDiseaseResults } from "@/components/cases/CaseImages"
 import { GradingResults } from "@/components/grading/GradingResults"
 import { EmptyState } from "@/components/ui/empty-state"
 import { Spinner } from "@/components/ui/spinner"
@@ -126,7 +126,7 @@ export function CaseAnalysisPanel({ donorCase, images }: { donorCase: DonorCase;
                     )}
                     {result.modules.disease && (
                         <ModuleResult label={MODULE_LABELS.disease} outcome={result.modules.disease}
-                            render={(r) => <DiseaseResults result={r} />} />
+                            render={(r) => <CaseDiseaseResults caseId={donorCase.id} imageId={selectedImage} result={r} />} />
                     )}
                 </>
             )}

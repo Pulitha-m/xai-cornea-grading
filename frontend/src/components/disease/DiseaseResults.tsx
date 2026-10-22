@@ -1,7 +1,7 @@
 import { useState } from "react"
 import type { DiseaseAnalyzeResponse, DiseaseFinding, ImageQuality, InputIssue } from "@/api/disease"
 import { measurementLabel } from "@/lib/disease-measurements"
-import { coverageLabel, GRADCAM_EXPLANATIONS } from "@/lib/gradcam-explanations"
+import { coverageLabel, GRADCAM_EXPLANATIONS, regionCell } from "@/lib/gradcam-explanations"
 import { alertError, alertWarning } from "@/lib/styles"
 import { Card } from "@/components/dashboard/PageHeader"
 import { ShapCard } from "@/components/disease/ShapCard"
@@ -100,7 +100,7 @@ export function DiseaseResults({ result, originalUrl = null }: { result: Disease
 
                 {result.imageQuality && <QualityCard quality={result.imageQuality} />}
 
-                <Card title="Inputs used" description="Blank values were filled with the training median, as in training.">
+                <Card title="Inputs used">
                     <dl className="grid grid-cols-2 gap-4 sm:grid-cols-3">
                         {/* ECD_Deficit is derived from ECD for the model only; not shown to clinicians. */}
                         {Object.entries(result.measurementsUsed ?? {}).filter(([name]) => name !== "ECD_Deficit").map(([name, value]) => (
@@ -117,7 +117,7 @@ export function DiseaseResults({ result, originalUrl = null }: { result: Disease
             </div>
 
             {detected.some((d) => d.gradcamPng) && (
-                <Card title="Grad-CAM explanations" description="Where in the image the model found the evidence for each detected disease. An aid for review, not proof of the finding.">
+                <Card title="Why these results: image analysis" description="Where in the image the model found the evidence for each detected disease. An aid for review, not proof of the finding.">
                     <div className="space-y-6">
                         <GradcamGuide />
                         {detected.filter((d) => d.gradcamPng).map((d) => (
@@ -153,61 +153,96 @@ function GradcamGuide() {
                 <li>Check the highlighted area yourself: does it show the features listed for that disease? Use “Show original” to see it without colour.</li>
                 <li>The map shows <em>where the model looked</em>, not the outline of a lesion. It is coarse (blocks of about 1/12 of the image width), so edges are approximate.</li>
                 <li>If the hottest area is on the image border, a reflection, an out-of-focus patch or overlaid text, treat the finding with extra caution.</li>
-                <li>It explains only the image. The CellChek values also contribute; see the note under each disease.</li>
+                <li>It explains only the image. The CellChek values also contribute to the result.</li>
             </ul>
         </div>
     )
 }
 
+const toggleButton = "rounded-full border border-border px-3 py-1 text-xs font-medium hover:bg-muted aria-pressed:bg-muted"
+
 function GradcamPanel({ finding, originalUrl }: { finding: DiseaseFinding; originalUrl: string | null }) {
     const [showOriginal, setShowOriginal] = useState(false)
+    const [markRegion, setMarkRegion] = useState(true)
     const explanation = GRADCAM_EXPLANATIONS[finding.code]
     const focus = finding.gradcamFocus
+    const cell = focus ? regionCell(focus.region) : null
     const original = showOriginal && originalUrl !== null
+    const region = focus ? focus.region.charAt(0).toUpperCase() + focus.region.slice(1) : ""
 
     return (
         <figure className="grid gap-4 border-t border-border pt-5 md:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]">
             <div className="space-y-2">
-                <img
-                    src={original ? originalUrl : `data:image/png;base64,${finding.gradcamPng}`}
-                    alt={original ? `Original image (${finding.label})` : `Grad-CAM heat map for ${finding.label}`}
-                    className="aspect-[4/3] w-full rounded-2xl border border-border object-cover"
-                />
-                {originalUrl && (
-                    <button
-                        type="button"
-                        aria-pressed={showOriginal}
-                        onClick={() => setShowOriginal((v) => !v)}
-                        className="rounded-full border border-border px-3 py-1 text-xs font-medium hover:bg-muted"
-                    >
-                        {showOriginal ? "Show heat map" : "Show original"}
-                    </button>
-                )}
+                <div className="relative">
+                    <img
+                        src={original ? originalUrl : `data:image/png;base64,${finding.gradcamPng}`}
+                        alt={original ? `Original image (${finding.label})` : `Grad-CAM heat map for ${finding.label}`}
+                        className="aspect-[4/3] w-full rounded-2xl border border-border object-cover"
+                    />
+                    {/* The heat map is 4:3 like the frame, so the grid third lines up with the image. */}
+                    {markRegion && cell && (
+                        <div
+                            data-testid="focus-outline"
+                            aria-hidden="true"
+                            className="pointer-events-none absolute rounded-lg border-2 border-dashed border-white shadow-[0_0_0_1px_rgba(0,0,0,0.6)]"
+                            style={{ top: `${cell.row * 33.333}%`, left: `${cell.col * 33.333}%`, width: "33.333%", height: "33.333%" }}
+                        />
+                    )}
+                </div>
+                <div className="flex flex-wrap gap-2">
+                    {originalUrl && (
+                        <button type="button" aria-pressed={showOriginal} onClick={() => setShowOriginal((v) => !v)} className={toggleButton}>
+                            {showOriginal ? "Show heat map" : "Show original"}
+                        </button>
+                    )}
+                    {cell && (
+                        <button type="button" aria-pressed={markRegion} onClick={() => setMarkRegion((v) => !v)} className={toggleButton}>
+                            Mark region
+                        </button>
+                    )}
+                </div>
             </div>
-            <figcaption className="space-y-3 text-sm">
-                <p className="font-semibold">
-                    {finding.label} <span className="font-normal text-muted-foreground">(P = {finding.probability.toFixed(2)})</span>
-                </p>
-                {focus && (
-                    <p>
-                        <span className={sectionLabel}>Where the model looked</span>
-                        <br />
-                        Strongest in the <span className="font-medium">{focus.region === "centre" ? "centre" : focus.region}</span>{" "}
-                        of the image; {percent(focus.coverage)} of the image highlighted ({coverageLabel(focus.coverage)}).
-                    </p>
-                )}
-                {explanation && (
-                    <>
-                        <p>
-                            <span className={sectionLabel}>What to look for there</span>
-                            <br />
-                            {explanation.lookFor}
-                        </p>
-                        <p className="text-xs text-muted-foreground">{explanation.evidence}</p>
-                    </>
-                )}
+            <figcaption className="space-y-4 text-sm">
+                <div className="flex flex-wrap items-start justify-between gap-2">
+                    <p className="font-semibold">{finding.label}</p>
+                    <StatusBadge tone="danger">Found · {percent(finding.probability)}</StatusBadge>
+                </div>
+                <dl className="space-y-3">
+                    {focus && (
+                        <div>
+                            <dt className={sectionLabel}>Model focus</dt>
+                            <dd className="mt-1 flex items-center gap-3">
+                                {cell && <RegionGrid row={cell.row} col={cell.col} />}
+                                <span>
+                                    <span className="font-medium">{region}</span> · {percent(focus.coverage)} of image ({coverageLabel(focus.coverage)})
+                                </span>
+                            </dd>
+                        </div>
+                    )}
+                    {explanation && (
+                        <div>
+                            <dt className={sectionLabel}>Look for</dt>
+                            <dd>
+                                <ul className="mt-1 list-disc space-y-1 pl-5">
+                                    {explanation.lookFor.map((point) => <li key={point}>{point}</li>)}
+                                </ul>
+                            </dd>
+                        </div>
+                    )}
+                </dl>
             </figcaption>
         </figure>
+    )
+}
+
+/** 3 x 3 thumbnail of the image with the focus cell filled. */
+function RegionGrid({ row, col }: { row: number; col: number }) {
+    return (
+        <span className="grid size-8 shrink-0 grid-cols-3 gap-px rounded-sm border border-border bg-border p-px" aria-hidden="true">
+            {Array.from({ length: 9 }, (_, i) => (
+                <span key={i} className={Math.floor(i / 3) === row && i % 3 === col ? "bg-destructive" : "bg-card"} />
+            ))}
+        </span>
     )
 }
 
@@ -239,21 +274,13 @@ function FindingRow({ finding }: { finding: DiseaseFinding }) {
 
 function QualityCard({ quality }: { quality: ImageQuality }) {
     const tone: StatusTone = quality.rating === "OK" ? "success" : quality.rating === "Low" ? "warning" : "danger"
-    const unusual = quality.unusualDistance > quality.unusualRejectAbove
-        ? "Not like the training images"
-        : quality.unusualDistance > quality.unusualWarnAbove ? "Unusual" : "Similar to training images"
     return (
-        <Card title="Image quality" description="Automatic checks of focus, exposure and similarity to the training images." actions={<StatusBadge tone={tone}>{quality.rating}</StatusBadge>}>
+        <Card title="Image quality" description="Automatic checks of focus and exposure." actions={<StatusBadge tone={tone}>{quality.rating}</StatusBadge>}>
             <dl className="grid grid-cols-2 gap-4">
                 <Field label="Focus" value={quality.focus.toFixed(1)} unit={`low below ${quality.focusLowLimit.toFixed(1)}`} />
                 <Field label="Dark pixels" value={percent(quality.darkFraction)} />
                 <Field label="Saturated pixels" value={percent(quality.saturatedFraction)} />
-                <Field label="Similarity" value={unusual} />
             </dl>
-            <p className={`mt-3 ${sectionLabel}`}>
-                Distance to training images {quality.unusualDistance.toFixed(3)} (warn &gt; {quality.unusualWarnAbove.toFixed(3)},
-                reject &gt; {quality.unusualRejectAbove.toFixed(3)})
-            </p>
         </Card>
     )
 }
