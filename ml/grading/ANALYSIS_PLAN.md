@@ -135,10 +135,53 @@ One reporting document that brings together existing results; no new models. It 
 - The performance estimate is notebook 13's nested result (macro F1 0.793 ± 0.047), not the inner score.
 - Model probabilities are the share of trees voting. They have not been calibrated and are shown with that label, never as a confidence.
 
-### Remaining work
+## E. Model family comparison (follow-up) — complete
+
+**Status:** complete in `14_model_family_comparison.ipynb`. It is a follow-up, raised after section D. The protocol, search spaces and selection rule were fixed before execution but not committed separately. It reuses section D's outer folds, so it is **not independent confirmation**.
+
+**Question:** can another model family, tuned the same way, grade better than the deployed tuned RF hybrid?
+
+**Design:**
+
+- **Candidates:** histogram gradient boosting, logistic regression, RBF SVM and Extra Trees, each as tabular and hybrid.
+- **Validation:** the same nested donor-grouped design as section D.
+- **Comparisons:** each candidate against the RF hybrid (primary, Holm across 8) and against the ECD tree (secondary, Holm across 8).
+- **New metric:** quadratic-weighted kappa.
+
+**Result:**
+
+- **Gradient boosting** could not be distinguished from the RF hybrid: hybrid −0.001, tabular −0.009, Holm p = 1.00.
+- **Logistic regression, the SVM and Extra Trees** were worse, by 0.07–0.12 macro F1 (Holm p ≤ 0.027).
+- **No candidate beat the ECD tree.**
+- Under the pre-set rule, **the deployed RF hybrid is retained**. Amendment 2 is unchanged.
+
+**Deviation:** the first execution stopped at the reproduction check because PCA rounding depends on the BLAS thread count. The reference models were refit with notebook 13's threading and the notebook was executed once more. This is recorded in its deviations log.
+
+## F. Extended hybrid Random Forest tuning (follow-up) — complete
+
+**Status:** complete in `15_extended_hybrid_tuning.ipynb`. It is a follow-up, motivated by inspecting notebook 13's selections: `max_features` 0.3 was chosen in 25/25 folds and PCA 32 in 16/25, both at the edge of the grid. The protocol, grid and selection rule were fixed before execution but not committed separately. It is the third tuning-related analysis on section D's outer folds, so it is **not independent confirmation**.
+
+**Design:**
+
+- **Grid:** 48 settings. PCA {16, 32, 64, 128} × `max_features` {0.3, 0.5, 0.7} × `min_samples_leaf` {2, 1} × `class_weight` {balanced, None}.
+- **Preprocessing:** notebook 13's, unchanged, with the PCA fitted inside each training fold.
+- **Validation:** the same nested donor-grouped design.
+- **Comparison:** against notebook 13's tuned hybrid (primary) and the ECD tree (secondary).
+
+**Result:**
+
+- **Primary comparison:** +0.008 macro F1 [−0.016, +0.033], p = 0.48. **Inconclusive.**
+- **Secondary comparison:** against the ECD tree, +0.006, also inconclusive.
+- **Selections:** PCA 128 was never chosen. `max_features` 0.7, the new edge, was chosen in 13/25 folds.
+- Under the pre-set rule, **the deployed RF hybrid is retained**.
+
+**Note:** the notebook's printed `class_weight` count omitted the `None` selections. It was corrected from the saved CSV in a post-run cell and recorded in the deviations log.
+
+## Remaining work
 
 No planned analyses remain. Possible future work:
 
 - Validation on new, independently graded tissues (notebook 09, Section 9).
+- A further hybrid search above `max_features` 0.7 (notebook 15: selected at the edge in 13/25 folds). It should be pre-specified and evaluated on new tissues, since the current folds have been used for three tuning analyses (13–15).
 - A model-free comparison of tissues graded below the ECD thresholds (post hoc).
 - Microscopy-specific image representations under a new protocol.

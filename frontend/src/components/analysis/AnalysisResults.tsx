@@ -6,7 +6,7 @@ import { alertError, alertWarning } from "@/lib/styles"
 import { Card } from "@/components/dashboard/PageHeader"
 import { ConfidenceMeter } from "@/components/analysis/ConfidenceMeter"
 import { ImageValidationNote } from "@/components/analysis/ImageValidationNote"
-import { EcdReferenceDetails, GradeShares, sectionLabel } from "@/components/grading/grading-parts"
+import { GradeShares, sectionLabel } from "@/components/grading/grading-parts"
 import { Field } from "@/components/ui/field"
 import { StatusBadge } from "@/components/ui/status-badge"
 
@@ -87,8 +87,7 @@ export function AnalysisResults({ result }: { result: AnalyzeResponse }) {
 
 /**
  * The grade comes from the hybrid random forest (24 features + image). Its tree votes are shown as such: they have
- * not been calibrated, so they are not a confidence. The ECD rule's grade is shown alongside as
- * the single-feature reference the model was compared with.
+ * not been calibrated, so they are not a confidence.
  */
 function GradingDetails({ grading }: { grading: GradingResult }) {
     const warnings = grading.warnings ?? []
@@ -127,12 +126,6 @@ function GradingDetails({ grading }: { grading: GradingResult }) {
                     </summary>
                     <p className="mt-1">{notRecorded.map(featureLabel).join(", ")}</p>
                 </details>
-            )}
-
-            {grading.ecdReference && (
-                <div className="border-t border-border pt-4">
-                    <EcdReferenceDetails reference={grading.ecdReference} />
-                </div>
             )}
 
             {grading.message && <p className="text-xs text-muted-foreground">{grading.message}</p>}

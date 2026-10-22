@@ -1,6 +1,6 @@
 # Consolidated Results (Analysis C)
 
-All results for the cornea grading models, drawn from saved outputs of notebooks `05` and `images/02`–`images/13`. No models were rerun for this document. Interpretation and claim status are in `CLAIMS_AUDIT.md`; the analysis history is in `ANALYSIS_PLAN.md`.
+All results for the cornea grading models, drawn from saved outputs of notebooks `05` and `images/02`–`images/15`. No models were rerun for this document. Interpretation and claim status are in `CLAIMS_AUDIT.md`; the analysis history is in `ANALYSIS_PLAN.md`.
 
 ## How to read this document
 
@@ -41,7 +41,7 @@ Notebooks 09–12 restrict V2 to the primary cohort (K3): training and test tiss
 | Type | Meaning |
 |---|---|
 | Pre-specified | Protocol documented before the analysis was run, with git history supporting that sequence: the protocol cell was committed before analysis code (notebook 10) |
-| Planned | Settings written into the notebook before its comparisons, but the timing cannot be independently verified from git history (notebooks 07–08 and 13) |
+| Planned | Settings written into the notebook before its comparisons, but the timing cannot be independently verified from git history (notebooks 07–08 and 13–15; notebooks 14 and 15 are also follow-ups) |
 | Sensitivity | Pre-specified (protocol committed before analysis code) re-analysis on data that already generated the hypothesis (notebook 09); not independent confirmation |
 | Follow-up | Pre-specified (protocol committed before analysis code), but motivated by an earlier result (notebook 11); not independent confirmation |
 | Exploratory | Descriptive, no hypothesis tests (notebook 12) |
@@ -230,14 +230,164 @@ All rows are evaluated on the same 470 tissues and are directly comparable with 
 
 Sources: `nested_tuning_fold_scores.csv`, `nested_tuning_results.csv`, `nested_tuning_selections.csv`, `selected_grading_model.json`. The selected-settings table in the notebook was corrected after the run from `nested_tuning_selections.csv`; see its deviations log.
 
-### R7. Superseded results (not comparable with R1–R6b)
+### R6c. Model family comparison (K4, V2 restricted + inner CV; notebook 14; planned follow-up)
+
+**Question:** can another model family, tuned the same way, grade better than the tuned Random Forest hybrid served by the application?
+
+**Status:** a follow-up, raised after notebook 13's results were known. It reuses the same outer folds, which have informed earlier decisions, so it is **not independent confirmation**. The protocol was written before execution but not committed separately.
+
+**Design:** the same as R6b. 3-fold donor-grouped inner tuning (macro F1) within each of the 25 outer folds.
+
+**Candidates:** four families, each as tabular (24 features) and hybrid (24 features + image, PCA {8, 16, 32}):
+
+| Family | Settings searched |
+|---|---:|
+| Histogram gradient boosting | 32 |
+| Logistic regression | 10 |
+| RBF SVM | 24 |
+| Extra Trees | 24 |
+
+For these candidates the image PCA components were standardised, which logistic regression and the SVM need.
+
+**References:** the ECD tree and both tuned Random Forests, refit from notebook 13's per-fold selections. They reproduced notebooks 11 and 13: the ECD tree and RF tabular exactly, the RF hybrid within 6e-17.
+
+All rows are evaluated on the same 470 tissues and are directly comparable with each other and with R5 and R6b.
+
+| Model | Macro F1 | Balanced accuracy | Accuracy | Grade B recall | Kappa (quadratic) |
+|---|---:|---:|---:|---:|---:|
+| ECD tree | 0.796 ± 0.038 | 0.768 ± 0.043 | 0.804 ± 0.031 | 0.790 ± 0.117 | 0.771 ± 0.056 |
+| Tuned RF tabular | 0.805 ± 0.034 | 0.781 ± 0.037 | 0.809 ± 0.030 | 0.793 ± 0.115 | 0.783 ± 0.043 |
+| **Tuned RF hybrid** (deployed) | 0.793 ± 0.047 | 0.775 ± 0.050 | 0.797 ± 0.040 | 0.789 ± 0.130 | 0.764 ± 0.066 |
+| Gradient boosting tabular | 0.785 ± 0.046 | 0.770 ± 0.046 | 0.782 ± 0.038 | 0.806 ± 0.114 | 0.753 ± 0.048 |
+| Gradient boosting hybrid | 0.792 ± 0.034 | 0.770 ± 0.039 | 0.788 ± 0.033 | 0.796 ± 0.123 | 0.764 ± 0.048 |
+| Logistic regression tabular | 0.698 ± 0.058 | 0.686 ± 0.056 | 0.709 ± 0.053 | 0.690 ± 0.131 | 0.675 ± 0.065 |
+| Logistic regression hybrid | 0.678 ± 0.063 | 0.677 ± 0.062 | 0.695 ± 0.055 | 0.713 ± 0.145 | 0.665 ± 0.071 |
+| RBF SVM tabular | 0.715 ± 0.049 | 0.701 ± 0.047 | 0.731 ± 0.047 | 0.673 ± 0.134 | 0.699 ± 0.054 |
+| RBF SVM hybrid | 0.681 ± 0.050 | 0.673 ± 0.054 | 0.699 ± 0.049 | 0.659 ± 0.147 | 0.664 ± 0.074 |
+| Extra Trees tabular | 0.709 ± 0.046 | 0.701 ± 0.049 | 0.730 ± 0.039 | 0.692 ± 0.129 | 0.702 ± 0.043 |
+| Extra Trees hybrid | 0.724 ± 0.044 | 0.720 ± 0.042 | 0.754 ± 0.039 | 0.717 ± 0.124 | 0.737 ± 0.045 |
+
+Kappa is quadratic-weighted, with the order B < A < A+.
+
+**Primary family P:** candidate − tuned RF hybrid, macro F1, Holm across 8.
+
+| ID | Candidate | Difference [95% CI] | p (Holm) | Folds improved | Verdict |
+|---|---|---|---:|---:|---|
+| P1 | Gradient boosting tabular | −0.009 [−0.046, +0.029] | 1.00 | 9/25 | Inconclusive |
+| P2 | Gradient boosting hybrid | −0.001 [−0.041, +0.038] | 1.00 | 11/25 | Inconclusive |
+| P3 | Logistic regression tabular | −0.095 [−0.159, −0.032] | 0.027 | 1/25 | Worse |
+| P4 | Logistic regression hybrid | −0.115 [−0.187, −0.043] | 0.022 | 1/25 | Worse |
+| P5 | RBF SVM tabular | −0.078 [−0.134, −0.023] | 0.027 | 1/25 | Worse |
+| P6 | RBF SVM hybrid | −0.112 [−0.164, −0.060] | 0.001 | 0/25 | Worse |
+| P7 | Extra Trees tabular | −0.084 [−0.140, −0.028] | 0.027 | 1/25 | Worse |
+| P8 | Extra Trees hybrid | −0.069 [−0.114, −0.023] | 0.027 | 2/25 | Worse |
+
+**Secondary family S:** candidate − ECD tree, macro F1, Holm across 8.
+
+- Gradient boosting was inconclusive in both arms:
+  - tabular −0.011 [−0.039, +0.017];
+  - hybrid −0.004 [−0.032, +0.025];
+  - Holm p 0.86 for both.
+- The other six candidates were worse than the ECD tree (Holm p 0.002–0.017).
+
+**Pooled per-grade precision / recall** (K4, pooled over repeats) **and kappa**:
+
+| Model | A+ | A | B | Kappa |
+|---|---|---|---|---:|
+| ECD tree | 0.748 / 0.988 | 0.884 / 0.528 | 1.000 / 0.791 | 0.772 |
+| Tuned RF tabular | 0.779 / 0.943 | 0.805 / 0.609 | 0.978 / 0.794 | 0.785 |
+| Tuned RF hybrid | 0.788 / 0.906 | 0.761 / 0.635 | 0.936 / 0.791 | 0.769 |
+| Gradient boosting tabular | 0.784 / 0.870 | 0.719 / 0.636 | 0.928 / 0.809 | 0.756 |
+| Gradient boosting hybrid | 0.777 / 0.892 | 0.733 / 0.625 | 0.982 / 0.797 | 0.767 |
+| Logistic regression tabular | 0.752 / 0.816 | 0.593 / 0.552 | 0.808 / 0.690 | 0.677 |
+| Logistic regression hybrid | 0.748 / 0.811 | 0.578 / 0.504 | 0.719 / 0.716 | 0.668 |
+| RBF SVM tabular | 0.775 / 0.830 | 0.622 / 0.603 | 0.832 / 0.678 | 0.702 |
+| RBF SVM hybrid | 0.759 / 0.803 | 0.577 / 0.558 | 0.761 / 0.657 | 0.667 |
+| Extra Trees tabular | 0.765 / 0.857 | 0.633 / 0.552 | 0.790 / 0.687 | 0.703 |
+| Extra Trees hybrid | 0.779 / 0.906 | 0.694 / 0.538 | 0.759 / 0.713 | 0.738 |
+
+**Further outcomes:**
+
+- **Descriptive (no tests), tabular arms against the tuned RF tabular model:**
+  - gradient boosting −0.020 (higher in 3/25 folds);
+  - logistic regression −0.107;
+  - SVM −0.090;
+  - Extra Trees −0.096.
+- **Selection rule outcome:** no candidate convincingly outperformed the deployed model, so **the tuned RF hybrid is retained**.
+- **Logistic regression** produced 0 convergence warnings.
+
+**Deviation:** the first execution stopped at the reproduction check, before any candidate result was shown. The RF hybrid differed in one fold because PCA rounding depends on the BLAS thread count. The references were then fitted with default threading, as in notebook 13, and the notebook was executed once more. See the notebook's deviations log.
+
+Sources: `model_family_fold_scores.csv`, `model_family_results.csv`, `model_family_selections.csv`, `model_family_per_grade.csv`, `model_family_oof_predictions.csv`.
+
+### R6d. Extended hybrid Random Forest tuning (K4, V2 restricted + inner CV; notebook 15; planned follow-up)
+
+**Question:** does extending the PCA size and `max_features` improve the tuned hybrid Random Forest?
+
+**Motivation:** in notebook 13, `max_features = 0.3` (the larger value tested) was selected in all 25 folds, and PCA 32 (the largest tested) in 16.
+
+**Status:** a follow-up on the same outer folds, and the third tuning-related analysis on them (after 13 and 14). It is **not independent confirmation**. The protocol was written before execution but not committed separately.
+
+**Design:** the same as R6b.
+
+- **Candidate:** an extended RF hybrid, with preprocessing identical to notebook 13 and a grid of 48 settings: PCA {16, 32, 64, 128} × `max_features` {0.3, 0.5, 0.7} × `min_samples_leaf` {2, 1} × `class_weight` {balanced, None}, with `max_depth` 15 and 300 trees.
+- **References:** the ECD tree and notebook 13's tuned RF hybrid, refit from its per-fold selections. Both reproduced: the ECD tree exactly, the RF hybrid within 6e-17.
+
+| Model | Macro F1 | Balanced accuracy | Accuracy | Grade B recall | Kappa (quadratic) |
+|---|---:|---:|---:|---:|---:|
+| ECD tree | 0.796 ± 0.038 | 0.768 ± 0.043 | 0.804 ± 0.031 | 0.790 ± 0.117 | 0.771 ± 0.056 |
+| Tuned RF hybrid (notebook 13, deployed) | 0.793 ± 0.047 | 0.775 ± 0.050 | 0.797 ± 0.040 | 0.789 ± 0.130 | 0.764 ± 0.066 |
+| Extended RF hybrid | 0.802 ± 0.035 | 0.781 ± 0.041 | 0.803 ± 0.029 | 0.793 ± 0.115 | 0.770 ± 0.052 |
+
+| Comparison (macro F1) | Difference [95% CI] | p | Folds improved | Verdict |
+|---|---|---:|---:|---|
+| F1 (primary): extended − tuned RF hybrid | +0.008 [−0.016, +0.033] | 0.48 | 13/25 | Inconclusive |
+| F2 (secondary): extended − ECD tree | +0.006 [−0.019, +0.031] | 0.62 | 14/25 | Inconclusive |
+
+**Secondary metrics, extended − tuned RF hybrid (unadjusted):**
+
+- balanced accuracy +0.006;
+- accuracy +0.006;
+- grade B recall +0.004;
+- kappa +0.006.
+
+All were non-significant.
+
+**Pooled per-grade precision / recall:**
+
+| Model | A+ | A | B | Kappa |
+|---|---|---|---|---:|
+| Tuned RF hybrid | 0.788 / 0.906 | 0.761 / 0.635 | 0.936 / 0.791 | 0.769 |
+| Extended RF hybrid | 0.786 / 0.913 | 0.773 / 0.639 | 0.964 / 0.794 | 0.774 |
+
+**Selected settings (25 folds):**
+
+| Setting | Values chosen |
+|---|---|
+| PCA | 32 in 14, 16 in 6, 64 in 5, 128 in 0 |
+| `max_features` | 0.7 in 13, 0.5 in 8, 0.3 in 4 |
+| `min_samples_leaf` | 2 in 15, 1 in 10 |
+| `class_weight` | None in 13, balanced in 12 |
+
+The mean inner macro F1 was 0.767, against 0.760 in notebook 13.
+
+**Further outcomes:**
+
+- **PCA:** larger image representations were not preferred. 128 was never chosen.
+- **`max_features`:** 0.7 is the new upper edge and was chosen in 13 of 25 folds. Under the protocol, this is a reason for further search, not evidence of improvement.
+- **Selection rule outcome:** the extended hybrid did not convincingly outperform the deployed model, so **the tuned RF hybrid is retained**.
+- **Correction:** the notebook's printed `class_weight` count omitted the `None` selections (pandas missing values). It was recounted from the saved CSV in a post-run correction cell.
+
+Sources: `extended_tuning_fold_scores.csv`, `extended_tuning_results.csv`, `extended_tuning_selections.csv`, `extended_tuning_per_grade.csv`, `extended_tuning_oof_predictions.csv`.
+
+### R7. Superseded results (not comparable with R1–R6d)
 
 Listed for completeness. These designs split fellow eyes across training and test and have no uncertainty estimates.
 
 | Notebook | Cohort / design | Result | Why superseded |
 |---|---|---|---|
 | 05 | K1 / V0 | Tuned RF holdout macro F1 0.861; 5-fold CV 0.854 | Donor pairs split; holdout informed earlier decisions |
-| 05 | K1 / V0 | RF ranked above SVM, Extra Trees, LR (CV macro F1 0.834 / 0.789 / 0.754 / 0.719) | Non-grouped CV; ranking not re-checked with grouping |
+| 05 | K1 / V0 | RF ranked above SVM, Extra Trees, LR (CV macro F1 0.834 / 0.789 / 0.754 / 0.719) | Non-grouped CV. Re-checked with donor grouping and nested tuning in R6c, where RF again ranked above SVM, Extra Trees and LR |
 | images/05 | K2 / V1 | Test macro F1: tabular RF 0.906, neural multimodal 0.818, CNN 0.371 | Single 152-tissue test set, donor pairs split; fusion confounded with MLP vs RF |
 | images/02 | K2 / V1 | Validation macro F1 0.33–0.48 for from-scratch CNNs and partly fine-tuned ResNet-18 | 224-pixel inputs; shows these configurations failed, not that images are uninformative |
 
@@ -245,7 +395,7 @@ Source: notebook outputs only.
 
 ## 5. Verification notes
 
-**Verified from saved CSVs:** fold-level means and SDs in R2, R4 and R5; R3 differences, CIs and unadjusted p-values; R5 paired results and cut points; R6 group sizes and SHAP means.
+**Verified from saved CSVs:** fold-level means and SDs in R2, R4 and R5; R3 differences, CIs and unadjusted p-values; R5 paired results and cut points; R6 group sizes and SHAP means; all of R6c and R6d.
 
 **Available only in notebook outputs** (no CSV saved):
 
@@ -262,7 +412,7 @@ Source: notebook outputs only.
 - Donor counts depend on the inferred pairing rule; no donor register was available.
 - The provenance of the 2250/2500 thresholds as eye-bank criteria; no documentation was available. They are treated as inferred throughout.
 - Whether the notebook 07–08 settings were fixed before results. This is stated in the notebooks but was not committed to git separately, unlike notebooks 09–11.
-- Whether the notebook 12 and 13 protocols preceded their analysis code. They were not committed separately; recorded in their deviations logs.
+- Whether the notebook 12–15 protocols preceded their analysis code. They were not committed separately; recorded in their deviations logs.
 - Exact data versions: SHA-256 hashes of the dataset, folds and embeddings are printed in notebooks 09–12. The data files are not in git.
 
 ## 6. Limitations (all results)

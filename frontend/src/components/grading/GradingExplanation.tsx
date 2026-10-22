@@ -5,6 +5,16 @@ import { Card } from "@/components/dashboard/PageHeader"
 /** Rows shown individually; the rest are summed into one "other inputs" row. */
 const SHOWN_ROWS = 8
 
+/**
+ * Effect sizes on the share of trees voting for the grade (0–1), in words for end users:
+ * below LITTLE is "Little effect", from STRONG up is "strongly", in between "slightly".
+ */
+const LITTLE = 0.02
+const STRONG = 0.1
+
+/** Below this share of the image's effect on the maps, say that part of it could not be placed. */
+const MOSTLY_MAPPED = 0.5
+
 interface Row {
     key: string
     label: string
@@ -12,14 +22,12 @@ interface Row {
     contribution: number
 }
 
-/** Share of tree votes as percentage points, e.g. "+9.2 pts". */
-function points(value: number) {
-    const rounded = Math.round(value * 1000) / 10
-    return `${rounded > 0 ? "+" : rounded < 0 ? "−" : "±"}${Math.abs(rounded).toFixed(1)} pts`
-}
-
-function percent(value: number) {
-    return `${Math.round(value * 100)}%`
+/** A SHAP contribution in words, e.g. "Raised strongly", without numbers. */
+function effectLabel(value: number): { text: string; minor: boolean } {
+    if (Math.abs(value) < LITTLE) {
+        return { text: "Little effect", minor: true }
+    }
+    return { text: `${value > 0 ? "Raised" : "Lowered"} ${Math.abs(value) >= STRONG ? "strongly" : "slightly"}`, minor: false }
 }
 
 function rowsOf(explanation: GradingExplanation): Row[] {
@@ -30,7 +38,7 @@ function rowsOf(explanation: GradingExplanation): Row[] {
             detail: formatFeatureValue(f.name, f.value) ?? "Not recorded",
             contribution: f.contribution,
         })),
-        { key: "image", label: "Image features", detail: "ResNet-50, 32 components", contribution: explanation.imageContribution },
+        { key: "image", label: "Specular image", detail: null, contribution: explanation.imageContribution },
     ].sort((a, b) => Math.abs(b.contribution) - Math.abs(a.contribution))
 
     const shown = all.slice(0, SHOWN_ROWS)
@@ -39,14 +47,14 @@ function rowsOf(explanation: GradingExplanation): Row[] {
         shown.push({
             key: "other",
             label: `${rest.length} other inputs`,
-            detail: "combined",
+            detail: "together",
             contribution: rest.reduce((sum, r) => sum + r.contribution, 0),
         })
     }
     return shown
 }
 
-/** SHAP explanation of the grade: what raised or lowered the share of trees voting for it, and where in the image. */
+/** What raised or lowered the model's support for the grade (SHAP), and where in the image (SHAP-weighted map). */
 export function GradingExplanationView({ explanation }: { explanation: GradingExplanation }) {
     const grade = explanation.explainedGrade
     const rows = rowsOf(explanation)
@@ -57,51 +65,53 @@ export function GradingExplanationView({ explanation }: { explanation: GradingEx
         <div className="grid gap-6 lg:grid-cols-2">
             <Card
                 title="What drove this grade"
-                description={`SHAP contributions to the share of trees voting ${grade}: from the training average (${percent(explanation.baseline)}) to this tissue (${percent(explanation.prediction)}).`}
+                description={`How each input moved the model towards grade ${grade} or away from it, compared with a typical training tissue.`}
             >
                 <div className="space-y-4">
                     <ul className="flex flex-wrap gap-4 text-xs text-muted-foreground" aria-label="Legend">
                         <li className="flex items-center gap-1.5">
                             <span className="size-2.5 rounded-sm bg-attr-raise" aria-hidden="true" />
-                            Raised the share for {grade}
+                            Raised support for {grade}
                         </li>
                         <li className="flex items-center gap-1.5">
                             <span className="size-2.5 rounded-sm bg-attr-lower" aria-hidden="true" />
-                            Lowered it
+                            Lowered support for {grade}
                         </li>
                     </ul>
 
-                    <ul className="space-y-2.5" aria-label={`Contributions to grade ${grade}`}>
+                    <ul className="space-y-2.5" aria-label={`Effects on grade ${grade}`}>
                         {rows.map((row) => (
                             <ContributionRow key={row.key} row={row} scale={scale} grade={grade} />
                         ))}
                     </ul>
 
-                    <p className="text-xs text-muted-foreground">{explanation.message}</p>
+                    <ul className="list-disc space-y-1 pl-5 text-xs leading-relaxed text-muted-foreground">
+                        <li>Longer bars mattered more. &ldquo;Little effect&rdquo; means the input barely changed the result.</li>
+                        <li>Inputs that were not recorded were handled as in training, never as &ldquo;No&rdquo; or zero.</li>
+                        <li>This shows what the model relied on, not what causes the tissue&rsquo;s condition. A specialist must confirm the grade.</li>
+                    </ul>
                 </div>
             </Card>
 
-            <Card
-                title="Where in the image"
-                description="The image's SHAP contribution spread over the image through the backbone's last convolutional layer. A Grad-CAM-style map, but weighted by SHAP: the forest has no gradients."
-            >
+            <Card title="Where in the image" description={`The parts of the specular image that moved the model towards grade ${grade} or away from it.`}>
                 {map ? (
                     <div className="space-y-4">
                         <div className="grid gap-4 sm:grid-cols-2">
-                            <MapFigure png={map.supportingPng} title={`Raised the share for ${grade}`} total={map.supportingTotal} />
-                            <MapFigure png={map.opposingPng} title="Lowered it" total={map.opposingTotal} />
+                            <MapFigure png={map.supportingPng} title={`Raised support for ${grade}`} total={map.supportingTotal} />
+                            <MapFigure png={map.opposingPng} title={`Lowered support for ${grade}`} total={map.opposingTotal} />
                         </div>
-                        <p className="text-xs text-muted-foreground">
-                            Each map is scaled to its own maximum, so compare their totals, not their colours. The maps
-                            cover {percent(map.localisedShare)} of the image&rsquo;s attribution. They show what the model
-                            relied on, which may not be clinically meaningful (e.g. image borders); their faithfulness has
-                            not been evaluated.
-                        </p>
+                        <ul className="list-disc space-y-1 pl-5 text-xs leading-relaxed text-muted-foreground">
+                            <li>Brighter areas mattered more. Each map is scaled on its own, so compare the labels under them, not their colours.</li>
+                            <li>Check the highlighted areas yourself: the map shows where the model looked, not the outline of a defect.</li>
+                            <li>If the brightest area is on the image border, a reflection or an out-of-focus patch, treat the grade with extra caution.</li>
+                            {map.localisedShare < MOSTLY_MAPPED && (
+                                <li>Part of the image&rsquo;s effect could not be placed on the maps.</li>
+                            )}
+                        </ul>
                     </div>
                 ) : (
                     <p className="text-sm text-muted-foreground">
-                        No image map: the image backbone in use does not provide feature maps. The image&rsquo;s overall
-                        contribution is shown in the chart.
+                        No image map is available for this grade. The image&rsquo;s overall effect is shown in &ldquo;What drove this grade&rdquo;.
                     </p>
                 )}
             </Card>
@@ -112,10 +122,11 @@ export function GradingExplanationView({ explanation }: { explanation: GradingEx
 function ContributionRow({ row, scale, grade }: { row: Row; scale: number; grade: string }) {
     const width = (Math.abs(row.contribution) / scale) * 50
     const raises = row.contribution >= 0
-    const summary = `${row.label}${row.detail ? ` (${row.detail})` : ""}: ${points(row.contribution)} for ${grade}`
+    const effect = effectLabel(row.contribution)
+    const summary = `${row.label}${row.detail ? ` (${row.detail})` : ""}: ${effect.text.toLowerCase()} for ${grade}`
 
     return (
-        <li className="grid grid-cols-[minmax(0,11rem)_1fr_4.5rem] items-center gap-3 text-xs" title={summary} aria-label={summary}>
+        <li className="grid grid-cols-[minmax(0,11rem)_1fr_7.5rem] items-center gap-3 text-xs" title={summary} aria-label={summary}>
             <span className="min-w-0">
                 <span className="block truncate font-medium">{row.label}</span>
                 {row.detail && <span className="block truncate text-2xs text-muted-foreground">{row.detail}</span>}
@@ -129,23 +140,24 @@ function ContributionRow({ row, scale, grade }: { row: Row; scale: number; grade
                     style={{ width: `${width}%` }}
                 />
             </span>
-            <span className="text-right tabular-nums text-muted-foreground">{points(row.contribution)}</span>
+            <span className={effect.minor ? "text-right text-muted-foreground" : "text-right font-medium"}>{effect.text}</span>
         </li>
     )
 }
 
 function MapFigure({ png, title, total }: { png: string | null; title: string; total: number }) {
+    const effect = effectLabel(total)
     return (
         <figure className="space-y-1.5">
             {png ? (
-                <img src={`data:image/png;base64,${png}`} alt={`Image regions that ${title.toLowerCase()}`} className="w-full rounded-2xl border border-border" />
+                <img src={`data:image/png;base64,${png}`} alt={`Image areas that ${title.toLowerCase()}`} className="w-full rounded-2xl border border-border" />
             ) : (
                 <div className="flex aspect-[4/3] items-center justify-center rounded-2xl border border-border bg-sunken text-xs text-muted-foreground">
-                    No region
+                    No area
                 </div>
             )}
             <figcaption className="text-xs text-muted-foreground">
-                {title} <span className="tabular-nums">({points(total)})</span>
+                {title}: <span className={effect.minor ? "" : "font-medium text-foreground"}>{effect.text}</span>
             </figcaption>
         </figure>
     )

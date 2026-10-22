@@ -92,6 +92,15 @@ public class CaseService {
 
     /** Sets and saves the case details; the slit-lamp findings are validated before anything changes. */
     public DonorCase applyDetails(DonorCase donorCase, CaseDetails details) {
+        setDetails(donorCase, details);
+        return cases.saveAndFlush(donorCase);
+    }
+
+    /**
+     * Sets the case details without saving (bulk import saves all cases together at the end); the
+     * slit-lamp findings are validated before anything changes.
+     */
+    public void setDetails(DonorCase donorCase, CaseDetails details) {
         String slitLampJson = objectMapper.writeValueAsString(SlitLampFindings.normalise(details.slitLamp()));
         donorCase.setDonorAgeYears(details.donorAgeYears());
         donorCase.setDeathToPreservationHours(details.deathToPreservationHours());
@@ -103,7 +112,6 @@ public class CaseService {
         donorCase.setTotalCellCount(details.totalCellCount());
         donorCase.setTotalAreaUm2(details.totalAreaUm2());
         donorCase.setSlitLampJson(slitLampJson);
-        return cases.saveAndFlush(donorCase);
     }
 
     public ImageUploadResponse uploadImage(UUID caseId, byte[] data, Long userId) {

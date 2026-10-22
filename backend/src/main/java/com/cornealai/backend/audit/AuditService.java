@@ -2,6 +2,7 @@ package com.cornealai.backend.audit;
 
 import com.cornealai.backend.user.entity.AppUser;
 import com.cornealai.backend.user.repository.AppUserRepository;
+import jakarta.persistence.EntityManager;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.stereotype.Service;
 
@@ -40,14 +41,29 @@ public class AuditService {
 
     private final AuditEventRepository events;
     private final AppUserRepository users;
+    private final EntityManager entityManager;
 
-    public AuditService(AuditEventRepository events, AppUserRepository users) {
+    public AuditService(AuditEventRepository events, AppUserRepository users, EntityManager entityManager) {
         this.events = events;
         this.users = users;
+        this.entityManager = entityManager;
     }
 
     /** {@code detail} must not contain sensitive values (tissue IDs, serology, notes). */
     public void record(Long userId, String action, String subjectType, UUID subjectId, String detail) {
+        events.save(event(userId, action, subjectType, subjectId, detail));
+    }
+
+    /**
+     * As {@link #record}, but only schedules the insert inside the caller's transaction (no lookup, no
+     * flush), so bulk operations write their events in batches. The event commits or rolls back with
+     * that transaction.
+     */
+    public void recordInTransaction(Long userId, String action, String subjectType, UUID subjectId, String detail) {
+        entityManager.persist(event(userId, action, subjectType, subjectId, detail));
+    }
+
+    private static AuditEvent event(Long userId, String action, String subjectType, UUID subjectId, String detail) {
         AuditEvent event = new AuditEvent();
         event.setId(UUID.randomUUID());
         event.setOccurredAt(Instant.now());
@@ -56,7 +72,7 @@ public class AuditService {
         event.setSubjectType(subjectType);
         event.setSubjectId(subjectId);
         event.setDetail(detail);
-        events.save(event);
+        return event;
     }
 
     public record AuditEntry(UUID id, Instant occurredAt, Long userId, String username, String action,

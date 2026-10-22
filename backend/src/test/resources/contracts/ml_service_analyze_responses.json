@@ -65,7 +65,7 @@
         "message": "Grade based on ECD only (cut points 2232, 2497 cells/mm²). Slit-lamp findings and other morphology are not considered and may justify a lower grade. Specialist confirmation required."
       },
       "reviewRequired": false,
-      "message": "Grade from the hybrid model (24 Konan and slit-lamp inputs plus image features). In nested cross-validation it was not better than the ECD rule shown below. Specialist confirmation required. 16 of 24 inputs were not recorded and were handled as in training."
+      "message": "Grade from the hybrid model (24 Konan and slit-lamp inputs plus image features). Decision support only. Specialist confirmation required. 16 of 24 inputs were not recorded and were handled as in training."
     },
     "disease": {
       "status": "not_implemented",
@@ -143,7 +143,7 @@
         "message": "ECD is required for automated grading. Grade this tissue manually."
       },
       "reviewRequired": true,
-      "message": "Grade from the hybrid model (24 Konan and slit-lamp inputs plus image features). In nested cross-validation it was not better than the ECD rule shown below. Specialist confirmation required. 19 of 24 inputs were not recorded and were handled as in training."
+      "message": "Grade from the hybrid model (24 Konan and slit-lamp inputs plus image features). Decision support only. Specialist confirmation required. 19 of 24 inputs were not recorded and were handled as in training."
     },
     "disease": {
       "status": "not_implemented",
