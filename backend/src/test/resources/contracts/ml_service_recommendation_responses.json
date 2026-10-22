@@ -175,7 +175,8 @@
       "ml_mrr": 0.3602,
       "mcda_mrr": 0.3346
     },
-    "disclaimer": "Decision support only. The final allocation decision rests with the clinician."
+    "disclaimer": "Decision support only. The final allocation decision rests with the clinician.",
+    "warnings": ["R0002: stored 20 days, longer than the usual 14-day limit."]
   },
   "followup_completed": {
     "graft_id": "G0001",
@@ -303,7 +304,8 @@
     "model_version": "2026-10-20",
     "rules_version": "placeholder-2026-10-20",
     "data_source": "simulated",
-    "disclaimer": "Decision support only. Follow-up decisions rest with the treating clinician."
+    "disclaimer": "Decision support only. Follow-up decisions rest with the treating clinician.",
+    "warnings": ["Donor age 12 years is outside the range the model was trained on (18–78 years); the prediction is less reliable."]
   },
   "followup_rejected_invalid": {
     "status": "rejected",

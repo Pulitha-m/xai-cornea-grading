@@ -12,6 +12,7 @@ import {
     runGraftFollowup,
     type Graft,
 } from "@/api/transplants"
+import { SHOW_GRAFTS_ON_FOLLOWUP, SHOW_STOCK_ON_MATCHING } from "@/lib/feature-flags"
 import { FEATURES } from "@/lib/grading-features"
 import { makeAuth, makeUser, renderApp } from "@/test/auth-test-utils"
 
@@ -61,7 +62,8 @@ beforeEach(() => {
 })
 
 describe("Matching from donor cases", () => {
-    it("ranks the signed-off corneas by tissue ID and lets a doctor allocate one", async () => {
+    // The stock tab is hidden on the matching page for now; this runs again when the flag is turned back on.
+    it.skipIf(!SHOW_STOCK_ON_MATCHING)("ranks the signed-off corneas by tissue ID and lets a doctor allocate one", async () => {
         vi.mocked(matchFromCases).mockResolvedValue({
             match: {
                 analysisId: "match-1", requestId: "Q0001",
@@ -107,7 +109,8 @@ describe("Matching from donor cases", () => {
 })
 
 describe("Follow-up of grafts", () => {
-    it("records a visit and gets the recommendation for a graft", async () => {
+    // The graft list is hidden on the follow-up page for now; this runs again when the flag is turned back on.
+    it.skipIf(!SHOW_GRAFTS_ON_FOLLOWUP)("records a visit and gets the recommendation for a graft", async () => {
         vi.mocked(listGrafts).mockResolvedValue([GRAFT])
         vi.mocked(recordGraftVisit).mockImplementation(async () => {
             const ready = { ...GRAFT, missing: [], visits: [...GRAFT.visits, { month: 12 as const, ecd: 1000, cv: 46, hex: 45, visitDate: null }] }

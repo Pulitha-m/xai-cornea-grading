@@ -1,8 +1,9 @@
 import { fireEvent, screen, within } from "@testing-library/react"
 import userEvent from "@testing-library/user-event"
 import { beforeEach, describe, expect, it, vi } from "vitest"
-import { recommendFollowup, type FollowupResponse } from "@/api/recommendation"
+import { listRecommendationRuns, recommendFollowup, type FollowupResponse } from "@/api/recommendation"
 import { ApiError } from "@/lib/api-client"
+import { SHOW_FOLLOWUP_RISK } from "@/lib/feature-flags"
 import { makeAuth, makeUser, renderApp } from "@/test/auth-test-utils"
 
 vi.mock(import("@/api/transplants"), async (importOriginal) => ({
@@ -12,6 +13,7 @@ vi.mock(import("@/api/transplants"), async (importOriginal) => ({
 vi.mock(import("@/api/recommendation"), async (importOriginal) => ({
     ...(await importOriginal()),
     recommendFollowup: vi.fn(),
+    listRecommendationRuns: vi.fn(),
 }))
 
 const RED: FollowupResponse = {
@@ -50,7 +52,7 @@ const RED: FollowupResponse = {
     disclaimer: "Decision support only. Follow-up decisions rest with the treating clinician.",
 }
 
-async function fillAndSubmit(options: { skip3m?: boolean; leaveOut?: string } = {}) {
+async function fillAndSubmit(options: { skip3m?: boolean; leaveOut?: string; override?: Record<string, string> } = {}) {
     const user = userEvent.setup()
     const fields: [string, string][] = [
         ["Graft ID", "G0001"], ["Donor age", "60"], ["Donor ECD", "2700"], ["Donor CV", "36"], ["Donor HEX", "56"],
@@ -60,7 +62,7 @@ async function fillAndSubmit(options: { skip3m?: boolean; leaveOut?: string } = 
     if (!options.skip3m) fields.push(["3-month ECD", "2300"], ["3-month CV", "38"], ["3-month HEX", "54"])
     for (const [label, value] of fields) {
         if (label === options.leaveOut) continue
-        await user.type(await screen.findByLabelText(new RegExp(`^${label}`)), value)
+        await user.type(await screen.findByLabelText(new RegExp(`^${label}`)), options.override?.[label] ?? value)
     }
     await user.click(screen.getByRole("button", { name: "Get recommendation" }))
     return user
@@ -68,12 +70,12 @@ async function fillAndSubmit(options: { skip3m?: boolean; leaveOut?: string } = 
 
 beforeEach(() => {
     vi.mocked(recommendFollowup).mockReset()
+    vi.mocked(listRecommendationRuns).mockResolvedValue({ items: [], nextBefore: null })
 })
 
 describe("FollowupPage", () => {
     it("is in the navigation for clinical roles and is no longer 'coming soon'", async () => {
         renderApp("/post-transplant", makeAuth({ user: makeUser("NURSE") }))
-        await userEvent.setup().click(await screen.findByRole("radio", { name: "Enter values by hand" }))
         expect(await screen.findByRole("link", { name: /Post-transplant follow-up/ })).toHaveAttribute("href", "/post-transplant")
         expect(screen.getByRole("heading", { name: "Post-transplant follow-up", level: 1 })).toBeInTheDocument()
         expect(screen.getAllByText(/Decision support only/).length).toBeGreaterThan(0)
@@ -85,10 +87,10 @@ describe("FollowupPage", () => {
         expect(screen.queryByRole("link", { name: /Post-transplant follow-up/ })).not.toBeInTheDocument()
     })
 
-    it("sends the visits and shows the alert, next visit, predictions, risk and reasons", async () => {
+    // Risk, alert and what-if are outside the current scope (SHOW_FOLLOWUP_RISK); these run again when it is turned on.
+    it.skipIf(!SHOW_FOLLOWUP_RISK)("sends the visits and shows the alert, next visit, predictions, risk and reasons", async () => {
         vi.mocked(recommendFollowup).mockResolvedValue(RED)
         renderApp("/post-transplant", makeAuth({ user: makeUser("DOCTOR") }))
-        await userEvent.setup().click(await screen.findByRole("radio", { name: "Enter values by hand" }))
 
         await fillAndSubmit()
 
@@ -117,13 +119,12 @@ describe("FollowupPage", () => {
         expect(screen.queryByText(/simulated/i)).not.toBeInTheDocument()
     })
 
-    it("what-if recalculates with a changed 12-month ECD and compares the alert", async () => {
+    it.skipIf(!SHOW_FOLLOWUP_RISK)("what-if recalculates with a changed 12-month ECD and compares the alert", async () => {
         vi.mocked(recommendFollowup).mockResolvedValueOnce(RED).mockResolvedValueOnce({
             ...RED, alert: "green", nextVisitMonths: 12,
             risk: RED.risk.map((r) => ({ ...r, probability: 0.01 })),
         })
         renderApp("/post-transplant", makeAuth({ user: makeUser("DOCTOR") }))
-        await userEvent.setup().click(await screen.findByRole("radio", { name: "Enter values by hand" }))
         const user = await fillAndSubmit()
 
         const whatIf = within(await screen.findByRole("region", { name: "What if?" }))
@@ -139,17 +140,43 @@ describe("FollowupPage", () => {
     it("accepts a missed 3-month visit", async () => {
         vi.mocked(recommendFollowup).mockResolvedValue(RED)
         renderApp("/post-transplant", makeAuth({ user: makeUser("DOCTOR") }))
-        await userEvent.setup().click(await screen.findByRole("radio", { name: "Enter values by hand" }))
 
         await fillAndSubmit({ skip3m: true })
 
-        await screen.findByText("Red alert")
+        await screen.findByRole("region", { name: /^ECD trajectory/ })
         expect(vi.mocked(recommendFollowup).mock.calls[0][0].visit3m).toBeNull()
+    })
+
+    it.skipIf(SHOW_FOLLOWUP_RISK)("shows the ECD trajectory and its reasons only, without risk or alert", async () => {
+        vi.mocked(recommendFollowup).mockResolvedValue(RED)
+        vi.mocked(listRecommendationRuns).mockResolvedValue({
+            items: [{ id: "run-1", kind: "followup", subjectId: "G0001", status: "completed", errorCode: null, methodUsed: null,
+                topRecordId: null, alert: "amber", nextVisitMonths: 6, requestedBy: "Nurse Perera", createdAt: "2026-10-20T09:00:00Z" }],
+            nextBefore: null,
+        })
+        renderApp("/post-transplant", makeAuth({ user: makeUser("DOCTOR") }))
+
+        await fillAndSubmit()
+
+        const trajectory = within(await screen.findByRole("region", { name: "ECD trajectory for G0001" }))
+        expect(trajectory.getByText("Predicted to reach the 500 cells/mm² failure level by month 36 (3 years): 380.")).toBeInTheDocument()
+        expect(trajectory.getByRole("img", { name: /predicted 24 months 542 \(485–641\)/ })).toBeInTheDocument()
+        expect(trajectory.getByRole("cell", { name: "485–641" })).toBeInTheDocument()
+        const why = within(screen.getByRole("region", { name: "Why" }))
+        expect(why.getByText("early cell loss")).toBeInTheDocument()
+        expect(why.getByText("-28.4%")).toBeInTheDocument()
+        expect(why.queryByText("×22.52")).not.toBeInTheDocument()
+        for (const hidden of ["Red alert", "Risk after this visit", "What if?", "Next visit in 3 months"]) {
+            expect(screen.queryByText(hidden)).not.toBeInTheDocument()
+        }
+        expect(screen.getByText(/Risk of graft failure, alert level and next visit: in development/)).toBeInTheDocument()
+        const previous = within(screen.getByRole("region", { name: "Previous runs" }))
+        expect(await previous.findByText("ECD trajectory predicted")).toBeInTheDocument()
+        expect(previous.queryByText("amber alert")).not.toBeInTheDocument()
     })
 
     it("lists missing values instead of calling the server", async () => {
         renderApp("/post-transplant", makeAuth({ user: makeUser("DOCTOR") }))
-        await userEvent.setup().click(await screen.findByRole("radio", { name: "Enter values by hand" }))
 
         await fillAndSubmit({ leaveOut: "12-month ECD" })
 
@@ -157,11 +184,58 @@ describe("FollowupPage", () => {
         expect(recommendFollowup).not.toHaveBeenCalled()
     })
 
+    it("rejects impossible values instead of calling the server", async () => {
+        renderApp("/post-transplant", makeAuth({ user: makeUser("DOCTOR") }))
+
+        await fillAndSubmit({ override: { "Donor ECD": "27000", "12-month CV": "460" } })
+
+        expect(await screen.findByText(
+            "Not possible: Donor ECD must be above 0 and at most 5000; 12-month CV must be between 0 and 100.",
+        )).toBeInTheDocument()
+        expect(recommendFollowup).not.toHaveBeenCalled()
+    })
+
+    it("shows the values to check above the recommendation", async () => {
+        vi.mocked(recommendFollowup).mockResolvedValue({
+            ...RED, warnings: ["ECD rises from 1700 (6 months) to 2600 (12 months). Endothelial cells do not regenerate: check for a typing error."],
+        })
+        renderApp("/post-transplant", makeAuth({ user: makeUser("DOCTOR") }))
+
+        await fillAndSubmit()
+
+        const check = within(await screen.findByRole("region", { name: "Check these values" }))
+        expect(check.getByText(/ECD rises from 1700/)).toBeInTheDocument()
+        expect(screen.getByRole("region", { name: /^ECD trajectory/ })).toBeInTheDocument()
+    })
+
+    it("accepts only a study code as graft ID", async () => {
+        renderApp("/post-transplant", makeAuth({ user: makeUser("DOCTOR") }))
+
+        await fillAndSubmit({ override: { "Graft ID": "12656L" } })
+
+        expect(await screen.findByText(/12656L looks like a real NEBSL tissue ID/)).toBeInTheDocument()
+        expect(recommendFollowup).not.toHaveBeenCalled()
+    })
+
+    it.skipIf(!SHOW_FOLLOWUP_RISK)("lists previous follow-up recommendations with their alert", async () => {
+        vi.mocked(listRecommendationRuns).mockResolvedValue({
+            items: [{ id: "run-1", kind: "followup", subjectId: "G0001", status: "completed", errorCode: null, methodUsed: null,
+                topRecordId: null, alert: "amber", nextVisitMonths: 6, requestedBy: "Nurse Perera", createdAt: "2026-10-20T09:00:00Z" }],
+            nextBefore: null,
+        })
+        renderApp("/post-transplant", makeAuth({ user: makeUser("NURSE") }))
+
+        const previous = within(await screen.findByRole("region", { name: "Previous runs" }))
+        expect(await previous.findByText("G0001")).toBeInTheDocument()
+        expect(previous.getByText("amber alert")).toBeInTheDocument()
+        expect(previous.getByText("next visit in 6 months")).toBeInTheDocument()
+        expect(vi.mocked(listRecommendationRuns).mock.calls[0][0]).toBe("followup")
+    })
+
     it("shows a server rejection", async () => {
         vi.mocked(recommendFollowup).mockRejectedValue(
             new ApiError(503, "The follow-up model is unavailable. Try again later.", {}, "MODEL_NOT_READY"))
         renderApp("/post-transplant", makeAuth({ user: makeUser("DOCTOR") }))
-        await userEvent.setup().click(await screen.findByRole("radio", { name: "Enter values by hand" }))
 
         await fillAndSubmit()
 

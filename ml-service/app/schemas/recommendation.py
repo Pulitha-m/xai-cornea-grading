@@ -1,9 +1,14 @@
 """Request/response models for the donor-tissue ranking endpoint."""
 from typing import Literal
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 
 Grade = Literal["A+", "A", "B", "C"]
+Indication = Literal["Fuchs/Endothelial", "Bullous keratopathy", "Failed/Re-graft", "Other"]
+
+
+def warnings_field():
+    return Field(default_factory=list, description="Values that are possible but unusual: check them; not a rejection")
 
 
 class MatchRequestInfo(BaseModel):
@@ -16,12 +21,12 @@ class MatchRequestInfo(BaseModel):
 class Candidate(BaseModel):
     record_id: str = Field(..., description="Study code for the tissue, e.g. R0233")
     grade: Grade | None = None
-    ecd: float | None = Field(None, ge=0)
-    cv: float | None = Field(None, ge=0)
+    ecd: float | None = Field(None, ge=0, le=5000)
+    cv: float | None = Field(None, ge=0, le=100)
     hex: float | None = Field(None, ge=0, le=100)
-    donor_age: float | None = Field(None, ge=0)
-    death_to_preservation_h: float | None = Field(None, ge=0)
-    days_in_storage: float | None = Field(None, ge=0)
+    donor_age: float | None = Field(None, ge=0, le=100)
+    death_to_preservation_h: float | None = Field(None, ge=0, le=72)
+    days_in_storage: float | None = Field(None, ge=0, le=60)
     serology_clear: Literal["Yes", "No", "Unknown"] | None = "Unknown"
 
 
@@ -33,6 +38,13 @@ class WeightsIn(BaseModel):
     freshness: float | None = Field(None, ge=0)
     surgery_compatibility: float | None = Field(None, ge=0)
 
+    @model_validator(mode="after")
+    def not_all_zero(self):
+        values = self.model_dump().values()
+        if all(v is not None for v in values) and sum(values) == 0:
+            raise ValueError("at least one weight must be above 0")
+        return self
+
 
 class MatchRequest(BaseModel):
     request: MatchRequestInfo
@@ -41,6 +53,18 @@ class MatchRequest(BaseModel):
     weights: WeightsIn | None = None
     method: Literal["ml", "mcda"] | None = Field(
         "ml", description="ml = trained ranker (default), mcda = rule-based baseline")
+
+    @model_validator(mode="after")
+    def unique_tissue_ids(self):
+        seen, duplicates = set(), []
+        for c in self.candidates:
+            key = c.record_id.strip().upper()
+            if key in seen and c.record_id not in duplicates:
+                duplicates.append(c.record_id)
+            seen.add(key)
+        if duplicates:
+            raise ValueError(f"duplicate tissue ID: {', '.join(duplicates)}")
+        return self
 
 
 class ReasonEffect(BaseModel):
@@ -78,6 +102,7 @@ class MatchResponse(BaseModel):
     method_used: str = "mcda"
     model: str = "mcda-baseline-v1"
     model_summary: dict[str, float | str] | None = None
+    warnings: list[str] = warnings_field()
     disclaimer: str = "Decision support only. The final allocation decision rests with the clinician."
 
 
@@ -92,7 +117,7 @@ class FollowupVisit(BaseModel):
 class FollowupRequest(BaseModel):
     graft_id: str = Field(..., description="Study code for the graft, e.g. G0012")
     procedure: Literal["PK", "DSEK", "DMEK"]
-    indication: str = Field(..., description="e.g. Fuchs/Endothelial, Bullous keratopathy, Failed/Re-graft, Other")
+    indication: Indication
     donor_age: float = Field(..., ge=0, le=100)
     baseline_ecd: float = Field(..., gt=0, le=5000, description="Donor ECD before surgery")
     baseline_cv: float = Field(..., ge=0, le=100)
@@ -149,4 +174,5 @@ class FollowupResponse(BaseModel):
     model_version: str
     rules_version: str | None
     data_source: str
+    warnings: list[str] = warnings_field()
     disclaimer: str

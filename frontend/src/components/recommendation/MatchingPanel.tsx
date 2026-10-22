@@ -5,6 +5,7 @@ import { ApiError } from "@/lib/api-client"
 import {
     GRADES, NUMBER_COLUMNS, SEROLOGY, SURGERIES, emptyRow, toCandidates, type CandidateRow,
 } from "@/lib/matching-form"
+import { studyIdPlaceholder } from "@/lib/study-id"
 import { alertError, primaryButton, tableCell, tableHead, tableHeaderCell, textInput } from "@/lib/styles"
 import { Card } from "@/components/dashboard/PageHeader"
 import { Spinner } from "@/components/ui/spinner"
@@ -15,13 +16,14 @@ const cellInput = `${textInput} h-9 min-w-[5.5rem] px-2.5`
 /** Enter a recipient request and the corneas in stock; get them ranked with reasons. */
 export function MatchingPanel() {
     const recommendation = useMatchRecommendation()
-    const [requestId, setRequestId] = useState("")
+    // Assigned by the backend on the first ranking; re-ranking keeps it until "New request".
+    const [requestId, setRequestId] = useState<string | null>(null)
     const [requestedGrade, setRequestedGrade] = useState<TissueGrade>("A")
     const [surgeryType, setSurgeryType] = useState("PK")
     const [urgency, setUrgency] = useState<NonNullable<MatchRequestInfo["urgency"]>>("Routine")
-    const [method, setMethod] = useState<"ml" | "mcda">("ml")
     const [rows, setRows] = useState<CandidateRow[]>(() => [emptyRow(), emptyRow()])
     const [problems, setProblems] = useState<string[]>([])
+    const [invalid, setInvalid] = useState<string[]>([])
     const ids = useId()
 
     const serverError = recommendation.error instanceof ApiError ? recommendation.error : null
@@ -35,17 +37,25 @@ export function MatchingPanel() {
 
     function handleSubmit(event: FormEvent<HTMLFormElement>) {
         event.preventDefault()
-        const { candidates, problems: found } = toCandidates(rows)
-        if (!requestId.trim()) found.unshift("request ID")
+        const { candidates, problems: found, invalid: wrong } = toCandidates(rows)
         if (rows.length === 0) found.push("at least one cornea")
         setProblems(found)
-        if (found.length) return
+        setInvalid(wrong)
+        if (found.length || wrong.length) return
         recommendation.mutate({
-            request: { requestId: requestId.trim(), requestedGrade, surgeryType, urgency },
+            request: { requestId, requestedGrade, surgeryType, urgency },
             candidates,
             topK: null,
-            method,
-        })
+            method: "ml",
+        }, { onSuccess: (data) => setRequestId(data.requestId) })
+    }
+
+    function newRequest() {
+        setRequestId(null)
+        setRows([emptyRow(), emptyRow()])
+        setProblems([])
+        setInvalid([])
+        recommendation.reset()
     }
 
     const select = <T extends string>(id: string, label: string, value: T, options: readonly T[], onChange: (v: T) => void,
@@ -68,27 +78,26 @@ export function MatchingPanel() {
 
     return (
         <div className="space-y-6">
-            <Card title="Recipient request" description="The request and every cornea currently in stock. Unknown values can be left empty.">
+            <Card title="Recipient request" description="The request and every cornea currently in stock. Corneas by study code (R0012), not the NEBSL tissue ID. Unknown values can be left empty.">
                 <form className="space-y-5" onSubmit={handleSubmit} noValidate>
-                    <div className="grid gap-4 sm:grid-cols-5">
+                    <div className="grid gap-4 sm:grid-cols-4">
                         <div>
                             <label htmlFor={`${ids}-request`} className="mb-1.5 block text-sm font-medium">Request ID</label>
                             <input
                                 id={`${ids}-request`}
-                                value={requestId}
-                                onChange={(e) => {
-                                    setRequestId(e.target.value)
-                                    recommendation.reset()
-                                }}
-                                className={textInput}
-                                placeholder="Q0012"
+                                value={requestId ?? ""}
+                                readOnly
+                                aria-describedby={`${ids}-request-hint`}
+                                className={`${textInput} bg-sunken`}
+                                placeholder="New request"
                             />
+                            <p id={`${ids}-request-hint`} className="mt-1 text-xs text-muted-foreground">
+                                {requestId ? "Re-ranking keeps this ID." : "Assigned automatically when you rank."}
+                            </p>
                         </div>
                         {select("grade", "Requested grade", requestedGrade, GRADES, setRequestedGrade)}
                         {select("surgery", "Surgery", surgeryType, SURGERIES, setSurgeryType)}
                         {select("urgency", "Urgency", urgency, ["Routine", "Emergency"] as const, setUrgency)}
-                        {select("method", "Ranking method", method, ["ml", "mcda"] as const, setMethod,
-                            { ml: "ML ranker (learned)", mcda: "MCDA (clinician weights)" })}
                     </div>
 
                     <div className="-mx-5 overflow-x-auto sm:-mx-6">
@@ -96,7 +105,7 @@ export function MatchingPanel() {
                             <caption className="sr-only">Corneas in stock</caption>
                             <thead className={tableHead}>
                                 <tr>
-                                    <th className={tableHeaderCell}>Tissue ID</th>
+                                    <th className={tableHeaderCell} title="Study code: R followed by 4 digits, e.g. R0012. Not the NEBSL tissue ID.">Tissue ID</th>
                                     <th className={tableHeaderCell}>Grade</th>
                                     {NUMBER_COLUMNS.map((c) => (
                                         <th key={c.key} className={tableHeaderCell} title={c.hint}>
@@ -112,7 +121,7 @@ export function MatchingPanel() {
                                 {rows.map((r, i) => (
                                     <tr key={r.key}>
                                         <td className={tableCell}>
-                                            <input aria-label={`Tissue ID, row ${i + 1}`} value={r.recordId}
+                                            <input aria-label={`Tissue ID, row ${i + 1}`} value={r.recordId} placeholder={studyIdPlaceholder("cornea")}
                                                 onChange={(e) => update(r.key, { recordId: e.target.value })} className={cellInput} />
                                         </td>
                                         <td className={tableCell}>
@@ -158,12 +167,21 @@ export function MatchingPanel() {
                     {problems.length > 0 && (
                         <p role="alert" className={alertError}>Missing or not a number: {problems.join(", ")}.</p>
                     )}
+                    {invalid.length > 0 && (
+                        <p role="alert" className={alertError}>Not possible: {invalid.join("; ")}.</p>
+                    )}
                     {generalError && <p role="alert" className={alertError}>{generalError}</p>}
 
-                    <div>
+                    <div className="flex flex-wrap items-center gap-3">
                         <button type="submit" className={primaryButton} disabled={recommendation.isPending}>
                             {recommendation.isPending ? <><Spinner /> Ranking…</> : "Rank corneas"}
                         </button>
+                        {requestId && (
+                            <button type="button" onClick={newRequest}
+                                className="h-10 rounded-full border border-border px-4 text-sm font-medium hover:bg-sunken">
+                                New request
+                            </button>
+                        )}
                     </div>
                 </form>
             </Card>

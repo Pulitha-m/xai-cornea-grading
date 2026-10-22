@@ -6,7 +6,8 @@ import java.util.UUID;
 
 /**
  * Mirrors ml-service's POST /recommendation/match response; {@code analysisId} is added by the backend.
- * Positive-serology corneas are never ranked: they are listed in {@code excluded}.
+ * Positive-serology corneas are never ranked: they are listed in {@code excluded}. {@code warnings} lists
+ * possible but unusual values to check; they do not change the ranking.
  */
 public record MatchResponse(
         UUID analysisId,
@@ -18,11 +19,21 @@ public record MatchResponse(
         String methodUsed,
         String model,
         Map<String, Object> modelSummary,
-        String disclaimer
+        String disclaimer,
+        List<String> warnings
 ) {
+
+    /** Without warnings (callers that build a response themselves). */
+    public MatchResponse(UUID analysisId, String requestId, List<RankedCandidate> ranked,
+                         List<ExcludedCandidate> excluded, Map<String, Double> weightsUsed,
+                         Boolean endotheliumConsidered, String methodUsed, String model,
+                         Map<String, Object> modelSummary, String disclaimer) {
+        this(analysisId, requestId, ranked, excluded, weightsUsed, endotheliumConsidered, methodUsed, model,
+                modelSummary, disclaimer, List.of());
+    }
 
     public MatchResponse withAnalysisId(UUID id) {
         return new MatchResponse(id, requestId, ranked, excluded, weightsUsed, endotheliumConsidered, methodUsed,
-                model, modelSummary, disclaimer);
+                model, modelSummary, disclaimer, warnings == null ? List.of() : warnings);
     }
 }

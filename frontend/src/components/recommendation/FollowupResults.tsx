@@ -5,6 +5,9 @@ import { alertWarning, tableCell, tableHead, tableHeaderCell, tableRow } from "@
 import { Card } from "@/components/dashboard/PageHeader"
 import { StatusBadge, type StatusTone } from "@/components/ui/status-badge"
 import { DivergingBars, RiskMeter, TrajectoryChart } from "@/components/recommendation/charts"
+import { DataWarnings } from "@/components/recommendation/DataWarnings"
+import { SHOW_FOLLOWUP_RISK } from "@/lib/feature-flags"
+import { trajectorySummary } from "@/lib/trajectory-summary"
 
 const ALERT: Record<AlertLevel, { tone: StatusTone; label: string }> = {
     green: { tone: "success", label: "Green" },
@@ -32,11 +35,18 @@ export function FollowupResults({ result, request }: { result: FollowupResponse;
 
     return (
         <div className="space-y-6">
-            <Card
+            <DataWarnings warnings={result.warnings} />
+            {SHOW_FOLLOWUP_RISK && <Card
                 title={`Recommendation for ${result.graftId}`}
-                actions={<StatusBadge tone={alert.tone}>{alert.label} alert</StatusBadge>}
+                actions={<>
+                    <StatusBadge tone="neutral">Preliminary</StatusBadge>
+                    <StatusBadge tone={alert.tone}>{alert.label} alert</StatusBadge>
+                </>}
             >
                 <p className="text-lg font-semibold">Next visit in {result.nextVisitMonths} months</p>
+                <p className="mt-1 text-xs text-muted-foreground">
+                    Provisional: the alert thresholds and visit intervals are still being agreed with NEBSL.
+                </p>
                 <ul className="mt-3 list-disc space-y-1 pl-5 text-sm">
                     {result.actions.map((a) => <li key={a}>{a}</li>)}
                 </ul>
@@ -44,9 +54,11 @@ export function FollowupResults({ result, request }: { result: FollowupResponse;
                     <span className="font-medium text-foreground">Why this alert: </span>
                     {result.rulesFired.length > 0 ? result.rulesFired.join("; ") : "no alert rule was triggered"}
                 </p>
-            </Card>
+            </Card>}
 
-            <Card title="ECD trajectory" description="Measured visits and the predicted endothelial cell density, with the uncertainty band.">
+            <Card title={SHOW_FOLLOWUP_RISK ? "ECD trajectory" : `ECD trajectory for ${result.graftId}`}
+                description="Measured visits and the predicted endothelial cell density, with the uncertainty band.">
+                <TrajectoryReading ecd12m={request.visit12m.ecd} predicted={result.predictedEcd} />
                 <TrajectoryChart observed={observed} predicted={result.predictedEcd} bandLevel={result.bandLevel} />
                 <table className="mt-4 w-full text-sm">
                     <caption className="sr-only">Predicted ECD</caption>
@@ -60,7 +72,9 @@ export function FollowupResults({ result, request }: { result: FollowupResponse;
                     <tbody>
                         {result.predictedEcd.map((p) => (
                             <tr key={p.months} className={tableRow}>
-                                <td className={tableCell}>{p.months}</td>
+                                <td className={tableCell}>
+                                    {p.months} <span className="text-muted-foreground">({p.months / 12} year{p.months === 12 ? "" : "s"})</span>
+                                </td>
                                 <td className={`${tableCell} font-semibold tabular-nums`}>{p.ecd}</td>
                                 <td className={`${tableCell} tabular-nums text-muted-foreground`}>{p.low}–{p.high}</td>
                             </tr>
@@ -69,8 +83,9 @@ export function FollowupResults({ result, request }: { result: FollowupResponse;
                 </table>
             </Card>
 
-            <div className="grid gap-6 lg:grid-cols-2">
-                <Card title="Risk after this visit" description="Recalibrated probability; the black mark is the alert threshold.">
+            <div className={SHOW_FOLLOWUP_RISK ? "grid gap-6 lg:grid-cols-2" : undefined}>
+                {SHOW_FOLLOWUP_RISK && <Card title="Risk after this visit" description="Recalibrated probability; the black mark is the alert threshold."
+                    actions={<StatusBadge tone="neutral">Preliminary</StatusBadge>}>
                     <div className="space-y-4">
                         <RiskMeter label="Graft failure within 12 months" probability={riskOf(result, "graft_failure", 12)}
                             threshold={t.red_failure_risk_12m ?? null} thresholdLabel="red" />
@@ -98,11 +113,11 @@ export function FollowupResults({ result, request }: { result: FollowupResponse;
                             ))}
                         </tbody>
                     </table>
-                </Card>
+                </Card>}
 
                 <Card title="Why" description="What drives this graft's prediction compared with an average graft.">
                     <div className="space-y-5">
-                        {result.reasons.graftFailure.length > 0 && (
+                        {SHOW_FOLLOWUP_RISK && result.reasons.graftFailure.length > 0 && (
                             <DivergingBars
                                 title="Graft-failure risk (hazard ratio)"
                                 items={result.reasons.graftFailure.map((r) => ({
@@ -124,20 +139,33 @@ export function FollowupResults({ result, request }: { result: FollowupResponse;
                                 unfavourableLabel="lowers ECD"
                             />
                         )}
-                        {result.counterfactuals.map((c) => (
+                        {SHOW_FOLLOWUP_RISK && result.counterfactuals.map((c) => (
                             <p key={c} className="text-sm text-muted-foreground">{c}</p>
                         ))}
                     </div>
                 </Card>
             </div>
 
-            <WhatIf request={request} current={result} />
+            {SHOW_FOLLOWUP_RISK && <WhatIf request={request} current={result} />}
 
             <AboutFollowupModel result={result} />
 
             <p className={alertWarning}>{result.disclaimer}</p>
         </div>
     )
+}
+
+const READING_STYLE = {
+    success: "border-success/20 bg-success-soft",
+    warning: "border-warning/20 bg-warning-soft",
+    danger: "border-destructive/20 bg-destructive-soft",
+} as const
+
+/** One sentence: where this graft's predicted ECD goes relative to the 1000 and 500 levels on the chart. */
+function TrajectoryReading({ ecd12m, predicted }: { ecd12m: number; predicted: FollowupResponse["predictedEcd"] }) {
+    if (predicted.length === 0) return null
+    const { tone, text } = trajectorySummary(ecd12m, predicted)
+    return <p className={`mb-4 rounded-2xl border px-3.5 py-3 text-sm font-medium ${READING_STYLE[tone]}`}>{text}</p>
 }
 
 /** Change the 12-month ECD and recalculate: shows how the alert and risk respond. */
@@ -197,8 +225,15 @@ function AboutFollowupModel({ result }: { result: FollowupResponse }) {
             <summary className="cursor-pointer font-semibold">About this model</summary>
             <ul className="mt-3 list-disc space-y-1.5 pl-5 text-muted-foreground">
                 <li>Research prototype: not yet validated on patient follow-up data. For decision-support research only.</li>
-                <li>Predicted ECD: gradient-boosting model with an uncertainty band. Risks: Cox model with recalibrated probabilities.</li>
-                <li>Alert thresholds are placeholders until agreed with clinicians (rules {result.rulesVersion ?? "not versioned"}).</li>
+                <li>Predicted ECD: gradient-boosting model with an uncertainty band.</li>
+                {SHOW_FOLLOWUP_RISK ? (
+                    <>
+                        <li>Risks: Cox model with recalibrated probabilities.</li>
+                        <li>Alert thresholds are placeholders until agreed with clinicians (rules {result.rulesVersion ?? "not versioned"}).</li>
+                    </>
+                ) : (
+                    <li>Risk of graft failure, alert level and next visit: in development (to be agreed with NEBSL clinicians).</li>
+                )}
                 <li>Model {result.model}, version {result.modelVersion}.</li>
             </ul>
         </details>

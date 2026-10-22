@@ -98,12 +98,12 @@ def main() -> None:
         from recommendation.reporting.meeting_pack import build_pack
 
         out = Path(cfg["paths"]["outputs"]) / "review" / "nebsl_meeting_pack.xlsx"
-        counts = build_pack(cfg["paths"]["raw_workbook"], out)
+        counts = build_pack(cfg, out)
         print("\nMeeting pack sheets (rows):")
         for k, v in counts.items():
             print(f"   {k:<18} {v}")
         print(f"\nSaved: {out}")
-        print("Contains NEBSL Tissue_IDs: keep it on this laptop / with NEBSL. Do not email or commit it.")
+        print("No patient or tissue data. After the meeting: main ahp --file <filled workbook> --apply")
     elif a.task == "ahp":
         from datetime import date
         from pathlib import Path

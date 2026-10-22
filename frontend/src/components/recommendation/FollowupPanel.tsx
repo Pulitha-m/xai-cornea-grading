@@ -3,6 +3,7 @@ import type { FollowupRequest } from "@/api/recommendation"
 import { useFollowupRecommendation } from "@/hooks/use-recommendation"
 import { ApiError } from "@/lib/api-client"
 import { EMPTY_FOLLOWUP, MEASURES, VISITS, toFollowupRequest, type FollowupValues, type VisitKey } from "@/lib/followup-form"
+import { studyIdPlaceholder } from "@/lib/study-id"
 import { alertError, primaryButton, textInput } from "@/lib/styles"
 import { Card } from "@/components/dashboard/PageHeader"
 import { Spinner } from "@/components/ui/spinner"
@@ -19,6 +20,7 @@ export function FollowupPanel() {
     const [indication, setIndication] = useState(INDICATIONS[0])
     const [rejection, setRejection] = useState(false)
     const [missing, setMissing] = useState<string[]>([])
+    const [invalid, setInvalid] = useState<string[]>([])
     const [sent, setSent] = useState<FollowupRequest | null>(null)
     const ids = useId()
 
@@ -33,15 +35,16 @@ export function FollowupPanel() {
 
     function handleSubmit(event: FormEvent<HTMLFormElement>) {
         event.preventDefault()
-        const { request, missing: gaps } = toFollowupRequest(values, procedure, indication, rejection)
+        const { request, missing: gaps, invalid: wrong } = toFollowupRequest(values, procedure, indication, rejection)
         setMissing(gaps)
+        setInvalid(wrong)
         if (request) {
             setSent(request)
             recommendation.mutate(request)
         }
     }
 
-    const input = (key: keyof FollowupValues, label: string, unit?: string) => (
+    const input = (key: keyof FollowupValues, label: string, unit?: string, placeholder?: string) => (
         <div>
             <label htmlFor={`${ids}-${key}`} className="mb-1.5 block text-sm font-medium">
                 {label}
@@ -49,7 +52,8 @@ export function FollowupPanel() {
             </label>
             <input
                 id={`${ids}-${key}`}
-                inputMode="decimal"
+                inputMode={key === "graftId" ? "text" : "decimal"}
+                placeholder={placeholder}
                 value={values[key]}
                 onChange={(e) => set(key, e.target.value)}
                 className={textInput}
@@ -65,7 +69,7 @@ export function FollowupPanel() {
             >
                 <form className="space-y-5" onSubmit={handleSubmit} noValidate>
                     <div className="grid gap-4 sm:grid-cols-3">
-                        {input("graftId", "Graft ID")}
+                        {input("graftId", "Graft ID", "study code", studyIdPlaceholder("graft"))}
                         <div>
                             <label htmlFor={`${ids}-procedure`} className="mb-1.5 block text-sm font-medium">Procedure</label>
                             <select
@@ -128,6 +132,9 @@ export function FollowupPanel() {
 
                     {missing.length > 0 && (
                         <p role="alert" className={alertError}>Missing or not a number: {missing.join(", ")}.</p>
+                    )}
+                    {invalid.length > 0 && (
+                        <p role="alert" className={alertError}>Not possible: {invalid.join("; ")}.</p>
                     )}
                     {generalError && <p role="alert" className={alertError}>{generalError}</p>}
 
