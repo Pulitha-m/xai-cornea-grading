@@ -18,7 +18,7 @@ vi.mock(import("@/api/analysis"), async (importOriginal) => ({
 }))
 
 const GRADING_MESSAGE =
-    "Grade from the hybrid model (24 Konan and slit-lamp inputs plus image features). In nested cross-validation it was not better than the ECD rule shown below. Specialist confirmation required."
+    "Grade from the hybrid model (24 Konan and slit-lamp inputs plus image features). Decision support only. Specialist confirmation required."
 
 const ECD_REFERENCE: EcdReference = {
     status: "completed",
@@ -153,7 +153,7 @@ describe("AnalysisPage", () => {
         expect(within(moduleCard("Recommendation")).getByText("Suitable for further evaluation")).toBeInTheDocument()
     })
 
-    it("shows the model grade with uncalibrated tree votes and the ECD rule as a reference", async () => {
+    it("shows the model grade with uncalibrated tree votes and no ECD rule", async () => {
         vi.mocked(analyzeCornea).mockResolvedValue(RESPONSE)
         renderApp("/analysis", makeAuth({ user: makeUser("DOCTOR") }))
 
@@ -164,9 +164,8 @@ describe("AnalysisPage", () => {
         expect(grade.getByText("Inputs recorded").parentElement).toHaveTextContent(/^Inputs recorded2 of 24$/)
         expect(grade.getByText("Not calibrated — not a confidence")).toBeInTheDocument()
         expect(grade.getByText("63%")).toBeInTheDocument()
-        expect(grade.getByText("ECD rule grade").parentElement).toHaveTextContent(/^ECD rule gradeA$/)
-        expect(grade.getByText("2,232 < ECD ≤ 2,497")).toBeInTheDocument()
-        expect(grade.getByText(/94 training tissues in this band/)).toBeInTheDocument()
+        expect(grade.queryByText(/ECD rule/)).not.toBeInTheDocument()
+        expect(grade.queryByText(/training tissues in this band/)).not.toBeInTheDocument()
         expect(grade.getByText("22 inputs not recorded")).toBeInTheDocument()
         expect(grade.queryByRole("meter")).not.toBeInTheDocument()
     })
@@ -181,7 +180,9 @@ describe("AnalysisPage", () => {
         expect(analyzeCornea).toHaveBeenLastCalledWith({ caseId: "12656R", imageId: "img-1", clinicalFeatures: expectedFeatures() })
         expect(grade.getByRole("alert")).toHaveTextContent("CV 80 is outside the training range")
         expect(grade.getByRole("alert")).toHaveTextContent("The image is 640 × 480 px; it was resized.")
-        expect(grade.getByText("ECD is required for automated grading. Grade this tissue manually.")).toBeInTheDocument()
+        // The ECD rule's own message is not shown: the hybrid model still grades without ECD.
+        expect(grade.queryByText(/Grade this tissue manually/)).not.toBeInTheDocument()
+        expect(grade.getByText("Predicted grade").parentElement).toHaveTextContent(/^Predicted grade/)
         expect(within(moduleCard("Cellular analysis")).getByText("This module is not available yet.")).toBeInTheDocument()
     })
 

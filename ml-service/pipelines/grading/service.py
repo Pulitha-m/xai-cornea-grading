@@ -129,8 +129,8 @@ def run_grading_analysis(values: dict, warnings: list[dict], image, explain: boo
     reference = ecd_reference(values.get("ECD_CD_cells_per_mm2"))
 
     message = (
-        "Grade from the hybrid model (24 Konan and slit-lamp inputs plus image features). In nested "
-        "cross-validation it was not better than the ECD rule shown below. Specialist confirmation required."
+        "Grade from the hybrid model (24 Konan and slit-lamp inputs plus image features). Decision support "
+        "only. Specialist confirmation required."
     )
     if missing:
         message += f" {len(missing)} of 24 inputs were not recorded and were handled as in training."
