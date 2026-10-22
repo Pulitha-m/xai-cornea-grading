@@ -50,7 +50,7 @@ const RED: FollowupResponse = {
     disclaimer: "Decision support only. Follow-up decisions rest with the treating clinician.",
 }
 
-async function fillAndSubmit(options: { skip3m?: boolean; leaveOut?: string } = {}) {
+async function fillAndSubmit(options: { skip3m?: boolean; leaveOut?: string; override?: Record<string, string> } = {}) {
     const user = userEvent.setup()
     const fields: [string, string][] = [
         ["Graft ID", "G0001"], ["Donor age", "60"], ["Donor ECD", "2700"], ["Donor CV", "36"], ["Donor HEX", "56"],
@@ -60,7 +60,7 @@ async function fillAndSubmit(options: { skip3m?: boolean; leaveOut?: string } = 
     if (!options.skip3m) fields.push(["3-month ECD", "2300"], ["3-month CV", "38"], ["3-month HEX", "54"])
     for (const [label, value] of fields) {
         if (label === options.leaveOut) continue
-        await user.type(await screen.findByLabelText(new RegExp(`^${label}`)), value)
+        await user.type(await screen.findByLabelText(new RegExp(`^${label}`)), options.override?.[label] ?? value)
     }
     await user.click(screen.getByRole("button", { name: "Get recommendation" }))
     return user
@@ -155,6 +155,32 @@ describe("FollowupPage", () => {
 
         expect(await screen.findByText(/Missing or not a number: 12-month ECD/)).toBeInTheDocument()
         expect(recommendFollowup).not.toHaveBeenCalled()
+    })
+
+    it("rejects impossible values instead of calling the server", async () => {
+        renderApp("/post-transplant", makeAuth({ user: makeUser("DOCTOR") }))
+        await userEvent.setup().click(await screen.findByRole("radio", { name: "Enter values by hand" }))
+
+        await fillAndSubmit({ override: { "Donor ECD": "27000", "12-month CV": "460" } })
+
+        expect(await screen.findByText(
+            "Not possible: Donor ECD must be above 0 and at most 5000; 12-month CV must be between 0 and 100.",
+        )).toBeInTheDocument()
+        expect(recommendFollowup).not.toHaveBeenCalled()
+    })
+
+    it("shows the values to check above the recommendation", async () => {
+        vi.mocked(recommendFollowup).mockResolvedValue({
+            ...RED, warnings: ["ECD rises from 1700 (6 months) to 2600 (12 months). Endothelial cells do not regenerate: check for a typing error."],
+        })
+        renderApp("/post-transplant", makeAuth({ user: makeUser("DOCTOR") }))
+        await userEvent.setup().click(await screen.findByRole("radio", { name: "Enter values by hand" }))
+
+        await fillAndSubmit()
+
+        const check = within(await screen.findByRole("region", { name: "Check these values" }))
+        expect(check.getByText(/ECD rises from 1700/)).toBeInTheDocument()
+        expect(screen.getByText("Red alert")).toBeInTheDocument()
     })
 
     it("shows a server rejection", async () => {

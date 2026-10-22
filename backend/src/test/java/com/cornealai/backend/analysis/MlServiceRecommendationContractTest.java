@@ -65,6 +65,7 @@ class MlServiceRecommendationContractTest {
         assertThat(top.criterionScores()).containsKeys("grade_fit", "endothelium", "serology");
         assertThat(r.ranked().get(1).counterfactual()).contains("would be #1 if");
         assertTrue(r.disclaimer().contains("clinician"));
+        assertThat(r.warnings()).singleElement().asString().contains("14-day limit");
     }
 
     @Test
@@ -86,6 +87,7 @@ class MlServiceRecommendationContractTest {
         assertThat(r.alertThresholds()).containsKeys("red_failure_risk_12m", "amber_failure_risk_24m",
                 "amber_low_ecd_risk_24m");
         assertThat(r.modelSummary()).containsKey("graft_failure_cv_c_index");
+        assertThat(r.warnings()).singleElement().asString().contains("outside the range the model was trained on");
     }
 
     @Test

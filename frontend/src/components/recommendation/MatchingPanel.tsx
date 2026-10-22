@@ -22,6 +22,7 @@ export function MatchingPanel() {
     const [method, setMethod] = useState<"ml" | "mcda">("ml")
     const [rows, setRows] = useState<CandidateRow[]>(() => [emptyRow(), emptyRow()])
     const [problems, setProblems] = useState<string[]>([])
+    const [invalid, setInvalid] = useState<string[]>([])
     const ids = useId()
 
     const serverError = recommendation.error instanceof ApiError ? recommendation.error : null
@@ -35,11 +36,12 @@ export function MatchingPanel() {
 
     function handleSubmit(event: FormEvent<HTMLFormElement>) {
         event.preventDefault()
-        const { candidates, problems: found } = toCandidates(rows)
+        const { candidates, problems: found, invalid: wrong } = toCandidates(rows)
         if (!requestId.trim()) found.unshift("request ID")
         if (rows.length === 0) found.push("at least one cornea")
         setProblems(found)
-        if (found.length) return
+        setInvalid(wrong)
+        if (found.length || wrong.length) return
         recommendation.mutate({
             request: { requestId: requestId.trim(), requestedGrade, surgeryType, urgency },
             candidates,
@@ -157,6 +159,9 @@ export function MatchingPanel() {
 
                     {problems.length > 0 && (
                         <p role="alert" className={alertError}>Missing or not a number: {problems.join(", ")}.</p>
+                    )}
+                    {invalid.length > 0 && (
+                        <p role="alert" className={alertError}>Not possible: {invalid.join("; ")}.</p>
                     )}
                     {generalError && <p role="alert" className={alertError}>{generalError}</p>}
 

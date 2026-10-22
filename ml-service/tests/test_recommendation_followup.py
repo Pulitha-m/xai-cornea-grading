@@ -77,3 +77,22 @@ def test_missing_model_returns_model_not_ready(monkeypatch):
     monkeypatch.setattr(F, "load_model", lambda *a, **k: None)
     r = _post()
     assert r.status_code == 503 and r.json()["error"]["code"] == "MODEL_NOT_READY"
+
+
+def test_unknown_indication_is_rejected():
+    assert _post(indication="Keratoconus??").status_code == 422
+
+
+def test_plausible_graft_has_no_warnings():
+    assert _post().json()["warnings"] == []
+
+
+def test_unusual_values_are_warned_not_rejected():
+    r = _post(donor_age=12, baseline_ecd=1900, visit_6m={"ecd": 2400, "cv": 38, "hex": 54},
+              visit_12m={"ecd": 450, "cv": 45, "hex": 45})
+    assert r.status_code == 200
+    w = " | ".join(r.json()["warnings"])
+    assert "Donor age 12" in w and "outside the range the model was trained on" in w
+    assert "below the usual eye-bank minimum" in w
+    assert "rises from 2450 (3 months) to 2400" not in w and "rises from 1900 (donor) to 2450 (3 months)" in w
+    assert "already failed" in w

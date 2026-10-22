@@ -19,6 +19,7 @@ export function FollowupPanel() {
     const [indication, setIndication] = useState(INDICATIONS[0])
     const [rejection, setRejection] = useState(false)
     const [missing, setMissing] = useState<string[]>([])
+    const [invalid, setInvalid] = useState<string[]>([])
     const [sent, setSent] = useState<FollowupRequest | null>(null)
     const ids = useId()
 
@@ -33,8 +34,9 @@ export function FollowupPanel() {
 
     function handleSubmit(event: FormEvent<HTMLFormElement>) {
         event.preventDefault()
-        const { request, missing: gaps } = toFollowupRequest(values, procedure, indication, rejection)
+        const { request, missing: gaps, invalid: wrong } = toFollowupRequest(values, procedure, indication, rejection)
         setMissing(gaps)
+        setInvalid(wrong)
         if (request) {
             setSent(request)
             recommendation.mutate(request)
@@ -128,6 +130,9 @@ export function FollowupPanel() {
 
                     {missing.length > 0 && (
                         <p role="alert" className={alertError}>Missing or not a number: {missing.join(", ")}.</p>
+                    )}
+                    {invalid.length > 0 && (
+                        <p role="alert" className={alertError}>Not possible: {invalid.join("; ")}.</p>
                     )}
                     {generalError && <p role="alert" className={alertError}>{generalError}</p>}
 

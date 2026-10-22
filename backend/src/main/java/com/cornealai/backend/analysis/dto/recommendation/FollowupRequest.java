@@ -15,7 +15,7 @@ import jakarta.validation.constraints.Size;
 public record FollowupRequest(
         @NotBlank @Size(max = 100) String graftId,
         @NotBlank @Pattern(regexp = "PK|DSEK|DMEK") String procedure,
-        @NotBlank @Size(max = 60) String indication,
+        @NotBlank @Pattern(regexp = "Fuchs/Endothelial|Bullous keratopathy|Failed/Re-graft|Other") String indication,
         @NotNull @DecimalMin("0") @DecimalMax("100") Double donorAge,
         @NotNull @DecimalMin(value = "0", inclusive = false) @DecimalMax("5000") Double baselineEcd,
         @NotNull @DecimalMin("0") @DecimalMax("100") Double baselineCv,

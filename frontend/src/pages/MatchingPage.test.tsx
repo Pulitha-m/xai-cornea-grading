@@ -159,6 +159,36 @@ describe("MatchingPage", () => {
         expect(screen.queryByText("Methods differ")).not.toBeInTheDocument()
     })
 
+    it("rejects impossible values and a tissue ID used twice instead of calling the server", async () => {
+        renderApp("/recipients", makeAuth({ user: makeUser("DOCTOR") }))
+        await userEvent.setup().click(await screen.findByRole("radio", { name: "Enter corneas by hand" }))
+        const user = userEvent.setup()
+        await user.type(await screen.findByLabelText("Request ID"), "Q0001")
+        await fillRow(user, 1, "R0001")
+        await user.type(screen.getByLabelText("Days in storage, row 1"), "400")
+        await fillRow(user, 2, "r0001")
+        await user.click(screen.getByRole("button", { name: "Rank corneas" }))
+
+        expect(await screen.findByText(
+            "Not possible: R0001: days in storage must be between 0 and 60; tissue ID r0001 is used twice.",
+        )).toBeInTheDocument()
+        expect(recommendMatch).not.toHaveBeenCalled()
+    })
+
+    it("shows the values to check above the ranking", async () => {
+        vi.mocked(recommendMatch).mockResolvedValue({ ...RANKED, warnings: ["R0002: stored 20 days, longer than the usual 14-day limit."] })
+        renderApp("/recipients", makeAuth({ user: makeUser("DOCTOR") }))
+        await userEvent.setup().click(await screen.findByRole("radio", { name: "Enter corneas by hand" }))
+        const user = userEvent.setup()
+        await user.type(await screen.findByLabelText("Request ID"), "Q0001")
+        await fillRow(user, 1, "R0001", "Yes")
+        await fillRow(user, 2, "R0002")
+        await user.click(screen.getByRole("button", { name: "Rank corneas" }))
+
+        const check = within(await screen.findByRole("region", { name: "Check these values" }))
+        expect(check.getByText("R0002: stored 20 days, longer than the usual 14-day limit.")).toBeInTheDocument()
+    })
+
     it("requires a request ID and a tissue ID on every row", async () => {
         renderApp("/recipients", makeAuth({ user: makeUser("DOCTOR") }))
         await userEvent.setup().click(await screen.findByRole("radio", { name: "Enter corneas by hand" }))

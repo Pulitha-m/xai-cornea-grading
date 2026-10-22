@@ -126,3 +126,29 @@ def test_falls_back_to_mcda_without_model(monkeypatch):
     monkeypatch.setattr(r, "rank_ml", lambda *a, **k: None)
     data = _post([_cand("R1")]).json()
     assert data["method_used"].startswith("mcda")
+
+
+def test_duplicate_tissue_ids_rejected():
+    assert _post([_cand("R1"), _cand("r1 ")]).status_code == 422
+
+
+def test_impossible_values_rejected():
+    for field, value in [("ecd", 90000), ("cv", 500), ("donor_age", 300),
+                         ("death_to_preservation_h", 100), ("days_in_storage", 400)]:
+        assert _post([_cand("R1", **{field: value})]).status_code == 422, field
+
+
+def test_all_zero_weights_rejected():
+    zero = {k: 0 for k in ("grade_fit", "endothelium", "serology", "freshness", "surgery_compatibility")}
+    assert _post([_cand("R1")], weights=zero).status_code == 422
+    assert _post([_cand("R1")], weights={**zero, "freshness": 1}).status_code == 200
+
+
+def test_unusual_values_are_warned_not_rejected():
+    r = _post([_cand("R1"), _cand("R2", days_in_storage=20, ecd=1800)])
+    assert r.status_code == 200
+    w = r.json()["warnings"]
+    assert any("R2: stored 20 days" in x for x in w) and any("R2: ECD 1800" in x for x in w)
+    assert not any(x.startswith("R1") for x in w)
+    # ECD minimum applies only to surgeries that transplant the endothelium
+    assert not any("ECD" in x for x in _post([_cand("R1", ecd=1800)], surgery="DALK").json()["warnings"])

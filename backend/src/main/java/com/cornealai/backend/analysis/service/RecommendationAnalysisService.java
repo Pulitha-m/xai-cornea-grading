@@ -4,14 +4,22 @@ import com.cornealai.backend.analysis.AnalysisRejectedException;
 import com.cornealai.backend.analysis.client.MlServiceClient;
 import com.cornealai.backend.analysis.dto.recommendation.FollowupRequest;
 import com.cornealai.backend.analysis.dto.recommendation.FollowupResponse;
+import com.cornealai.backend.analysis.dto.recommendation.MatchCandidate;
 import com.cornealai.backend.analysis.dto.recommendation.MatchRequest;
 import com.cornealai.backend.analysis.dto.recommendation.MatchResponse;
+import com.cornealai.backend.analysis.dto.recommendation.MatchWeights;
 import com.cornealai.backend.analysis.entity.RecommendationAnalysisRun;
 import com.cornealai.backend.analysis.repository.RecommendationAnalysisRunRepository;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import tools.jackson.databind.ObjectMapper;
 
+import java.util.Arrays;
+import java.util.HashSet;
+import java.util.LinkedHashSet;
+import java.util.List;
+import java.util.Locale;
+import java.util.Set;
 import java.util.UUID;
 import java.util.function.Supplier;
 
@@ -41,6 +49,7 @@ public class RecommendationAnalysisService {
         RecommendationAnalysisRun run = newRun(RecommendationAnalysisRun.MATCH, request.request().requestId(), userId);
         run.setInputsJson(objectMapper.writeValueAsString(request));
         return record(run, () -> {
+            checkMatchRequest(request);
             MatchResponse result = mlServiceClient.recommendMatch(request);
             if (result == null || result.ranked() == null) {
                 throw failed("The donor-tissue ranking could not be completed. Try again later.");
@@ -65,6 +74,29 @@ public class RecommendationAnalysisService {
             run.setNextVisitMonths(response.nextVisitMonths());
             return response;
         });
+    }
+
+    /** Checks that span several fields: each tissue ID once per request, and at least one MCDA weight above 0. */
+    private static void checkMatchRequest(MatchRequest request) {
+        Set<String> seen = new HashSet<>();
+        Set<String> duplicates = new LinkedHashSet<>();
+        for (MatchCandidate c : request.candidates()) {
+            if (!seen.add(c.recordId().strip().toUpperCase(Locale.ROOT))) {
+                duplicates.add(c.recordId().strip());
+            }
+        }
+        if (!duplicates.isEmpty()) {
+            throw invalid("DUPLICATE_TISSUE_ID", "candidates",
+                    "Each tissue ID can appear only once: " + String.join(", ", duplicates) + ".");
+        }
+        MatchWeights w = request.weights();
+        if (w != null) {
+            List<Double> values = Arrays.asList(w.gradeFit(), w.endothelium(), w.serology(), w.freshness(),
+                    w.surgeryCompatibility());
+            if (values.stream().allMatch(v -> v != null && v == 0)) {
+                throw invalid("INVALID_WEIGHTS", "weights", "At least one weight must be above 0.");
+            }
+        }
     }
 
     private RecommendationAnalysisRun newRun(String kind, String subjectId, Long userId) {
@@ -98,6 +130,10 @@ public class RecommendationAnalysisService {
             }
             throw e;
         }
+    }
+
+    private static AnalysisRejectedException invalid(String code, String field, String message) {
+        return new AnalysisRejectedException(HttpStatus.UNPROCESSABLE_CONTENT, code, field, message);
     }
 
     private static AnalysisRejectedException failed(String message) {

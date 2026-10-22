@@ -5,6 +5,7 @@ import { alertWarning, tableCell, tableHead, tableHeaderCell, tableRow } from "@
 import { Card } from "@/components/dashboard/PageHeader"
 import { StatusBadge, type StatusTone } from "@/components/ui/status-badge"
 import { DivergingBars, RiskMeter, TrajectoryChart } from "@/components/recommendation/charts"
+import { DataWarnings } from "@/components/recommendation/DataWarnings"
 
 const ALERT: Record<AlertLevel, { tone: StatusTone; label: string }> = {
     green: { tone: "success", label: "Green" },
@@ -32,6 +33,7 @@ export function FollowupResults({ result, request }: { result: FollowupResponse;
 
     return (
         <div className="space-y-6">
+            <DataWarnings warnings={result.warnings} />
             <Card
                 title={`Recommendation for ${result.graftId}`}
                 actions={<StatusBadge tone={alert.tone}>{alert.label} alert</StatusBadge>}

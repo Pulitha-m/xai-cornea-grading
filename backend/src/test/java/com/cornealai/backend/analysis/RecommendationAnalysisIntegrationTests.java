@@ -74,7 +74,8 @@ class RecommendationAnalysisIntegrationTests extends IntegrationTestSupport {
                 .andExpect(jsonPath("$.methodUsed").value("ml"))
                 .andExpect(jsonPath("$.ranked[0].rank").value(1))
                 .andExpect(jsonPath("$.ranked[0].recordId").value("R0001"))
-                .andExpect(jsonPath("$.excluded[0].recordId").value("R0004"));
+                .andExpect(jsonPath("$.excluded[0].recordId").value("R0004"))
+                .andExpect(jsonPath("$.warnings[0]").value(org.hamcrest.Matchers.containsString("14-day limit")));
 
         RecommendationAnalysisRun run = runs.findBySubjectId("Q0001").getFirst();
         assertThat(run.getKind()).isEqualTo("match");
@@ -135,7 +136,25 @@ class RecommendationAnalysisIntegrationTests extends IntegrationTestSupport {
         call(doctor, "/followup", FOLLOWUP_BODY.replace("\"visit12m\"", "\"other\"")).andExpect(status().isBadRequest());
         call(doctor, "/match", "{\"request\": {\"requestId\": \"Q1\", \"requestedGrade\": \"A\"}, \"candidates\": []}")
                 .andExpect(status().isBadRequest());
+        call(doctor, "/followup", FOLLOWUP_BODY.replace("Fuchs/Endothelial", "Keratoconus")).andExpect(status().isBadRequest());
+        call(doctor, "/match", MATCH_BODY.replace("\"ecd\": 2800", "\"ecd\": 90000")).andExpect(status().isBadRequest());
+        call(doctor, "/match", MATCH_BODY.replace("\"serologyClear\": \"Yes\"}", "\"serologyClear\": \"Yes\", \"daysInStorage\": 400}"))
+                .andExpect(status().isBadRequest());
         verifyNoInteractions(mlServiceClient);
+    }
+
+    @Test
+    void duplicateTissueIdsAndAllZeroWeightsAreRejectedAndRecorded() throws Exception {
+        call(doctor, "/match", MATCH_BODY.replace("R0004", "r0001"))
+                .andExpect(status().isUnprocessableContent())
+                .andExpect(jsonPath("$.code").value("DUPLICATE_TISSUE_ID"));
+        call(doctor, "/match", MATCH_BODY.replace("\"candidates\":", "\"weights\": {\"gradeFit\": 0, \"endothelium\": 0, "
+                + "\"serology\": 0, \"freshness\": 0, \"surgeryCompatibility\": 0}, \"candidates\":"))
+                .andExpect(status().isUnprocessableContent())
+                .andExpect(jsonPath("$.code").value("INVALID_WEIGHTS"));
+        verifyNoInteractions(mlServiceClient);
+        assertThat(runs.findBySubjectId("Q0001")).extracting(RecommendationAnalysisRun::getErrorCode)
+                .containsExactlyInAnyOrder("DUPLICATE_TISSUE_ID", "INVALID_WEIGHTS");
     }
 
     @Test

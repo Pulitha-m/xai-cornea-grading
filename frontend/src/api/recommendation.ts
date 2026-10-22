@@ -81,6 +81,8 @@ export interface MatchResponse {
     model: string
     modelSummary: Record<string, number | string> | null
     disclaimer: string
+    /** Possible but unusual values to check; they do not change the result. Absent from older runs. */
+    warnings?: string[]
 }
 
 export function recommendMatch(request: MatchRequest): Promise<MatchResponse> {
@@ -157,6 +159,8 @@ export interface FollowupResponse {
     rulesVersion: string | null
     dataSource: string
     disclaimer: string
+    /** Possible but unusual values to check; they do not change the result. Absent from older runs. */
+    warnings?: string[]
 }
 
 export function recommendFollowup(request: FollowupRequest): Promise<FollowupResponse> {

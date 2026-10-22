@@ -4,6 +4,7 @@ import { alertWarning, tableCell, tableHead, tableHeaderCell, tableRow } from "@
 import { Card } from "@/components/dashboard/PageHeader"
 import { StatusBadge } from "@/components/ui/status-badge"
 import { DivergingBars, FAVOURABLE, ScoreBars, UNFAVOURABLE } from "@/components/recommendation/charts"
+import { DataWarnings } from "@/components/recommendation/DataWarnings"
 import { rankReason, type RankReason } from "@/lib/matching-reasons"
 
 /** Ranked corneas with the reasons for their order, and the corneas that were excluded. */
@@ -16,6 +17,7 @@ export function MatchingResults({ result, labelFor }: { result: MatchResponse; l
 
     return (
         <div className="space-y-6">
+            <DataWarnings warnings={result.warnings} />
             <Card
                 title={`Ranking for ${result.requestId}`}
                 description={ml
