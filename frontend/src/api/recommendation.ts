@@ -6,8 +6,8 @@ export type TissueGrade = "A+" | "A" | "B" | "C"
 export type SerologyStatus = "Yes" | "No" | "Unknown"
 
 export interface MatchRequestInfo {
-    /** Study code of the recipient request, e.g. Q0012. */
-    requestId: string
+    /** Study code of the recipient request, e.g. Q0012. Null for a new request: the backend assigns the next free one. */
+    requestId: string | null
     requestedGrade: TissueGrade
     /** PK, DALK, DSEK, DMEK, Lamellar, Patch/Tectonic. */
     surgeryType: string | null

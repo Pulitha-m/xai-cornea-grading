@@ -185,6 +185,16 @@ describe("FollowupPage", () => {
         expect(screen.getByText("Red alert")).toBeInTheDocument()
     })
 
+    it("accepts only a study code as graft ID", async () => {
+        renderApp("/post-transplant", makeAuth({ user: makeUser("DOCTOR") }))
+        await userEvent.setup().click(await screen.findByRole("radio", { name: "Enter values by hand" }))
+
+        await fillAndSubmit({ override: { "Graft ID": "12656L" } })
+
+        expect(await screen.findByText(/12656L looks like a real NEBSL tissue ID/)).toBeInTheDocument()
+        expect(recommendFollowup).not.toHaveBeenCalled()
+    })
+
     it("lists previous follow-up recommendations with their alert", async () => {
         vi.mocked(listRecommendationRuns).mockResolvedValue({
             items: [{ id: "run-1", kind: "followup", subjectId: "G0001", status: "completed", errorCode: null, methodUsed: null,

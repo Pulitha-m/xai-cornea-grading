@@ -1,4 +1,5 @@
 import type { MatchCandidate, SerologyStatus, TissueGrade } from "@/api/recommendation"
+import { normaliseStudyId, studyIdError } from "@/lib/study-id"
 
 /** Form helpers for the donor-tissue matching page (kept out of the component file). */
 export const GRADES: TissueGrade[] = ["A+", "A", "B", "C"]
@@ -51,14 +52,17 @@ function num(v: string): number | null {
 
 /**
  * Rows -> candidates. `problems`: rows without an ID or with a value that is not a number;
- * `invalid`: impossible values (outside 0 to the column maximum) and tissue IDs used twice.
+ * `invalid`: IDs that are not study codes (R + 4 digits), impossible values (outside 0 to the column
+ * maximum) and tissue IDs used twice. IDs are sent trimmed and upper-cased.
  */
 export function toCandidates(rows: CandidateRow[]): { candidates: MatchCandidate[]; problems: string[]; invalid: string[] } {
     const problems: string[] = []
     const invalid: string[] = []
     const candidates = rows.map((r, i): MatchCandidate => {
-        const label = r.recordId.trim() || `row ${i + 1}`
-        if (!r.recordId.trim()) problems.push(`row ${i + 1}: tissue ID`)
+        const id = normaliseStudyId(r.recordId)
+        const label = id || `row ${i + 1}`
+        if (!id) problems.push(`row ${i + 1}: tissue ID`)
+        else if (studyIdError("cornea", id)) invalid.push(studyIdError("cornea", id)!)
         const value = (key: (typeof NUMBER_COLUMNS)[number]["key"], name: string) => {
             const n = num(r[key])
             if (r[key].trim() !== "" && n === null) problems.push(`${label}: ${name}`)
@@ -67,7 +71,7 @@ export function toCandidates(rows: CandidateRow[]): { candidates: MatchCandidate
             return n
         }
         return {
-            recordId: r.recordId.trim(),
+            recordId: id,
             grade: r.grade || null,
             ecd: value("ecd", "ECD"),
             cv: value("cv", "CV"),
@@ -80,9 +84,8 @@ export function toCandidates(rows: CandidateRow[]): { candidates: MatchCandidate
     })
     const seen = new Set<string>()
     for (const id of candidates.map((c) => c.recordId).filter(Boolean)) {
-        const k = id.toUpperCase()
-        if (seen.has(k) && !invalid.includes(`tissue ID ${id} is used twice`)) invalid.push(`tissue ID ${id} is used twice`)
-        seen.add(k)
+        if (seen.has(id) && !invalid.includes(`tissue ID ${id} is used twice`)) invalid.push(`tissue ID ${id} is used twice`)
+        seen.add(id)
     }
     return { candidates, problems, invalid }
 }

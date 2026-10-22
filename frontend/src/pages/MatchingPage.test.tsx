@@ -68,7 +68,7 @@ describe("MatchingPage", () => {
         await userEvent.setup().click(await screen.findByRole("radio", { name: "Enter corneas by hand" }))
         const user = userEvent.setup()
 
-        await user.type(await screen.findByLabelText("Request ID"), "Q0001")
+        await screen.findByLabelText("Request ID")
         await fillRow(user, 1, "R0001", "Yes")
         await fillRow(user, 2, "R0002")
         await user.click(screen.getByRole("button", { name: "+ Add cornea" }))
@@ -95,7 +95,8 @@ describe("MatchingPage", () => {
         expect(screen.queryByText(/not ranked/i)).not.toBeInTheDocument()
 
         const sent = vi.mocked(recommendMatch).mock.calls[0][0]
-        expect(sent.request).toEqual({ requestId: "Q0001", requestedGrade: "A", surgeryType: "PK", urgency: "Routine" })
+        expect(sent.request).toEqual({ requestId: null, requestedGrade: "A", surgeryType: "PK", urgency: "Routine" })
+        expect(screen.getByLabelText("Request ID")).toHaveValue("Q0001")
         expect(sent.method).toBe("ml")
         expect(sent.candidates.map((c) => [c.recordId, c.serologyClear, c.ecd, c.cv]))
             .toEqual([["R0001", "Yes", 2800, null], ["R0002", "Unknown", 2800, null], ["R0003", "No", 2800, null]])
@@ -109,23 +110,25 @@ describe("MatchingPage", () => {
         renderApp("/recipients", makeAuth({ user: makeUser("DOCTOR") }))
         await userEvent.setup().click(await screen.findByRole("radio", { name: "Enter corneas by hand" }))
         const user = userEvent.setup()
-        await user.type(await screen.findByLabelText("Request ID"), "Q0001")
+        await screen.findByLabelText("Request ID")
         await fillRow(user, 1, "R0001", "Yes")
         await fillRow(user, 2, "R0002")
         await user.click(screen.getByRole("button", { name: "Rank corneas" }))
 
-        expect(await screen.findByText(/does not transplant the endothelium, so MCDA does not score it/)).toBeInTheDocument()
+        expect(await screen.findByText(/does not transplant the endothelium, so the clinician-priority cross-check does not score it/)).toBeInTheDocument()
         await user.click(screen.getByRole("button", { name: "Details for R0002" }))
         const details = within(screen.getByRole("region", { name: "Details for R0002" }))
         expect(details.getByText("freshness")).toBeInTheDocument()
         expect(details.getByText("-0.20")).toBeInTheDocument()
-        expect(details.getByText(/ML rank #2, MCDA rank #2/)).toBeInTheDocument()
+        expect(details.getByText("Cross-check against clinician priorities:").parentElement).toHaveTextContent("#2")
         expect(details.getByText("grade fit")).toBeInTheDocument()
-        expect(screen.getByText(/top 3 for 43% of requests with the ML ranker and 39% with MCDA/)).toBeInTheDocument()
-        expect(screen.getByText(/not statistically significant/)).toBeInTheDocument()
+        expect(screen.getByText(/Validated by cross-validation against historical NEBSL allocations/)).toHaveTextContent("top 3 for 43% of requests")
+        expect(screen.getByText(/Cross-checked against clinician priorities: grade fit 35%/)).toBeInTheDocument()
+        // Wording rule: the output is never presented as validated or reviewed by clinicians.
+        expect(screen.queryByText(/validated with clinician|reviewed by clinician|MCDA/i)).not.toBeInTheDocument()
     })
 
-    it("shows one rank, flags rows where ML and MCDA disagree and compares them in Details", async () => {
+    it("shows one ranked list and says where the recommended cornea stands by clinician priorities", async () => {
         vi.mocked(recommendMatch).mockResolvedValue({
             ...RANKED,
             ranked: [{ ...RANKED.ranked[0], mcdaRank: 2 }, { ...RANKED.ranked[1], mcdaRank: 1 }],
@@ -133,47 +136,49 @@ describe("MatchingPage", () => {
         renderApp("/recipients", makeAuth({ user: makeUser("DOCTOR") }))
         await userEvent.setup().click(await screen.findByRole("radio", { name: "Enter corneas by hand" }))
         const user = userEvent.setup()
-        await user.type(await screen.findByLabelText("Request ID"), "Q0001")
+        await screen.findByLabelText("Request ID")
         await fillRow(user, 1, "R0001", "Yes")
         await fillRow(user, 2, "R0002")
         await user.click(screen.getByRole("button", { name: "Rank corneas" }))
 
         const ranking = within(await screen.findByRole("region", { name: "Ranking for Q0001" }))
         expect(ranking.queryByRole("columnheader", { name: /MCDA rank/i })).not.toBeInTheDocument()
-        expect(ranking.getAllByText("Methods differ")).toHaveLength(2)
+        expect(ranking.queryByText("Methods differ")).not.toBeInTheDocument()
+        expect(ranking.getByText(/ranks #2\. Review its reasons below before deciding\./)).toBeInTheDocument()
+        expect(screen.queryByLabelText("Ranking method")).not.toBeInTheDocument()
 
         await user.click(ranking.getByRole("button", { name: "Details for R0001" }))
         const details = within(screen.getByRole("region", { name: "Details for R0001" }))
-        expect(details.getByText(/ML rank #1, MCDA rank #2/)).toBeInTheDocument()
-        expect(details.getByText(/\(methods differ\)/)).toBeInTheDocument()
+        expect(details.getByText("Cross-check against clinician priorities:").parentElement).toHaveTextContent("#2")
     })
 
-    it("does not flag rows where both methods agree", async () => {
+    it("says when the recommended cornea is also first by clinician priorities", async () => {
         vi.mocked(recommendMatch).mockResolvedValue(RANKED)
         renderApp("/recipients", makeAuth({ user: makeUser("DOCTOR") }))
         await userEvent.setup().click(await screen.findByRole("radio", { name: "Enter corneas by hand" }))
         const user = userEvent.setup()
-        await user.type(await screen.findByLabelText("Request ID"), "Q0001")
+        await screen.findByLabelText("Request ID")
         await fillRow(user, 1, "R0001", "Yes")
         await fillRow(user, 2, "R0002")
         await user.click(screen.getByRole("button", { name: "Rank corneas" }))
 
-        await screen.findByRole("region", { name: "Ranking for Q0001" })
-        expect(screen.queryByText("Methods differ")).not.toBeInTheDocument()
+        const ranking = within(await screen.findByRole("region", { name: "Ranking for Q0001" }))
+        expect(ranking.getByText(/is also first\./)).toBeInTheDocument()
+        expect(vi.mocked(recommendMatch).mock.calls[0][0].method).toBe("ml")
     })
 
     it("rejects impossible values and a tissue ID used twice instead of calling the server", async () => {
         renderApp("/recipients", makeAuth({ user: makeUser("DOCTOR") }))
         await userEvent.setup().click(await screen.findByRole("radio", { name: "Enter corneas by hand" }))
         const user = userEvent.setup()
-        await user.type(await screen.findByLabelText("Request ID"), "Q0001")
+        await screen.findByLabelText("Request ID")
         await fillRow(user, 1, "R0001")
         await user.type(screen.getByLabelText("Days in storage, row 1"), "400")
         await fillRow(user, 2, "r0001")
         await user.click(screen.getByRole("button", { name: "Rank corneas" }))
 
         expect(await screen.findByText(
-            "Not possible: R0001: days in storage must be between 0 and 60; tissue ID r0001 is used twice.",
+            "Not possible: R0001: days in storage must be between 0 and 60; tissue ID R0001 is used twice.",
         )).toBeInTheDocument()
         expect(recommendMatch).not.toHaveBeenCalled()
     })
@@ -183,13 +188,68 @@ describe("MatchingPage", () => {
         renderApp("/recipients", makeAuth({ user: makeUser("DOCTOR") }))
         await userEvent.setup().click(await screen.findByRole("radio", { name: "Enter corneas by hand" }))
         const user = userEvent.setup()
-        await user.type(await screen.findByLabelText("Request ID"), "Q0001")
+        await screen.findByLabelText("Request ID")
         await fillRow(user, 1, "R0001", "Yes")
         await fillRow(user, 2, "R0002")
         await user.click(screen.getByRole("button", { name: "Rank corneas" }))
 
         const check = within(await screen.findByRole("region", { name: "Check these values" }))
         expect(check.getByText("R0002: stored 20 days, longer than the usual 14-day limit.")).toBeInTheDocument()
+    })
+
+    it("accepts only study codes, never a real NEBSL tissue ID", async () => {
+        renderApp("/recipients", makeAuth({ user: makeUser("DOCTOR") }))
+        await userEvent.setup().click(await screen.findByRole("radio", { name: "Enter corneas by hand" }))
+        const user = userEvent.setup()
+        await screen.findByLabelText("Request ID")
+        await fillRow(user, 1, "12656R")
+        await fillRow(user, 2, "T2")
+        await user.click(screen.getByRole("button", { name: "Rank corneas" }))
+
+        const alert = await screen.findByText(/^Not possible:/)
+        expect(alert).toHaveTextContent("12656R looks like a real NEBSL tissue ID; enter the study code instead (R + 4 digits, e.g. R0012)")
+        expect(alert).toHaveTextContent("Tissue ID T2 must be R followed by 4 digits, e.g. R0012")
+        expect(recommendMatch).not.toHaveBeenCalled()
+    })
+
+    it("sends tissue IDs trimmed and upper-cased", async () => {
+        vi.mocked(recommendMatch).mockResolvedValue(RANKED)
+        renderApp("/recipients", makeAuth({ user: makeUser("DOCTOR") }))
+        await userEvent.setup().click(await screen.findByRole("radio", { name: "Enter corneas by hand" }))
+        const user = userEvent.setup()
+        await screen.findByLabelText("Request ID")
+        await fillRow(user, 1, "r0001")
+        await fillRow(user, 2, "R0002")
+        await user.click(screen.getByRole("button", { name: "Rank corneas" }))
+
+        await screen.findByRole("region", { name: "Ranking for Q0001" })
+        const sent = vi.mocked(recommendMatch).mock.calls[0][0]
+        expect(sent.candidates.map((c) => c.recordId)).toEqual(["R0001", "R0002"])
+    })
+
+    it("assigns the request ID on the first ranking, keeps it on re-ranking, and clears it for a new request", async () => {
+        vi.mocked(recommendMatch).mockResolvedValue({ ...RANKED, requestId: "Q0007" })
+        renderApp("/recipients", makeAuth({ user: makeUser("DOCTOR") }))
+        await userEvent.setup().click(await screen.findByRole("radio", { name: "Enter corneas by hand" }))
+        const user = userEvent.setup()
+        const field = await screen.findByLabelText("Request ID")
+        expect(field).toHaveAttribute("readonly")
+        expect(screen.getByText("Assigned automatically when you rank.")).toBeInTheDocument()
+        await fillRow(user, 1, "R0001", "Yes")
+        await fillRow(user, 2, "R0002")
+
+        await user.click(screen.getByRole("button", { name: "Rank corneas" }))
+        await screen.findByRole("region", { name: "Ranking for Q0007" })
+        expect(field).toHaveValue("Q0007")
+        await user.click(screen.getByRole("button", { name: "Rank corneas" }))
+        await screen.findByRole("region", { name: "Ranking for Q0007" })
+        const calls = vi.mocked(recommendMatch).mock.calls.map((c) => c[0].request.requestId)
+        expect(calls).toEqual([null, "Q0007"])
+
+        await user.click(screen.getByRole("button", { name: "New request" }))
+        expect(screen.getByLabelText("Request ID")).toHaveValue("")
+        expect(screen.getByLabelText("Tissue ID, row 1")).toHaveValue("")
+        expect(screen.queryByRole("region", { name: "Ranking for Q0007" })).not.toBeInTheDocument()
     })
 
     it("says when no cornea is eligible instead of showing an empty ranking", async () => {
@@ -200,7 +260,7 @@ describe("MatchingPage", () => {
         renderApp("/recipients", makeAuth({ user: makeUser("DOCTOR") }))
         await userEvent.setup().click(await screen.findByRole("radio", { name: "Enter corneas by hand" }))
         const user = userEvent.setup()
-        await user.type(await screen.findByLabelText("Request ID"), "Q0001")
+        await screen.findByLabelText("Request ID")
         await fillRow(user, 1, "R0001", "No")
         await fillRow(user, 2, "R0002", "No")
         await user.click(screen.getByRole("button", { name: "Rank corneas" }))
@@ -240,13 +300,13 @@ describe("MatchingPage", () => {
         expect(vi.mocked(listRecommendationRuns)).toHaveBeenLastCalledWith("match", expect.objectContaining({ subject: "Q0001" }))
     })
 
-    it("requires a request ID and a tissue ID on every row", async () => {
+    it("requires a tissue ID on every row", async () => {
         renderApp("/recipients", makeAuth({ user: makeUser("DOCTOR") }))
         await userEvent.setup().click(await screen.findByRole("radio", { name: "Enter corneas by hand" }))
         const user = userEvent.setup()
         await user.click(await screen.findByRole("button", { name: "Rank corneas" }))
 
-        expect(await screen.findByText(/Missing or not a number: request ID, row 1: tissue ID/)).toBeInTheDocument()
+        expect(await screen.findByText(/Missing or not a number: row 1: tissue ID, row 2: tissue ID/)).toBeInTheDocument()
         expect(recommendMatch).not.toHaveBeenCalled()
     })
 })

@@ -3,6 +3,7 @@ package com.cornealai.backend.analysis.repository;
 import com.cornealai.backend.analysis.entity.RecommendationAnalysisRun;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Query;
 
 import java.time.Instant;
 import java.util.List;
@@ -13,6 +14,10 @@ public interface RecommendationAnalysisRunRepository extends JpaRepository<Recom
     List<RecommendationAnalysisRun> findBySubjectId(String subjectId);
 
     List<RecommendationAnalysisRun> findBySubjectIdAndKindOrderByCreatedAtDesc(String subjectId, String kind);
+
+    /** Request IDs already used by matching runs (to assign the next free one). */
+    @Query("select distinct r.subjectId from RecommendationAnalysisRun r where r.kind = 'match' and r.subjectId like 'Q%'")
+    List<String> findMatchRequestIds();
 
     // Previous runs (keyset paging by created_at): everyone's runs, or only the caller's.
     List<RecommendationAnalysisRun> findByKindAndCreatedAtBeforeOrderByCreatedAtDesc(

@@ -22,16 +22,17 @@ export function MatchingResults({ result, labelFor }: { result: MatchResponse; l
             <Card
                 title={`Ranking for ${result.requestId}`}
                 description={ml
-                    ? "Ordered by the trained ranker. Open Details to compare with the MCDA (clinician-weighted) rank."
-                    : "Ordered by the clinician-weighted MCDA score."}
-                actions={<StatusBadge tone="info">{ml ? "ML ranker" : "MCDA"}</StatusBadge>}
+                    ? "Ordered by the ranker learned from past NEBSL allocations, and cross-checked against clinician priorities."
+                    : "The learned ranker is unavailable, so the corneas are ordered by clinician priorities."}
+                actions={<StatusBadge tone="info">{ml ? "Learned ranker" : "Clinician priorities"}</StatusBadge>}
             >
                 {!result.endotheliumConsidered && (
                     <p className="mb-4 rounded-2xl border border-border bg-sunken px-3.5 py-3 text-sm text-muted-foreground">
-                        This surgery does not transplant the endothelium, so MCDA does not score it
-                        {ml ? "; the ML ranker can still weigh it, because it learned from NEBSL's past allocations" : ""}.
+                        This surgery does not transplant the endothelium, so the clinician-priority cross-check does not score it
+                        {ml ? "; the learned ranker can still weigh it, because it learned from NEBSL's past allocations" : ""}.
                     </p>
                 )}
+                {ml && result.ranked.length > 0 && <CrossCheck top={result.ranked[0]} />}
                 {result.ranked.length === 0 ? (
                     <EmptyState
                         title="No eligible cornea for this request"
@@ -61,9 +62,6 @@ export function MatchingResults({ result, labelFor }: { result: MatchResponse; l
                                             <div className="font-medium">{label(c.recordId)}</div>
                                             <div className="mt-1 flex flex-wrap gap-1">
                                                 {c.flags.map((f) => <StatusBadge key={f} tone="warning">{f}</StatusBadge>)}
-                                                {ml && c.mcdaRank !== null && c.mcdaRank !== c.rank && (
-                                                    <StatusBadge tone="info">Methods differ</StatusBadge>
-                                                )}
                                             </div>
                                         </td>
                                         <td className={tableCell}>{c.grade ?? "–"}</td>
@@ -180,19 +178,32 @@ function CandidateDetails({ candidate: c, ml }: { candidate: RankedCandidate; ml
                     unfavourableLabel="pushes down"
                 />
             ) : (
-                <p className="text-sm text-muted-foreground">MCDA reasons: {c.reasons.join(", ")}</p>
+                <p className="text-sm text-muted-foreground">Strongest criteria: {c.reasons.join(", ")}</p>
             )}
             <div>
                 {ml && c.mcdaRank !== null && (
                     <p className="mb-2 text-sm">
-                        <span className="font-medium">Method comparison:</span> ML rank #{c.rank}, MCDA rank #{c.mcdaRank}
-                        {c.mcdaRank === c.rank ? " (same)" : " (methods differ)"}
+                        <span className="font-medium">Cross-check against clinician priorities:</span> #{c.mcdaRank}
                     </p>
                 )}
-                <p className="mb-2 text-xs font-medium">MCDA criterion scores (0–1): total {c.matchScore.toFixed(2)}</p>
+                <p className="mb-2 text-xs font-medium">Clinician-priority scores (0–1): total {c.matchScore.toFixed(2)}</p>
                 <ScoreBars scores={c.criterionScores} />
             </div>
         </div>
+    )
+}
+
+/** One line above the ranking: where the recommended cornea (#1, highlighted below) stands by clinician priorities. */
+function CrossCheck({ top }: { top: RankedCandidate }) {
+    if (top.mcdaRank === null) return null
+    const agrees = top.mcdaRank === 1
+    return (
+        <p className={`mb-4 rounded-2xl border px-3.5 py-3 text-sm ${agrees ? "border-success/20 bg-success-soft" : "border-warning/20 bg-warning-soft"}`}>
+            <span className="font-medium">Cross-checked against clinician priorities: </span>
+            {agrees
+                ? "the recommended cornea is also first."
+                : `the recommended cornea ranks #${top.mcdaRank}. Review its reasons below before deciding.`}
+        </p>
     )
 }
 
@@ -203,16 +214,15 @@ function AboutMatchingModel({ result }: { result: MatchResponse }) {
         <details className="rounded-3xl border border-border bg-card px-5 py-4 text-sm shadow-bento sm:px-6">
             <summary className="cursor-pointer font-semibold">About this model</summary>
             <ul className="mt-3 list-disc space-y-1.5 pl-5 text-muted-foreground">
-                <li>Trained on real NEBSL allocations: for each past request, every cornea that was in stock on the decision date.</li>
+                <li>Learned from real NEBSL allocations: for each past request, every cornea that was in stock on the decision date.</li>
                 {s.ml_top3 !== undefined && (
                     <li>
-                        In cross-validation ({String(s.evaluation ?? "")}) the cornea NEBSL actually allocated was in the top 3 for{" "}
-                        {Math.round(Number(s.ml_top3) * 100)}% of requests with the ML ranker and {Math.round(Number(s.mcda_top3) * 100)}% with
-                        MCDA. The difference was not statistically significant, so both rankings are shown.
+                        Validated by cross-validation against historical NEBSL allocations ({String(s.evaluation ?? "")}): the cornea
+                        NEBSL actually allocated was in the top 3 for {Math.round(Number(s.ml_top3) * 100)}% of requests.
                     </li>
                 )}
                 <li>
-                    MCDA weights used: {Object.entries(w).filter(([, v]) => v > 0)
+                    Cross-checked against clinician priorities: {Object.entries(w).filter(([, v]) => v > 0)
                         .map(([k, v]) => `${k.replaceAll("_", " ")} ${Math.round(v * 100)}%`).join(", ")}.
                 </li>
                 <li>Agreement with past decisions is not the same as the clinically best choice; positive serology is always excluded.</li>

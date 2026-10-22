@@ -1,4 +1,5 @@
 import type { FollowupRequest, FollowupVisit } from "@/api/recommendation"
+import { normaliseStudyId, studyIdError } from "@/lib/study-id"
 
 /** Form helpers for the post-transplant follow-up page (kept out of the component file). */
 export const VISITS = [3, 6, 12] as const
@@ -58,8 +59,9 @@ export function toFollowupRequest(
         return { ecd: values[0] ?? 0, cv: values[1] ?? 0, hex: values[2] ?? 0 }
     }
     if (!v.graftId.trim()) missing.push("Graft ID")
+    else if (studyIdError("graft", v.graftId)) invalid.push(studyIdError("graft", v.graftId)!)
     const request: FollowupRequest = {
-        graftId: v.graftId.trim(),
+        graftId: normaliseStudyId(v.graftId),
         procedure,
         indication,
         donorAge: need("donorAge", "Donor age", "age"),

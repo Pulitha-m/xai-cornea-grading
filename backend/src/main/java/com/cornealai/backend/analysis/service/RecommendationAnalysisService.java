@@ -6,6 +6,7 @@ import com.cornealai.backend.analysis.dto.recommendation.FollowupRequest;
 import com.cornealai.backend.analysis.dto.recommendation.FollowupResponse;
 import com.cornealai.backend.analysis.dto.recommendation.MatchCandidate;
 import com.cornealai.backend.analysis.dto.recommendation.MatchRequest;
+import com.cornealai.backend.analysis.dto.recommendation.MatchRequestInfo;
 import com.cornealai.backend.analysis.dto.recommendation.MatchResponse;
 import com.cornealai.backend.analysis.dto.recommendation.MatchWeights;
 import com.cornealai.backend.analysis.dto.recommendation.RecommendationRuns.RunDetail;
@@ -31,6 +32,8 @@ import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
 import java.util.function.Supplier;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 
 /**
@@ -58,7 +61,8 @@ public class RecommendationAnalysisService {
         this.users = users;
     }
 
-    public MatchResponse match(MatchRequest request, Long userId) {
+    public MatchResponse match(MatchRequest given, Long userId) {
+        MatchRequest request = withRequestId(given);
         RecommendationAnalysisRun run = newRun(RecommendationAnalysisRun.MATCH, request.request().requestId(), userId);
         run.setInputsJson(objectMapper.writeValueAsString(request));
         return record(run, () -> {
@@ -87,6 +91,33 @@ public class RecommendationAnalysisService {
             run.setNextVisitMonths(response.nextVisitMonths());
             return response;
         });
+    }
+
+    // ---------------------------------------------------------------- request IDs
+
+    private static final Pattern REQUEST_ID = Pattern.compile("Q([0-9]{4})");
+    private int lastRequestNumber;   // last number handed out, so two requests at once never get the same one
+
+    /** A request without an ID is a new request: give it the next free study code (Q0001, Q0002, ...). */
+    private MatchRequest withRequestId(MatchRequest request) {
+        MatchRequestInfo info = request.request();
+        if (info.requestId() != null && !info.requestId().isBlank()) {
+            return request;
+        }
+        MatchRequestInfo assigned = new MatchRequestInfo(nextRequestId(), info.requestedGrade(), info.surgeryType(),
+                info.urgency());
+        return new MatchRequest(assigned, request.candidates(), request.topK(), request.weights(), request.method());
+    }
+
+    private synchronized String nextRequestId() {
+        int used = runs.findMatchRequestIds().stream().map(REQUEST_ID::matcher).filter(Matcher::matches)
+                .mapToInt(m -> Integer.parseInt(m.group(1))).max().orElse(0);
+        int next = Math.max(used, lastRequestNumber) + 1;
+        if (next > 9999) {
+            throw invalid("REQUEST_IDS_EXHAUSTED", "request.requestId", "All request IDs up to Q9999 are in use.");
+        }
+        lastRequestNumber = next;
+        return "Q%04d".formatted(next);
     }
 
     // ---------------------------------------------------------------- previous runs
