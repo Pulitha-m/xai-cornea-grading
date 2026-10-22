@@ -72,7 +72,9 @@ export function FollowupResults({ result, request }: { result: FollowupResponse;
                     <tbody>
                         {result.predictedEcd.map((p) => (
                             <tr key={p.months} className={tableRow}>
-                                <td className={tableCell}>{p.months}</td>
+                                <td className={tableCell}>
+                                    {p.months} <span className="text-muted-foreground">({p.months / 12} year{p.months === 12 ? "" : "s"})</span>
+                                </td>
                                 <td className={`${tableCell} font-semibold tabular-nums`}>{p.ecd}</td>
                                 <td className={`${tableCell} tabular-nums text-muted-foreground`}>{p.low}–{p.high}</td>
                             </tr>

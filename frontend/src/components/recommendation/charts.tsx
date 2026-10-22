@@ -54,9 +54,11 @@ export function TrajectoryChart({
                     </g>
                 ))}
                 {xTicks.map((m) => (
-                    <text key={m} x={x(m)} y={H - B + 18} textAnchor="middle" fontSize={11} fill={MUTED}>{m}</text>
+                    <text key={m} x={x(m)} y={H - B + 18} textAnchor="middle" fontSize={11} fill={MUTED}>
+                        {m >= 12 && m % 12 === 0 ? `${m} (${m / 12}y)` : m}
+                    </text>
                 ))}
-                <text x={(L + W - R) / 2} y={H - 4} textAnchor="middle" fontSize={11} fill={MUTED}>Months after surgery</text>
+                <text x={(L + W - R) / 2} y={H - 4} textAnchor="middle" fontSize={11} fill={MUTED}>Months after surgery (years)</text>
                 <line x1={L} x2={W - R} y1={y(0)} y2={y(0)} stroke={AXIS} strokeWidth={1} />
 
                 {[{ v: 1000, label: "Low ECD 1000" }, { v: 500, label: "Failure 500" }].map((r) => (

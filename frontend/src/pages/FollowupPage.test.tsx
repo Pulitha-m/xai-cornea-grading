@@ -159,7 +159,7 @@ describe("FollowupPage", () => {
         await fillAndSubmit()
 
         const trajectory = within(await screen.findByRole("region", { name: "ECD trajectory for G0001" }))
-        expect(trajectory.getByText("Predicted to reach the 500 cells/mm² failure level by month 36 (380).")).toBeInTheDocument()
+        expect(trajectory.getByText("Predicted to reach the 500 cells/mm² failure level by month 36 (3 years): 380.")).toBeInTheDocument()
         expect(trajectory.getByRole("img", { name: /predicted 24 months 542 \(485–641\)/ })).toBeInTheDocument()
         expect(trajectory.getByRole("cell", { name: "485–641" })).toBeInTheDocument()
         const why = within(screen.getByRole("region", { name: "Why" }))
