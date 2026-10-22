@@ -2,6 +2,7 @@ import { useState } from "react"
 import { UsersIcon } from "lucide-react"
 import { PageHeader } from "@/components/dashboard/PageHeader"
 import { MatchingPanel } from "@/components/recommendation/MatchingPanel"
+import { PreviousRuns } from "@/components/recommendation/PreviousRuns"
 import { CaseMatchingPanel } from "@/components/transplant/CaseMatchingPanel"
 import { ModeSwitch } from "@/components/transplant/ModeSwitch"
 import { useAuth } from "@/hooks/use-auth"
@@ -31,6 +32,9 @@ export function MatchingPage() {
                 ]} />
             )}
             {mode === "cases" ? <CaseMatchingPanel /> : <MatchingPanel />}
+            <div className="mt-6">
+                <PreviousRuns kind="match" />
+            </div>
         </>
     )
 }

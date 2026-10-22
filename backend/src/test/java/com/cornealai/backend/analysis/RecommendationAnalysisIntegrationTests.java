@@ -16,6 +16,7 @@ import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.ResultActions;
+import org.springframework.test.web.servlet.request.MockMvcRequestBuilders;
 import tools.jackson.databind.DeserializationFeature;
 import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.ObjectMapper;
@@ -23,6 +24,7 @@ import tools.jackson.databind.PropertyNamingStrategies;
 import tools.jackson.databind.json.JsonMapper;
 
 import java.io.InputStream;
+import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
@@ -163,6 +165,63 @@ class RecommendationAnalysisIntegrationTests extends IntegrationTestSupport {
         call(support, "/followup", FOLLOWUP_BODY).andExpect(status().isForbidden());
         call(support, "/match", MATCH_BODY).andExpect(status().isForbidden());
         verifyNoInteractions(mlServiceClient);
+    }
+
+    @Test
+    void previousRunsAreListedNewestFirstAndReopenWithInputsAndResult() throws Exception {
+        when(mlServiceClient.recommendMatch(any())).thenReturn(fixtureValue("match_completed", MatchResponse.class));
+        call(doctor, "/match", MATCH_BODY).andExpect(status().isOk());
+        call(doctor, "/match", MATCH_BODY.replace("Q0001", "Q0002")).andExpect(status().isOk());
+        when(mlServiceClient.recommendFollowup(any())).thenReturn(fixtureValue("followup_completed", FollowupResponse.class));
+        call(doctor, "/followup", FOLLOWUP_BODY).andExpect(status().isOk());
+
+        get(doctor, "/runs?kind=match")
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.items.length()").value(2))
+                .andExpect(jsonPath("$.items[0].subjectId").value("Q0002"))
+                .andExpect(jsonPath("$.items[0].topRecordId").value("R0001"))
+                .andExpect(jsonPath("$.items[0].methodUsed").value("ml"))
+                .andExpect(jsonPath("$.items[0].requestedBy").isNotEmpty())
+                .andExpect(jsonPath("$.nextBefore").doesNotExist());
+        get(doctor, "/runs?kind=match&subject=q0001").andExpect(jsonPath("$.items.length()").value(1));
+        get(doctor, "/runs?kind=match&limit=1")
+                .andExpect(jsonPath("$.items.length()").value(1))
+                .andExpect(jsonPath("$.nextBefore").isNotEmpty());
+        get(doctor, "/runs?kind=followup")
+                .andExpect(jsonPath("$.items[0].alert").value("red"))
+                .andExpect(jsonPath("$.items[0].nextVisitMonths").value(3));
+        get(doctor, "/runs?kind=other").andExpect(status().isUnprocessableContent());
+
+        String id = runs.findBySubjectId("Q0001").getFirst().getId().toString();
+        get(doctor, "/runs/" + id)
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.summary.subjectId").value("Q0001"))
+                .andExpect(jsonPath("$.inputs.candidates[0].recordId").value("R0001"))
+                .andExpect(jsonPath("$.result.ranked[0].recordId").value("R0001"));
+        get(doctor, "/runs/" + UUID.randomUUID()).andExpect(status().isNotFound());
+    }
+
+    @Test
+    void withoutSerologyAccessOnlyOwnRunsAreVisible() throws Exception {
+        when(mlServiceClient.recommendMatch(any())).thenReturn(fixtureValue("match_completed", MatchResponse.class));
+        call(doctor, "/match", MATCH_BODY).andExpect(status().isOk());
+        AppUser nurse = createUser("nurse.recommendation", RoleName.NURSE);
+        call(nurse, "/match", MATCH_BODY.replace("Q0001", "Q0009")).andExpect(status().isOk());
+
+        get(nurse, "/runs?kind=match")
+                .andExpect(jsonPath("$.items.length()").value(1))
+                .andExpect(jsonPath("$.items[0].subjectId").value("Q0009"));
+        String doctorsRun = runs.findBySubjectId("Q0001").getFirst().getId().toString();
+        get(nurse, "/runs/" + doctorsRun).andExpect(status().isNotFound());
+        get(doctor, "/runs?kind=match").andExpect(jsonPath("$.items.length()").value(2));
+
+        AppUser support = createUser("support.runs", RoleName.SUPPORT_STAFF);
+        get(support, "/runs?kind=match").andExpect(status().isForbidden());
+    }
+
+    private ResultActions get(AppUser user, String path) throws Exception {
+        return mockMvc.perform(MockMvcRequestBuilders.get("/api/analysis/recommendation" + path)
+                .header(HttpHeaders.AUTHORIZATION, bearer(user)));
     }
 
     private <T> T fixtureValue(String key, Class<T> type) {

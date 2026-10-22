@@ -166,3 +166,53 @@ export interface FollowupResponse {
 export function recommendFollowup(request: FollowupRequest): Promise<FollowupResponse> {
     return apiRequest<FollowupResponse>("/api/analysis/recommendation/followup", { method: "POST", body: request })
 }
+
+/* ---------------------------------------------------------------- previous runs */
+
+export type RecommendationKind = "match" | "followup"
+
+/** A saved run: subjectId is the request ID (matching) or graft ID (follow-up). */
+export interface RecommendationRun {
+    id: string
+    kind: RecommendationKind
+    subjectId: string
+    status: string
+    errorCode: string | null
+    methodUsed: string | null
+    /** Matching: the cornea ranked #1. */
+    topRecordId: string | null
+    alert: AlertLevel | null
+    nextVisitMonths: number | null
+    requestedBy: string | null
+    createdAt: string
+}
+
+export interface RecommendationRunPage {
+    items: RecommendationRun[]
+    /** Pass as `before` for older runs; null when there are none. */
+    nextBefore: string | null
+}
+
+export interface RecommendationRunDetail {
+    summary: RecommendationRun
+    /** The request the run was given (MatchRequest or FollowupRequest). */
+    inputs: unknown
+    /** The stored result (MatchResponse or FollowupResponse); null if the run did not complete. */
+    result: unknown
+}
+
+/** Saved runs, newest first. Users without serology access only see their own. */
+export function listRecommendationRuns(
+    kind: RecommendationKind,
+    options: { subject?: string; before?: string; limit?: number } = {},
+): Promise<RecommendationRunPage> {
+    const query = new URLSearchParams({ kind })
+    if (options.subject) query.set("subject", options.subject)
+    if (options.before) query.set("before", options.before)
+    if (options.limit) query.set("limit", String(options.limit))
+    return apiRequest<RecommendationRunPage>(`/api/analysis/recommendation/runs?${query}`)
+}
+
+export function getRecommendationRun(runId: string): Promise<RecommendationRunDetail> {
+    return apiRequest<RecommendationRunDetail>(`/api/analysis/recommendation/runs/${encodeURIComponent(runId)}`)
+}

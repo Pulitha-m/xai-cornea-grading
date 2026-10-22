@@ -2,6 +2,7 @@ import { Fragment, useState, type ReactNode } from "react"
 import type { MatchResponse, RankedCandidate } from "@/api/recommendation"
 import { alertWarning, tableCell, tableHead, tableHeaderCell, tableRow } from "@/lib/styles"
 import { Card } from "@/components/dashboard/PageHeader"
+import { EmptyState } from "@/components/ui/empty-state"
 import { StatusBadge } from "@/components/ui/status-badge"
 import { DivergingBars, FAVOURABLE, ScoreBars, UNFAVOURABLE } from "@/components/recommendation/charts"
 import { DataWarnings } from "@/components/recommendation/DataWarnings"
@@ -31,6 +32,12 @@ export function MatchingResults({ result, labelFor }: { result: MatchResponse; l
                         {ml ? "; the ML ranker can still weigh it, because it learned from NEBSL's past allocations" : ""}.
                     </p>
                 )}
+                {result.ranked.length === 0 ? (
+                    <EmptyState
+                        title="No eligible cornea for this request"
+                        description={`All ${result.excluded.length} cornea${result.excluded.length === 1 ? " was" : "s were"} excluded by the safety rule (listed below), so none can be ranked.`}
+                    />
+                ) : (
                 <div className="-mx-5 -mb-5 overflow-x-auto sm:-mx-6 sm:-mb-6">
                     <table className="w-full text-sm">
                         <thead className={tableHead}>
@@ -84,6 +91,7 @@ export function MatchingResults({ result, labelFor }: { result: MatchResponse; l
                         </tbody>
                     </table>
                 </div>
+                )}
             </Card>
 
             {result.excluded.length > 0 && (

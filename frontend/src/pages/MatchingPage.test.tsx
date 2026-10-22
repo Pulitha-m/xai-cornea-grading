@@ -1,7 +1,7 @@
 import { screen, within } from "@testing-library/react"
 import userEvent from "@testing-library/user-event"
 import { beforeEach, describe, expect, it, vi } from "vitest"
-import { recommendMatch, type MatchResponse } from "@/api/recommendation"
+import { getRecommendationRun, listRecommendationRuns, recommendMatch, type MatchResponse } from "@/api/recommendation"
 import { makeAuth, makeUser, renderApp } from "@/test/auth-test-utils"
 
 vi.mock(import("@/api/cases"), async (importOriginal) => ({
@@ -11,6 +11,8 @@ vi.mock(import("@/api/cases"), async (importOriginal) => ({
 vi.mock(import("@/api/recommendation"), async (importOriginal) => ({
     ...(await importOriginal()),
     recommendMatch: vi.fn(),
+    listRecommendationRuns: vi.fn(),
+    getRecommendationRun: vi.fn(),
 }))
 
 const RANKED: MatchResponse = {
@@ -43,6 +45,7 @@ async function fillRow(user: ReturnType<typeof userEvent.setup>, row: number, id
 
 beforeEach(() => {
     vi.mocked(recommendMatch).mockReset()
+    vi.mocked(listRecommendationRuns).mockResolvedValue({ items: [], nextBefore: null })
 })
 
 describe("MatchingPage", () => {
@@ -187,6 +190,54 @@ describe("MatchingPage", () => {
 
         const check = within(await screen.findByRole("region", { name: "Check these values" }))
         expect(check.getByText("R0002: stored 20 days, longer than the usual 14-day limit.")).toBeInTheDocument()
+    })
+
+    it("says when no cornea is eligible instead of showing an empty ranking", async () => {
+        vi.mocked(recommendMatch).mockResolvedValue({
+            ...RANKED, ranked: [],
+            excluded: [{ recordId: "R0001", reason: "positive serology" }, { recordId: "R0002", reason: "positive serology" }],
+        })
+        renderApp("/recipients", makeAuth({ user: makeUser("DOCTOR") }))
+        await userEvent.setup().click(await screen.findByRole("radio", { name: "Enter corneas by hand" }))
+        const user = userEvent.setup()
+        await user.type(await screen.findByLabelText("Request ID"), "Q0001")
+        await fillRow(user, 1, "R0001", "No")
+        await fillRow(user, 2, "R0002", "No")
+        await user.click(screen.getByRole("button", { name: "Rank corneas" }))
+
+        const ranking = within(await screen.findByRole("region", { name: "Ranking for Q0001" }))
+        expect(ranking.getByText("No eligible cornea for this request")).toBeInTheDocument()
+        expect(ranking.getByText(/All 2 corneas were excluded by the safety rule/)).toBeInTheDocument()
+        expect(ranking.queryByRole("table")).not.toBeInTheDocument()
+    })
+
+    it("lists previous rankings and reopens one in full", async () => {
+        vi.mocked(listRecommendationRuns).mockResolvedValue({
+            items: [
+                { id: "run-2", kind: "match", subjectId: "Q0001", status: "completed", errorCode: null, methodUsed: "ml",
+                    topRecordId: "R0001", alert: null, nextVisitMonths: null, requestedBy: "Dr Silva", createdAt: "2026-10-20T09:00:00Z" },
+                { id: "run-1", kind: "match", subjectId: "Q0000", status: "rejected", errorCode: "DUPLICATE_TISSUE_ID", methodUsed: null,
+                    topRecordId: null, alert: null, nextVisitMonths: null, requestedBy: "Dr Silva", createdAt: "2026-10-19T09:00:00Z" },
+            ],
+            nextBefore: null,
+        })
+        vi.mocked(getRecommendationRun).mockResolvedValue({ summary: { id: "run-2", kind: "match" } as never, inputs: {}, result: RANKED })
+        renderApp("/recipients", makeAuth({ user: makeUser("DOCTOR") }))
+        const user = userEvent.setup()
+
+        const previous = within(await screen.findByRole("region", { name: "Previous runs" }))
+        expect(await previous.findByText("Q0001")).toBeInTheDocument()
+        expect(previous.getByText("R0001")).toBeInTheDocument()
+        expect(previous.getByText("duplicate tissue id")).toBeInTheDocument()
+        expect(previous.queryByRole("button", { name: "Open run Q0000" })).not.toBeInTheDocument()
+
+        await user.click(previous.getByRole("button", { name: "Open run Q0001" }))
+        expect(await previous.findByRole("region", { name: "Ranking for Q0001" })).toBeInTheDocument()
+        expect(getRecommendationRun).toHaveBeenCalledWith("run-2")
+
+        await user.type(previous.getByLabelText("Search by request id"), "Q0001")
+        await user.click(previous.getByRole("button", { name: "Search" }))
+        expect(vi.mocked(listRecommendationRuns)).toHaveBeenLastCalledWith("match", expect.objectContaining({ subject: "Q0001" }))
     })
 
     it("requires a request ID and a tissue ID on every row", async () => {

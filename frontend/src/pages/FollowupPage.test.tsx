@@ -1,7 +1,7 @@
 import { fireEvent, screen, within } from "@testing-library/react"
 import userEvent from "@testing-library/user-event"
 import { beforeEach, describe, expect, it, vi } from "vitest"
-import { recommendFollowup, type FollowupResponse } from "@/api/recommendation"
+import { listRecommendationRuns, recommendFollowup, type FollowupResponse } from "@/api/recommendation"
 import { ApiError } from "@/lib/api-client"
 import { makeAuth, makeUser, renderApp } from "@/test/auth-test-utils"
 
@@ -12,6 +12,7 @@ vi.mock(import("@/api/transplants"), async (importOriginal) => ({
 vi.mock(import("@/api/recommendation"), async (importOriginal) => ({
     ...(await importOriginal()),
     recommendFollowup: vi.fn(),
+    listRecommendationRuns: vi.fn(),
 }))
 
 const RED: FollowupResponse = {
@@ -68,6 +69,7 @@ async function fillAndSubmit(options: { skip3m?: boolean; leaveOut?: string; ove
 
 beforeEach(() => {
     vi.mocked(recommendFollowup).mockReset()
+    vi.mocked(listRecommendationRuns).mockResolvedValue({ items: [], nextBefore: null })
 })
 
 describe("FollowupPage", () => {
@@ -181,6 +183,21 @@ describe("FollowupPage", () => {
         const check = within(await screen.findByRole("region", { name: "Check these values" }))
         expect(check.getByText(/ECD rises from 1700/)).toBeInTheDocument()
         expect(screen.getByText("Red alert")).toBeInTheDocument()
+    })
+
+    it("lists previous follow-up recommendations with their alert", async () => {
+        vi.mocked(listRecommendationRuns).mockResolvedValue({
+            items: [{ id: "run-1", kind: "followup", subjectId: "G0001", status: "completed", errorCode: null, methodUsed: null,
+                topRecordId: null, alert: "amber", nextVisitMonths: 6, requestedBy: "Nurse Perera", createdAt: "2026-10-20T09:00:00Z" }],
+            nextBefore: null,
+        })
+        renderApp("/post-transplant", makeAuth({ user: makeUser("NURSE") }))
+
+        const previous = within(await screen.findByRole("region", { name: "Previous runs" }))
+        expect(await previous.findByText("G0001")).toBeInTheDocument()
+        expect(previous.getByText("amber alert")).toBeInTheDocument()
+        expect(previous.getByText("next visit in 6 months")).toBeInTheDocument()
+        expect(vi.mocked(listRecommendationRuns).mock.calls[0][0]).toBe("followup")
     })
 
     it("shows a server rejection", async () => {

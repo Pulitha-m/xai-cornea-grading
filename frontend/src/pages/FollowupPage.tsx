@@ -2,6 +2,7 @@ import { useState } from "react"
 import { ActivityIcon } from "lucide-react"
 import { PageHeader } from "@/components/dashboard/PageHeader"
 import { FollowupPanel } from "@/components/recommendation/FollowupPanel"
+import { PreviousRuns } from "@/components/recommendation/PreviousRuns"
 import { GraftsPanel } from "@/components/transplant/GraftsPanel"
 import { ModeSwitch } from "@/components/transplant/ModeSwitch"
 
@@ -25,6 +26,9 @@ export function FollowupPage() {
                 { value: "manual", label: "Enter values by hand" },
             ]} />
             {mode === "grafts" ? <GraftsPanel /> : <FollowupPanel />}
+            <div className="mt-6">
+                <PreviousRuns kind="followup" />
+            </div>
         </>
     )
 }

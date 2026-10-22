@@ -101,12 +101,23 @@ def test_ml_is_default_and_adds_explanations():
     assert top["mcda_rank"] is not None
 
 
-def test_ml_counterfactual_for_lower_ranked_cornea():
+def test_ml_counterfactual_only_for_pending_serology():
+    better_but_pending = _cand("R2", ecd=3300, cv=26, hex=66, days_in_storage=1, serology_clear="Unknown")
+    data = _post([_cand("R1", days_in_storage=4), better_but_pending]).json()
+    pending = next(c for c in data["ranked"] if c["record_id"] == "R2")
+    assert pending["rank"] == 2 and pending["counterfactual"] == "would be #1 if: serology confirmed clear"
+    # A confirmed cornea below #1 gets none: storage, ECD and grade cannot be changed by the clinician.
     data = _post([_cand("R1", days_in_storage=1), _cand("R2", days_in_storage=9)]).json()
-    second = data["ranked"][1]
-    assert second["record_id"] == "R2"
-    assert second["counterfactual"] and "fewer day" in second["counterfactual"]
-    assert data["ranked"][0]["counterfactual"] is None
+    assert [c["counterfactual"] for c in data["ranked"]] == [None, None]
+
+
+def test_long_stock_list_is_fast():
+    import time
+    many = [_cand(f"R{i}", ecd=2000 + 7 * i, days_in_storage=i % 14,
+                  serology_clear="Unknown" if i % 3 else "Yes") for i in range(200)]
+    start = time.perf_counter()
+    assert _post(many).status_code == 200
+    assert time.perf_counter() - start < 10
 
 
 def test_ml_excludes_positive_serology():

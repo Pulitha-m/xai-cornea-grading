@@ -8,20 +8,30 @@ import com.cornealai.backend.analysis.dto.recommendation.MatchCandidate;
 import com.cornealai.backend.analysis.dto.recommendation.MatchRequest;
 import com.cornealai.backend.analysis.dto.recommendation.MatchResponse;
 import com.cornealai.backend.analysis.dto.recommendation.MatchWeights;
+import com.cornealai.backend.analysis.dto.recommendation.RecommendationRuns.RunDetail;
+import com.cornealai.backend.analysis.dto.recommendation.RecommendationRuns.RunPage;
+import com.cornealai.backend.analysis.dto.recommendation.RecommendationRuns.RunSummary;
 import com.cornealai.backend.analysis.entity.RecommendationAnalysisRun;
 import com.cornealai.backend.analysis.repository.RecommendationAnalysisRunRepository;
+import com.cornealai.backend.user.repository.AppUserRepository;
+import org.springframework.data.domain.PageRequest;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
+import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.ObjectMapper;
 
+import java.time.Instant;
 import java.util.Arrays;
+import java.util.HashMap;
 import java.util.HashSet;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Locale;
+import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
 import java.util.function.Supplier;
+import java.util.stream.Collectors;
 
 /**
  * Recommendation (Member 4): donor-tissue ranking for a recipient request and the post-transplant follow-up
@@ -34,15 +44,18 @@ public class RecommendationAnalysisService {
     private final RecommendationAnalysisRunRepository runs;
     private final MlServiceClient mlServiceClient;
     private final ObjectMapper objectMapper;
+    private final AppUserRepository users;
 
     public RecommendationAnalysisService(
             RecommendationAnalysisRunRepository runs,
             MlServiceClient mlServiceClient,
-            ObjectMapper objectMapper
+            ObjectMapper objectMapper,
+            AppUserRepository users
     ) {
         this.runs = runs;
         this.mlServiceClient = mlServiceClient;
         this.objectMapper = objectMapper;
+        this.users = users;
     }
 
     public MatchResponse match(MatchRequest request, Long userId) {
@@ -74,6 +87,69 @@ public class RecommendationAnalysisService {
             run.setNextVisitMonths(response.nextVisitMonths());
             return response;
         });
+    }
+
+    // ---------------------------------------------------------------- previous runs
+
+    /**
+     * Saved runs of one kind ("match" or "followup"), newest first, optionally for one request or graft ID.
+     * Match runs carry serology status, so users with serology access see everyone's runs and others only
+     * their own (which hold only values they entered themselves).
+     */
+    public RunPage runs(String kind, String subjectId, Instant before, Integer limit, Long userId, boolean seeAll) {
+        requireKind(kind);
+        int size = Math.clamp(limit == null ? 10 : limit, 1, 50);
+        Instant cursor = before == null ? Instant.now().plusSeconds(1) : before;
+        PageRequest page = PageRequest.of(0, size + 1);  // one extra tells whether older runs exist
+        String subject = subjectId == null || subjectId.isBlank() ? null : subjectId.strip();
+        List<RecommendationAnalysisRun> found;
+        if (seeAll) {
+            found = subject == null
+                    ? runs.findByKindAndCreatedAtBeforeOrderByCreatedAtDesc(kind, cursor, page)
+                    : runs.findByKindAndSubjectIdIgnoreCaseAndCreatedAtBeforeOrderByCreatedAtDesc(kind, subject, cursor, page);
+        } else {
+            found = subject == null
+                    ? runs.findByKindAndRequestedByAndCreatedAtBeforeOrderByCreatedAtDesc(kind, userId, cursor, page)
+                    : runs.findByKindAndRequestedByAndSubjectIdIgnoreCaseAndCreatedAtBeforeOrderByCreatedAtDesc(
+                            kind, userId, subject, cursor, page);
+        }
+        List<RecommendationAnalysisRun> shown = found.subList(0, Math.min(size, found.size()));
+        Map<Long, String> names = names(shown);
+        Instant nextBefore = found.size() > size ? shown.getLast().getCreatedAt() : null;
+        return new RunPage(shown.stream().map(r -> summary(r, names)).toList(), nextBefore);
+    }
+
+    /** One saved run with its request and result; 404 if it does not exist or the caller may not see it. */
+    public RunDetail run(UUID runId, Long userId, boolean seeAll) {
+        RecommendationAnalysisRun run = runs.findById(runId)
+                .filter(r -> seeAll || r.getRequestedBy().equals(userId))
+                .orElseThrow(() -> new AnalysisRejectedException(HttpStatus.NOT_FOUND, "RUN_NOT_FOUND", null,
+                        "The run was not found."));
+        return new RunDetail(summary(run, names(List.of(run))), json(run.getInputsJson()), json(run.getResultJson()));
+    }
+
+    private static void requireKind(String kind) {
+        if (!RecommendationAnalysisRun.MATCH.equals(kind) && !RecommendationAnalysisRun.FOLLOWUP.equals(kind)) {
+            throw invalid("INVALID_REQUEST", "kind", "kind must be 'match' or 'followup'.");
+        }
+    }
+
+    private Map<Long, String> names(List<RecommendationAnalysisRun> list) {
+        Set<Long> ids = list.stream().map(RecommendationAnalysisRun::getRequestedBy).collect(Collectors.toSet());
+        Map<Long, String> out = new HashMap<>();
+        users.findAllById(ids).forEach(u -> out.put(u.getId(),
+                u.getFullName() == null || u.getFullName().isBlank() ? u.getUsername() : u.getFullName()));
+        return out;
+    }
+
+    private static RunSummary summary(RecommendationAnalysisRun r, Map<Long, String> names) {
+        return new RunSummary(r.getId(), r.getKind(), r.getSubjectId(), r.getStatus(), r.getErrorCode(),
+                r.getMethodUsed(), r.getTopRecordId(), r.getAlert(), r.getNextVisitMonths(),
+                names.get(r.getRequestedBy()), r.getCreatedAt());
+    }
+
+    private JsonNode json(String text) {
+        return text == null ? null : objectMapper.readTree(text);
     }
 
     /** Checks that span several fields: each tissue ID once per request, and at least one MCDA weight above 0. */
