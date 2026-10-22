@@ -11,10 +11,19 @@ import {
 import { Card } from "@/components/dashboard/PageHeader"
 import { Spinner } from "@/components/ui/spinner"
 import { StatusBadge, type StatusTone } from "@/components/ui/status-badge"
+import { ApiError } from "@/lib/api-client"
 import { alertError, alertWarning, primaryButton, tableCell, tableHead, tableHeaderCell, textInput } from "@/lib/styles"
 
 const ACCEPT = ".csv,.xlsx,text/csv,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
 const MAX_BYTES = 5 * 1024 * 1024
+
+/**
+ * No answer from the server (network error, proxy timeout or gateway error): the import may still be
+ * running or may have finished, so the outcome is unknown and importing again could clash with it.
+ */
+function outcomeUnknown(error: Error): boolean {
+    return error instanceof ApiError && [0, 502, 503, 504].includes(error.status)
+}
 
 const ACTIONS: Record<ImportRow["action"], { label: string; tone: StatusTone }> = {
     create: { label: "New case", tone: "success" },
@@ -70,8 +79,10 @@ export function ImportCasesCard() {
     }
 
     const report: ImportReport | undefined = apply.data ?? check.data
+    const applyUnknown = apply.isError && outcomeUnknown(apply.error)
+    // After an unknown outcome the file must be checked again before another import is offered.
     const canImport = check.isSuccess && check.data.withErrors === 0 && check.data.created + check.data.updated > 0
-        && !apply.isSuccess
+        && !apply.isSuccess && !applyUnknown
 
     return (
         <Card
@@ -111,9 +122,15 @@ export function ImportCasesCard() {
                 {template.isError && <p role="alert" className={alertError}>{template.error.message}</p>}
                 {check.isPending && <p role="status" className="flex items-center gap-2 text-sm text-muted-foreground"><Spinner /> Checking the file…</p>}
                 {check.isError && <p role="alert" className={alertError}>{check.error.message}</p>}
-                {apply.isError && (
+                {apply.isError && (applyUnknown ? (
+                    <p role="alert" className={alertWarning}>
+                        The server did not confirm the import, so it may still be running or may already have finished.
+                        Do not import again yet: wait a minute, then choose the file again. Rows that were imported will
+                        show as &ldquo;Exists, skipped&rdquo;.
+                    </p>
+                ) : (
                     <p role="alert" className={alertError}>The import was not applied: {apply.error.message} Check the file again.</p>
-                )}
+                ))}
 
                 {report && (
                     <>

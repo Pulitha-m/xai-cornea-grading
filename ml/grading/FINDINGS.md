@@ -1,6 +1,6 @@
 # Grading Model: Findings to Date
 
-Checkpoint of the evidence from notebooks `images/06`–`images/13`, plus the application's image validation (sections 14–15). The notebooks contain the full analysis and outputs; this file records what they establish and what they do not.
+Checkpoint of the evidence from notebooks `images/06`–`images/15`, plus the application's image validation (sections 14–15). The notebooks contain the full analysis and outputs; this file records what they establish and what they do not.
 
 ## Research question
 
@@ -283,6 +283,59 @@ Project decision recorded as Amendment 2 in `ANALYSIS_PLAN.md`: the application 
   - the list of inputs not recorded;
   - the ECD tree's grade and band distribution, when ECD was recorded.
 - **Tests:** the served pipeline reproduces the exported model on 61 golden cases (synthetic features and synthetic embeddings), the model file is checked by SHA-256 at load, and the backbone against its verification record. The frontend feature list is checked against the exported schema.
+
+### 17. Other model families do not improve on the Random Forest (notebook 14, follow-up)
+
+A follow-up to section 12, raised after its results were known. It uses the same 470 tissues, outer folds and nested donor-grouped tuning, so it is **not independent confirmation**.
+
+- **Candidates:** four further model families, each tuned as tabular and hybrid.
+- **Primary comparison:** against the deployed tuned RF hybrid (Holm across 8).
+- **Secondary comparison:** against the ECD tree.
+
+| Candidate − tuned RF hybrid (macro F1) | Tabular arm | Hybrid arm | Verdict |
+|---|---|---|---|
+| Histogram gradient boosting | −0.009 [−0.046, +0.029] | −0.001 [−0.041, +0.038] | Inconclusive (Holm p = 1.00) |
+| Logistic regression | −0.095 [−0.159, −0.032] | −0.115 [−0.187, −0.043] | Worse |
+| RBF SVM | −0.078 [−0.134, −0.023] | −0.112 [−0.164, −0.060] | Worse |
+| Extra Trees | −0.084 [−0.140, −0.028] | −0.069 [−0.114, −0.023] | Worse |
+
+- **Random Forest was not the bottleneck.** Gradient boosting reached the same level (hybrid 0.792 against 0.793). The other families were 0.07–0.12 macro F1 lower and also worse than the ECD tree.
+- **No candidate beat the ECD tree.** The finding that improvement beyond ECD alone was not established (sections 10 and 12) holds across five model families.
+- **Quadratic-weighted kappa** with the recorded grades:
+
+  | Model | Kappa |
+  |---|---:|
+  | ECD tree | 0.771 |
+  | Tuned RF tabular | 0.783 |
+  | Tuned RF hybrid | 0.764 |
+  | Gradient boosting hybrid | 0.764 |
+
+  This is agreement with one recorded grade per tissue; inter-rater reliability was not measured.
+- **The deployed tuned RF hybrid is retained** under the pre-set rule.
+
+**A possible explanation (not tested):** the recorded grades are anchored at two ECD cut points (section 10). Models that learn sharp, optimised thresholds (Random Forest, gradient boosting, the ECD tree) suit that structure. Smooth decision functions (logistic regression, RBF SVM) and randomly placed thresholds (Extra Trees) suit it less well.
+
+### 18. Extending the hybrid's tuning does not establish an improvement (notebook 15, follow-up)
+
+**Motivation:** in notebook 13 the hybrid's selections reached the edge of the grid. `max_features` 0.3 was chosen in all 25 folds and PCA 32 in 16.
+
+**Design:** notebook 15 extended both settings in a 48-setting grid: PCA up to 128, `max_features` up to 0.7. It used notebook 13's preprocessing and nested donor-grouped design. It is the third tuning analysis on these folds, so it is **not independent confirmation**.
+
+| Model (470 tissues) | Macro F1 | Accuracy | Grade B recall | Kappa (quadratic) |
+|---|---:|---:|---:|---:|
+| ECD tree | 0.796 | 0.804 | 0.790 | 0.771 |
+| Tuned RF hybrid (notebook 13, deployed) | 0.793 | 0.797 | 0.789 | 0.764 |
+| Extended RF hybrid | 0.802 | 0.803 | 0.793 | 0.770 |
+
+**Results:**
+
+- **Against notebook 13's hybrid:** +0.008 macro F1 [−0.016, +0.033], p = 0.48. **Inconclusive.**
+- **Against the ECD tree:** +0.006 [−0.019, +0.031]. Inconclusive.
+- **Larger image representations were not preferred.** PCA 128 was never selected, and PCA 32 remained the most common choice (14/25).
+- **`max_features` moved up:** 0.7, the new edge, was chosen in 13/25 folds. This is a reason for further search, not evidence of improvement.
+- **The deployed tuned RF hybrid is retained** under the pre-set rule.
+
+Across notebooks 13–15, three tuning analyses on the same folds all land at 0.79–0.80 macro F1 and about 0.80 accuracy, the same level as the two-threshold ECD tree.
 
 ## Limitations
 
