@@ -51,7 +51,6 @@ beforeEach(() => {
 describe("MatchingPage", () => {
     it("is in the navigation for clinical roles and is no longer 'coming soon'", async () => {
         renderApp("/recipients", makeAuth({ user: makeUser("DOCTOR") }))
-        await userEvent.setup().click(await screen.findByRole("radio", { name: "Enter corneas by hand" }))
         expect(await screen.findByRole("link", { name: /Recipients & matching/ })).toHaveAttribute("href", "/recipients")
         expect(screen.getByRole("heading", { name: "Recipients & matching", level: 1 })).toBeInTheDocument()
     })
@@ -65,7 +64,6 @@ describe("MatchingPage", () => {
     it("sends the request and corneas and shows the ranking, reasons and exclusions", async () => {
         vi.mocked(recommendMatch).mockResolvedValue(RANKED)
         renderApp("/recipients", makeAuth({ user: makeUser("DOCTOR") }))
-        await userEvent.setup().click(await screen.findByRole("radio", { name: "Enter corneas by hand" }))
         const user = userEvent.setup()
 
         await screen.findByLabelText("Request ID")
@@ -108,7 +106,6 @@ describe("MatchingPage", () => {
             modelSummary: { evaluation: "10x 5-fold grouped CV over 186 requests", ml_top3: 0.43, mcda_top3: 0.387 },
         })
         renderApp("/recipients", makeAuth({ user: makeUser("DOCTOR") }))
-        await userEvent.setup().click(await screen.findByRole("radio", { name: "Enter corneas by hand" }))
         const user = userEvent.setup()
         await screen.findByLabelText("Request ID")
         await fillRow(user, 1, "R0001", "Yes")
@@ -134,7 +131,6 @@ describe("MatchingPage", () => {
             ranked: [{ ...RANKED.ranked[0], mcdaRank: 2 }, { ...RANKED.ranked[1], mcdaRank: 1 }],
         })
         renderApp("/recipients", makeAuth({ user: makeUser("DOCTOR") }))
-        await userEvent.setup().click(await screen.findByRole("radio", { name: "Enter corneas by hand" }))
         const user = userEvent.setup()
         await screen.findByLabelText("Request ID")
         await fillRow(user, 1, "R0001", "Yes")
@@ -155,7 +151,6 @@ describe("MatchingPage", () => {
     it("says when the recommended cornea is also first by clinician priorities", async () => {
         vi.mocked(recommendMatch).mockResolvedValue(RANKED)
         renderApp("/recipients", makeAuth({ user: makeUser("DOCTOR") }))
-        await userEvent.setup().click(await screen.findByRole("radio", { name: "Enter corneas by hand" }))
         const user = userEvent.setup()
         await screen.findByLabelText("Request ID")
         await fillRow(user, 1, "R0001", "Yes")
@@ -169,7 +164,6 @@ describe("MatchingPage", () => {
 
     it("rejects impossible values and a tissue ID used twice instead of calling the server", async () => {
         renderApp("/recipients", makeAuth({ user: makeUser("DOCTOR") }))
-        await userEvent.setup().click(await screen.findByRole("radio", { name: "Enter corneas by hand" }))
         const user = userEvent.setup()
         await screen.findByLabelText("Request ID")
         await fillRow(user, 1, "R0001")
@@ -186,7 +180,6 @@ describe("MatchingPage", () => {
     it("shows the values to check above the ranking", async () => {
         vi.mocked(recommendMatch).mockResolvedValue({ ...RANKED, warnings: ["R0002: stored 20 days, longer than the usual 14-day limit."] })
         renderApp("/recipients", makeAuth({ user: makeUser("DOCTOR") }))
-        await userEvent.setup().click(await screen.findByRole("radio", { name: "Enter corneas by hand" }))
         const user = userEvent.setup()
         await screen.findByLabelText("Request ID")
         await fillRow(user, 1, "R0001", "Yes")
@@ -199,7 +192,6 @@ describe("MatchingPage", () => {
 
     it("accepts only study codes, never a real NEBSL tissue ID", async () => {
         renderApp("/recipients", makeAuth({ user: makeUser("DOCTOR") }))
-        await userEvent.setup().click(await screen.findByRole("radio", { name: "Enter corneas by hand" }))
         const user = userEvent.setup()
         await screen.findByLabelText("Request ID")
         await fillRow(user, 1, "12656R")
@@ -215,7 +207,6 @@ describe("MatchingPage", () => {
     it("sends tissue IDs trimmed and upper-cased", async () => {
         vi.mocked(recommendMatch).mockResolvedValue(RANKED)
         renderApp("/recipients", makeAuth({ user: makeUser("DOCTOR") }))
-        await userEvent.setup().click(await screen.findByRole("radio", { name: "Enter corneas by hand" }))
         const user = userEvent.setup()
         await screen.findByLabelText("Request ID")
         await fillRow(user, 1, "r0001")
@@ -230,7 +221,6 @@ describe("MatchingPage", () => {
     it("assigns the request ID on the first ranking, keeps it on re-ranking, and clears it for a new request", async () => {
         vi.mocked(recommendMatch).mockResolvedValue({ ...RANKED, requestId: "Q0007" })
         renderApp("/recipients", makeAuth({ user: makeUser("DOCTOR") }))
-        await userEvent.setup().click(await screen.findByRole("radio", { name: "Enter corneas by hand" }))
         const user = userEvent.setup()
         const field = await screen.findByLabelText("Request ID")
         expect(field).toHaveAttribute("readonly")
@@ -258,7 +248,6 @@ describe("MatchingPage", () => {
             excluded: [{ recordId: "R0001", reason: "positive serology" }, { recordId: "R0002", reason: "positive serology" }],
         })
         renderApp("/recipients", makeAuth({ user: makeUser("DOCTOR") }))
-        await userEvent.setup().click(await screen.findByRole("radio", { name: "Enter corneas by hand" }))
         const user = userEvent.setup()
         await screen.findByLabelText("Request ID")
         await fillRow(user, 1, "R0001", "No")
@@ -302,7 +291,6 @@ describe("MatchingPage", () => {
 
     it("requires a tissue ID on every row", async () => {
         renderApp("/recipients", makeAuth({ user: makeUser("DOCTOR") }))
-        await userEvent.setup().click(await screen.findByRole("radio", { name: "Enter corneas by hand" }))
         const user = userEvent.setup()
         await user.click(await screen.findByRole("button", { name: "Rank corneas" }))
 

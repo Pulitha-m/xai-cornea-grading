@@ -17,6 +17,7 @@ import { EmptyState } from "@/components/ui/empty-state"
 import { Spinner } from "@/components/ui/spinner"
 import { StatusBadge, type StatusTone } from "@/components/ui/status-badge"
 import { RUNS_KEY } from "@/hooks/use-recommendation"
+import { SHOW_FOLLOWUP_RISK } from "@/lib/feature-flags"
 import { CASES_PATH } from "@/lib/roles"
 import { alertError, tableCell, tableHead, tableHeaderCell, tableRow, textInput } from "@/lib/styles"
 
@@ -154,6 +155,7 @@ function RunOutcome({ run }: { run: RecommendationRun }) {
         )
     }
     if (run.kind === "followup") {
+        if (!SHOW_FOLLOWUP_RISK) return <span>ECD trajectory predicted</span>
         return (
             <span className="flex flex-wrap items-center gap-2">
                 {run.alert && <StatusBadge tone={ALERT_TONES[run.alert] ?? "neutral"}>{run.alert} alert</StatusBadge>}
