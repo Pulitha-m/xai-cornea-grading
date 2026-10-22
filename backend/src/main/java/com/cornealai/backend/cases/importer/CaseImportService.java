@@ -8,8 +8,11 @@ import com.cornealai.backend.cases.dto.CaseDtos.CaseDetails;
 import com.cornealai.backend.cases.entity.DonorCase;
 import com.cornealai.backend.cases.service.CaseService;
 import com.cornealai.backend.cases.service.DonorCaseService;
+import jakarta.persistence.EntityManager;
 import jakarta.validation.ConstraintViolation;
 import jakarta.validation.Validator;
+import org.hibernate.Session;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -23,6 +26,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
 
@@ -48,17 +52,22 @@ public class CaseImportService {
                            Map<String, String> values) {
     }
 
+    /** Rows per JDBC batch when an import is written. */
+    private static final int JDBC_BATCH_SIZE = 100;
+
     private final DonorCaseService donorCases;
     private final CaseService caseService;
     private final Validator validator;
     private final AuditService audit;
+    private final EntityManager entityManager;
 
     public CaseImportService(DonorCaseService donorCases, CaseService caseService, Validator validator,
-                             AuditService audit) {
+                             AuditService audit, EntityManager entityManager) {
         this.donorCases = donorCases;
         this.caseService = caseService;
         this.validator = validator;
         this.audit = audit;
+        this.entityManager = entityManager;
     }
 
     public static Mode mode(String raw) {
@@ -90,7 +99,11 @@ public class CaseImportService {
         List<Planned> valid = new ArrayList<>();
         Map<String, Integer> firstRowOf = new HashMap<>();
 
-        for (CaseImportFile.Row row : parsed.rows()) {
+        // Tissue IDs first, so the existing cases are found with one query rather than one per row.
+        List<CaseImportFile.Row> rows = parsed.rows();
+        List<TissueNumber> tissues = new ArrayList<>();
+        List<List<String>> rowErrors = new ArrayList<>();
+        for (CaseImportFile.Row row : rows) {
             List<String> errors = new ArrayList<>();
             String rawTissue = row.values().get("tissue_id");
             TissueNumber tissue = null;
@@ -99,14 +112,23 @@ public class CaseImportService {
             } catch (AnalysisRejectedException e) {
                 errors.add(rawTissue == null ? "The tissue ID is missing." : e.getMessage());
             }
-            String shown = tissue == null ? rawTissue : tissue.value();
             if (tissue != null) {
                 Integer earlier = firstRowOf.putIfAbsent(tissue.value(), row.number());
                 if (earlier != null) {
                     errors.add("Tissue ID " + tissue.value() + " is already in row " + earlier + ".");
                 }
             }
-            Optional<DonorCase> existing = tissue == null ? Optional.empty() : donorCases.find(tissue);
+            tissues.add(tissue);
+            rowErrors.add(errors);
+        }
+        Map<TissueNumber, DonorCase> existingCases = donorCases.findAll(tissues.stream().filter(Objects::nonNull).toList());
+
+        for (int i = 0; i < rows.size(); i++) {
+            CaseImportFile.Row row = rows.get(i);
+            TissueNumber tissue = tissues.get(i);
+            List<String> errors = rowErrors.get(i);
+            String shown = tissue == null ? row.values().get("tissue_id") : tissue.value();
+            Optional<DonorCase> existing = tissue == null ? Optional.empty() : Optional.ofNullable(existingCases.get(tissue));
             CaseDetails base = existing.map(caseService::detailsOf).orElse(null);
             if (errors.isEmpty()) {
                 errors.addAll(validate(merge(base, row.values(), errors)));
@@ -129,21 +151,46 @@ public class CaseImportService {
         long withErrors = results.stream().filter(r -> "error".equals(r.action())).count();
         boolean applied = apply && withErrors == 0;
         if (applied) {
-            for (Planned p : valid) {
-                DonorCase donorCase = p.existing().orElseGet(() -> donorCases.findOrCreate(p.tissue(), userId));
-                caseService.applyDetails(donorCase, merge(p.existing().map(caseService::detailsOf).orElse(null),
-                        p.values(), new ArrayList<>()));
-                audit.record(userId, AuditService.CASE_UPDATE, "case", donorCase.getId(),
-                        p.existing().isPresent() ? "bulk import: updated" : "bulk import: created");
-            }
-            audit.record(userId, AuditService.CASES_IMPORT, null, null,
-                    count(results, "create") + " created, " + count(results, "update") + " updated, "
-                            + count(results, "skip") + " skipped");
+            write(valid, results, userId);
         }
         results.sort(Comparator.comparingInt(ImportRow::row));
         return new ImportReport(applied, mode.name().toLowerCase(Locale.ROOT), results.size(),
                 count(results, "create"), count(results, "update"), count(results, "skip"), (int) withErrors,
                 parsed.ignoredColumns(), results);
+    }
+
+    /**
+     * Writes the planned rows in one flush with batched statements: all cases, then all audit events, so
+     * statements of one kind stay together. A tissue ID that another request created after the check
+     * fails the flush; the whole import then rolls back and is reported as a conflict.
+     */
+    private void write(List<Planned> valid, List<ImportRow> results, Long userId) {
+        entityManager.unwrap(Session.class).setJdbcBatchSize(JDBC_BATCH_SIZE);
+        List<DonorCase> written = new ArrayList<>();
+        for (Planned p : valid) {
+            DonorCase donorCase = p.existing().orElseGet(() -> donorCases.newCase(p.tissue(), userId));
+            caseService.setDetails(donorCase, merge(p.existing().map(caseService::detailsOf).orElse(null),
+                    p.values(), new ArrayList<>()));
+            if (p.existing().isEmpty()) {
+                donorCases.persist(donorCase);
+            }
+            written.add(donorCase);
+        }
+        for (int i = 0; i < valid.size(); i++) {
+            audit.recordInTransaction(userId, AuditService.CASE_UPDATE, "case", written.get(i).getId(),
+                    valid.get(i).existing().isPresent() ? "bulk import: updated" : "bulk import: created");
+        }
+        audit.recordInTransaction(userId, AuditService.CASES_IMPORT, null, null,
+                count(results, "create") + " created, " + count(results, "update") + " updated, "
+                        + count(results, "skip") + " skipped");
+        try {
+            donorCases.flush();
+        } catch (DataIntegrityViolationException e) {
+            throw new AnalysisRejectedException(HttpStatus.CONFLICT, "IMPORT_CONFLICT", "file",
+                    "Some of these tissue IDs were added by another import or user while this file was being "
+                            + "imported, so nothing was imported. Choose the file again: rows that now exist will "
+                            + "show as skipped.");
+        }
     }
 
     private static int count(List<ImportRow> rows, String action) {

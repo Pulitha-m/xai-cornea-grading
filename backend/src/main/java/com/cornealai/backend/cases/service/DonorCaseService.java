@@ -7,10 +7,15 @@ import com.cornealai.backend.cases.entity.DonorCase;
 import com.cornealai.backend.cases.repository.DonorCaseRepository;
 import com.cornealai.backend.common.crypto.BlindIndex;
 import com.cornealai.backend.common.crypto.FieldCipher;
+import jakarta.persistence.EntityManager;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 
+import java.util.Collection;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
 
@@ -21,14 +26,20 @@ import java.util.UUID;
 @Service
 public class DonorCaseService {
 
+    /** Blind indexes per IN query (well under PostgreSQL's bind-parameter limit). */
+    private static final int LOOKUP_CHUNK = 500;
+
     private final DonorCaseRepository cases;
     private final FieldCipher cipher;
     private final BlindIndex blindIndex;
+    private final EntityManager entityManager;
 
-    public DonorCaseService(DonorCaseRepository cases, FieldCipher cipher, BlindIndex blindIndex) {
+    public DonorCaseService(DonorCaseRepository cases, FieldCipher cipher, BlindIndex blindIndex,
+                            EntityManager entityManager) {
         this.cases = cases;
         this.cipher = cipher;
         this.blindIndex = blindIndex;
+        this.entityManager = entityManager;
     }
 
     /** The case with this id, or 404. */
@@ -64,12 +75,55 @@ public class DonorCaseService {
                 donorCase.getId()));
     }
 
-    private DonorCase create(TissueNumber tissue, String index, Long userId) {
+    /**
+     * The existing cases for these tissue IDs, found with one query (bulk import). Tissue IDs without a
+     * case are absent from the map.
+     */
+    public Map<TissueNumber, DonorCase> findAll(Collection<TissueNumber> tissues) {
+        Map<String, TissueNumber> byIndex = new HashMap<>();
+        tissues.forEach(t -> byIndex.put(index(t), t));
+        Map<TissueNumber, DonorCase> found = new HashMap<>();
+        List<String> indexes = List.copyOf(byIndex.keySet());
+        for (int from = 0; from < indexes.size(); from += LOOKUP_CHUNK) {
+            cases.findByTissueNumberBidxIn(indexes.subList(from, Math.min(from + LOOKUP_CHUNK, indexes.size())))
+                    .forEach(c -> found.put(byIndex.get(c.getTissueNumberBidx()), c));
+        }
+        return found;
+    }
+
+    /**
+     * A new, not yet saved case for this tissue ID. Pass it to {@link #persist} once its details are set,
+     * inside the caller's transaction.
+     */
+    public DonorCase newCase(TissueNumber tissue, Long userId) {
+        return build(tissue, index(tissue), userId);
+    }
+
+    /**
+     * Schedules the insert of a case from {@link #newCase} without a lookup or flush (the id is new), so
+     * a bulk import writes all its cases in batches at the end. A tissue ID created meanwhile by another
+     * request fails at {@link #flush} with a {@link DataIntegrityViolationException}.
+     */
+    public void persist(DonorCase donorCase) {
+        entityManager.persist(donorCase);
+    }
+
+    /** Writes pending changes now; constraint violations surface here as Spring exceptions. */
+    public void flush() {
+        cases.flush();
+    }
+
+    private DonorCase build(TissueNumber tissue, String index, Long userId) {
         DonorCase donorCase = new DonorCase();
         donorCase.setId(UUID.randomUUID());
         donorCase.setTissueNumberEnc(cipher.encrypt(tissue.value(), DonorCase.TISSUE_NUMBER, donorCase.getId()));
         donorCase.setTissueNumberBidx(index);
         donorCase.setCreatedBy(userId);
+        return donorCase;
+    }
+
+    private DonorCase create(TissueNumber tissue, String index, Long userId) {
+        DonorCase donorCase = build(tissue, index, userId);
         try {
             return cases.saveAndFlush(donorCase);
         } catch (DataIntegrityViolationException e) {

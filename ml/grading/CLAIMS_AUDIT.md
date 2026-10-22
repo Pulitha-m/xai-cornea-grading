@@ -1,4 +1,4 @@
-# Claims Audit: Notebooks 01–13
+# Claims Audit: Notebooks 01–15
 
 Purpose: decide what the paper can claim before writing the methodology and results. Each claim is traced to its source notebook and rated against the later evidence.
 
@@ -27,7 +27,7 @@ Purpose: decide what the paper can claim before writing the methodology and resu
 
 | # | Claim | Source | Status | Notes |
 |---|---|---|---|---|
-| T1 | Random Forest outperformed LR, SVM and Extra Trees | 05 | Qualified | Non-grouped CV; ranking is likely to hold but was not re-run with donor grouping |
+| T1 | Random Forest outperformed LR, SVM and Extra Trees | 05, 14 | Supported (follow-up) | Notebook 05 used non-grouped CV. Re-checked in notebook 14 with donor-grouped nested tuning: all six LR, SVM and Extra Trees arms were worse than the tuned RF hybrid (−0.069 to −0.115 macro F1; Holm p ≤ 0.027) and than the ECD tree. Reuses the notebook 13 folds; not independent confirmation |
 | T2 | Tuned RF holdout macro F1 0.861 | 05 | Superseded | 78 donor pairs split across holdout; the holdout informed earlier decisions. Use 06/07 |
 | T3 | Tabular RF macro F1 0.906 on the shared split | images/05 | Superseded | Single 152-tissue split, 108 donor pairs split, no uncertainty. Use 07 |
 | T4 | Tabular RF macro F1 0.844 (all 1,036) / 0.849 (image cohort), donor-grouped 5×5 CV | 06, 07 | Qualified | Hyperparameters tuned in 05 with non-grouped CV on overlapping tissues. Pooled figure averages 2023 (0.99) and other years (0.73); always report by year |
@@ -35,6 +35,9 @@ Purpose: decide what the paper can claim before writing the methodology and resu
 | T6 | The ML models add value beyond ECD alone | 10, 11 | **Not supported** | Pre-specified (10): Tabular and Hybrid beat an ECD-only Random Forest (+0.048, +0.081; Holm p 0.030, 0.006), but that comparator was weak. Follow-up (11): neither beat a depth-2 ECD tree fitted within training folds (Tabular −0.040, Hybrid −0.007; inconclusive). Report both; claim only that the models outperform an ECD-only Random Forest |
 | T7 | Recorded grades are anchored at ECD ≈ 2230 and ≈ 2500 across years | 11 | Supported as a description of the labels | Tree fitted on non-2023 tissues recovered cut points 2232 and 2494–2503 in all 25 folds. Not evidence of a single official protocol, nor of why tissues depart from the thresholds |
 | T8 | A tuned tabular model outperforms ECD alone | 13 | **Not supported** | Nested CV: +0.009 [−0.010, +0.028] over the fitted ECD tree, Holm p = 1.00. Tuning raised it by +0.049 over the notebook 05 settings |
+| T9 | Gradient boosting grades as well as or better than the Random Forest | 14 | **Not supported as "better"**; not distinguishable | Gradient boosting hybrid − RF hybrid −0.001 [−0.041, +0.038], tabular −0.009 [−0.046, +0.029], Holm p = 1.00. No equivalence margin was set, so "as well as" cannot be claimed formally either |
+| T10 | Another model family outperforms ECD alone | 14 | **Not supported** | None of the 8 candidate arms beat the ECD tree. Gradient boosting was inconclusive (−0.011, −0.004; Holm p 0.86); the other six arms were worse (Holm p ≤ 0.017). Extends T6 and T8 across five model families |
+| T11 | Quadratic-weighted kappa with the recorded grades is about 0.76–0.78 for the best models | 14 | Supported as a description | Fold-mean kappa: ECD tree 0.771, tuned RF tabular 0.783, tuned RF hybrid 0.764, gradient boosting hybrid 0.764. This measures agreement with one recorded grade per tissue, not inter-rater reliability, which was not measured |
 
 ### Image and hybrid models
 
@@ -48,6 +51,7 @@ Purpose: decide what the paper can claim before writing the methodology and resu
 | I6 | Images can substitute for Konan measurements | 08 | **Not supported** | Both arms collapse (C4); hybrid B recall 0.04 |
 | I7 | On non-2023 tissues the hybrid improves macro F1 (+0.038, CI −0.013 to +0.088) | 09 | Qualified: **inconclusive** | Pre-specified sensitivity analysis, not independent of the exploratory 08 result. Direction positive in all repeats and years. Notebook 13: once the tabular model is tuned in nested CV, the hybrid is slightly worse (−0.012, Holm p = 1.00), so the earlier positive direction was largely due to an under-tuned tabular comparator |
 | I8 | Tuning the hybrid makes it outperform the ECD tree or the tuned tabular model | 13 | **Not supported** | Nested CV: hybrid − ECD tree −0.003; hybrid − tuned tabular −0.012; both Holm p = 1.00. Tuning raised the hybrid by only +0.005 |
+| I9 | Extending the hybrid's search (PCA up to 128, `max_features` up to 0.7) improves it | 15 | **Not supported**: inconclusive | +0.008 [−0.016, +0.033], p = 0.48 against notebook 13's tuned hybrid; +0.006 [−0.019, +0.031] against the ECD tree. Third tuning analysis on the same folds. PCA 128 was never selected; `max_features` 0.7, the new upper edge, was selected in 13/25 folds |
 
 ### Explainability (the project's XAI component)
 
@@ -77,7 +81,7 @@ The evidence does not support "a model that grades corneas better" or "images im
 1. **Evaluation must respect donor structure.** Fellow eyes are strongly correlated, and ignoring them inflates performance (D3, D4).
 2. **Recorded grades follow different patterns across years, and pooled metrics hide it.** Near-perfect agreement in one year and 0.73 in others average to a misleading 0.85. Missing data is tied to the same year, which also makes test-time masking a misleading robustness check (D5, D6, I5).
 3. **Generic image features add little beyond endothelial morphology.** This held with all features available, without slit-lamp findings, and in the non-2023 subset (I4, I5, I7). The non-2023 result is consistently positive but inconclusive, a specific, testable hypothesis for future work.
-4. **Multimodal models did not outperform a fitted two-threshold ECD model.** They beat a poorly specified ECD-only learner, which shows how much the choice of baseline matters (T6). The recorded labels are anchored at consistent ECD cut points (T7), and the open question is what explains the departures from them.
+4. **Multimodal models did not outperform a fitted two-threshold ECD model.** They beat a poorly specified ECD-only learner, which shows how much the choice of baseline matters (T6). The result holds across five model families (notebook 14: Random Forest, gradient boosting, logistic regression, RBF SVM, Extra Trees; T10), so it is not an artefact of choosing Random Forests. The recorded labels are anchored at consistent ECD cut points (T7), and the open question is what explains the departures from them.
 
 A possible framing: *"Evaluating machine learning for donor cornea grading: donor dependence, year-dependent grading patterns and the incremental value of specular microscopy images."*
 
@@ -90,6 +94,8 @@ Ordered by how much they affect the paper's claims.
 | G1 | ~~No pre-specified comparison with ECD alone~~ **Closed (notebooks 10–11)** | Determined whether ML adds value beyond ECD | Done: improvement beyond ECD alone was not established (T6). Documented eye-bank criteria remain unavailable; the fitted tree recovered thresholds close to 2250/2500 (T7) |
 | G2 | ~~Explainability not redone under the final protocol~~ **Closed for model explanations (notebook 12)** | XAI is the project's stated focus | Done: out-of-fold grouped SHAP on the primary cohort (X3–X5). Not addressed: what drives specialists' downgrades independently of any model. A model-free comparison of all tissues graded below the ECD thresholds would be post hoc and is optional |
 | G3 | ~~Hyperparameters tuned on non-grouped CV~~ **Closed (notebook 13)** | The notebook 05 settings turned out to disadvantage the tabular arm, not favour it | Done: nested donor-grouped tuning (I7, I8, T8). The earlier comparisons stand as reported, with this context |
+| G8 | ~~Only Random Forests evaluated after notebook 05~~ **Closed (notebook 14, follow-up)** | Results could have reflected the choice of model family | Done: four further families under the notebook 13 design (T1, T9, T10). Gradient boosting matched the Random Forest; the others were worse. Reuses the same outer folds |
+| G9 | ~~Hybrid selections at the edge of the notebook 13 grid~~ **Addressed (notebook 15, follow-up)** | `max_features` 0.3 was selected in 25/25 folds and PCA 32 in 16/25, so better settings might lie outside the grid | Done: extended grid, inconclusive (I9). `max_features` 0.7 is again at the edge in 13/25 folds. Any further search should be pre-specified and evaluated on new tissues, since these folds have now been used for three tuning analyses |
 | G4 | No consolidated final-results table | Numbers are spread across 05–09 with different cohorts (1,036 vs 1,009 vs 551) | One table: final tabular model, overall and by year, with CIs and per-grade recall; cohort stated for each row |
 | G5 | Donor pairing inferred | Affects D3, D4 and every grouped result | State as a limitation; pairing rule documented in `modeling_setup.get_donor_groups` |
 | G6 | Images represented only by generic frozen features | Limits I4 and I7 to "generic features" | Future work; any new representation needs its own pre-specified protocol |
@@ -101,6 +107,6 @@ G1 is closed: improvement beyond ECD alone was not established, so the paper's c
 
 G2 is closed for model explanations: the earlier SHAP results (X1, X2) are replaced by the notebook 12 findings (X3–X5).
 
-G4 is closed by `RESULTS.md`. G3 is closed by notebook 13, which selected the ECD tree for the application.
+G4 is closed by `RESULTS.md`. G3 is closed by notebook 13, which selected the ECD tree for the application. G8 is closed by notebook 14: no other model family outperformed the deployed RF hybrid, which is retained.
 
 G3, G5 and G7 can be handled as stated limitations or quick checks. G6 is future work.

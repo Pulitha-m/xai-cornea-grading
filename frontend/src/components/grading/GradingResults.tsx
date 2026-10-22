@@ -3,7 +3,7 @@ import { orderedGrades } from "@/lib/analysis-format"
 import { FEATURE_GROUPS, FEATURES, formatFeatureValue } from "@/lib/grading-features"
 import { alertWarning } from "@/lib/styles"
 import { ImageValidationNote } from "@/components/analysis/ImageValidationNote"
-import { EcdReferenceDetails, sectionLabel } from "@/components/grading/grading-parts"
+import { sectionLabel } from "@/components/grading/grading-parts"
 import { GradingExplanationView } from "@/components/grading/GradingExplanation"
 import { Card } from "@/components/dashboard/PageHeader"
 import { Field } from "@/components/ui/field"
@@ -13,12 +13,10 @@ function percent(value: number) {
     return `${Math.round(value * 100)}%`
 }
 
-/** The grading report: the hybrid model's grade, the ECD rule as a reference and the inputs used. */
+/** The grading report: the hybrid model's grade, what drove it and the inputs used. */
 export function GradingResults({ result }: { result: GradingAnalyzeResponse }) {
     const warnings = result.warnings
     const notRecorded = result.featuresNotRecorded
-    const reference = result.ecdReference
-    const referenceGraded = reference.status.toLowerCase() === "completed" && reference.grade !== null
 
     return (
         <section aria-labelledby="grading-results-title" className="space-y-4">
@@ -47,37 +45,23 @@ export function GradingResults({ result }: { result: GradingAnalyzeResponse }) {
                 </div>
             )}
 
-            <div className="grid gap-6 lg:grid-cols-2">
-                <Card title="Model grade" description="Hybrid model: 24 Konan and slit-lamp inputs plus image features.">
-                    <div className="space-y-4">
-                        <dl className="grid grid-cols-2 gap-4">
-                            <Field label="Predicted grade" value={result.grade} />
-                            <Field label="Inputs recorded" value={`${24 - notRecorded.length} of 24`} />
-                        </dl>
-                        <div className="border-t border-border pt-4">
-                            <p className={sectionLabel}>Share of trees voting for each grade</p>
-                            <p className="mt-0.5 text-xs text-muted-foreground">Not calibrated — not a confidence</p>
-                            <ul className="mt-3 space-y-3">
-                                {orderedGrades(result.modelProbabilities).map((grade) => (
-                                    <VoteRow key={grade} grade={grade} share={result.modelProbabilities[grade]} predicted={grade === result.grade} />
-                                ))}
-                            </ul>
-                        </div>
+            <Card title="Model grade" description="Hybrid model: 24 Konan and slit-lamp inputs plus image features.">
+                <div className="grid gap-6 lg:grid-cols-2">
+                    <dl className="grid grid-cols-2 content-start gap-4">
+                        <Field label="Predicted grade" value={result.grade} />
+                        <Field label="Inputs recorded" value={`${24 - notRecorded.length} of 24`} />
+                    </dl>
+                    <div className="border-t border-border pt-4 lg:border-t-0 lg:border-l lg:pt-0 lg:pl-6">
+                        <p className={sectionLabel}>Share of trees voting for each grade</p>
+                        <p className="mt-0.5 text-xs text-muted-foreground">Not calibrated — not a confidence</p>
+                        <ul className="mt-3 space-y-3">
+                            {orderedGrades(result.modelProbabilities).map((grade) => (
+                                <VoteRow key={grade} grade={grade} share={result.modelProbabilities[grade]} predicted={grade === result.grade} />
+                            ))}
+                        </ul>
                     </div>
-                </Card>
-
-                <Card
-                    title="Reference: ECD rule"
-                    description="Grade from the ECD threshold tree alone, which the hybrid model was compared with."
-                    actions={referenceGraded && (
-                        reference.grade === result.grade
-                            ? <StatusBadge tone="success">Agrees with model</StatusBadge>
-                            : <StatusBadge tone="warning">Differs from model</StatusBadge>
-                    )}
-                >
-                    <EcdReferenceDetails reference={reference} showTitle={false} />
-                </Card>
-            </div>
+                </div>
+            </Card>
 
             {result.explanation
                 ? <GradingExplanationView explanation={result.explanation} />

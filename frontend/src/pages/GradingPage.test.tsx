@@ -87,7 +87,7 @@ describe("GradingPage", () => {
         expect(screen.getByRole("heading", { name: "Cornea grading", level: 1 })).toBeInTheDocument()
     })
 
-    it("sends all 24 features with blanks as null and shows the grade, votes and ECD reference", async () => {
+    it("sends all 24 features with blanks as null and shows the grade, votes and what drove it in words", async () => {
         vi.mocked(analyzeGrading).mockResolvedValue(COMPLETED)
         renderApp("/grading", makeAuth({ user: makeUser("DOCTOR") }))
 
@@ -105,18 +105,24 @@ describe("GradingPage", () => {
         expect(grade.getByRole("meter", { name: "Share of trees voting B" })).toHaveAttribute("aria-valuenow", "63")
         expect(grade.getByText("Not calibrated — not a confidence")).toBeInTheDocument()
 
-        const reference = within(screen.getByRole("region", { name: "Reference: ECD rule" }))
-        expect(reference.getByText("Differs from model")).toBeInTheDocument()
-        expect(reference.getByText("2,232 < ECD ≤ 2,497")).toBeInTheDocument()
+        // The ECD rule is not shown to end users.
+        expect(screen.queryByRole("region", { name: "Reference: ECD rule" })).not.toBeInTheDocument()
+        expect(screen.queryByText(/ECD rule/)).not.toBeInTheDocument()
 
+        // Effects in words, without percentage points.
         const drivers = within(screen.getByRole("region", { name: "What drove this grade" }))
-        expect(drivers.getByLabelText("ECD (2,400 cells/mm²): +31.0 pts for B")).toBeInTheDocument()
-        expect(drivers.getByLabelText("Stroma: Scar (Yes): +12.0 pts for B")).toBeInTheDocument()
-        expect(drivers.getByLabelText("Image features (ResNet-50, 32 components): +5.0 pts for B")).toBeInTheDocument()
-        expect(drivers.getByText(/from the training average \(14%\) to this tissue \(63%\)/)).toBeInTheDocument()
+        expect(drivers.getByLabelText("ECD (2,400 cells/mm²): raised strongly for B")).toBeInTheDocument()
+        expect(drivers.getByLabelText("Stroma: Scar (Yes): raised strongly for B")).toBeInTheDocument()
+        expect(drivers.getByLabelText("Specular image: raised slightly for B")).toBeInTheDocument()
+        expect(drivers.getAllByText("Lowered slightly")).toHaveLength(1)
+        expect(drivers.getAllByText("Little effect").length).toBeGreaterThan(0)
+        expect(drivers.queryByText(/pts|%/)).not.toBeInTheDocument()
+
         const where = within(screen.getByRole("region", { name: "Where in the image" }))
-        expect(where.getByRole("img", { name: /raised the share for b/ })).toHaveAttribute("src", "data:image/png;base64,iVBORw0KGgo=")
-        expect(where.getByText("No region")).toBeInTheDocument()
+        expect(where.getByRole("img", { name: /raised support for b/ })).toHaveAttribute("src", "data:image/png;base64,iVBORw0KGgo=")
+        expect(where.getByText("No area")).toBeInTheDocument()
+        expect(where.getByText("Raised slightly")).toBeInTheDocument()
+        expect(where.queryByText(/pts/)).not.toBeInTheDocument()
 
         const inputs = within(screen.getByRole("region", { name: "Inputs used" }))
         expect(inputs.getByText("2,400 cells/mm²")).toBeInTheDocument()

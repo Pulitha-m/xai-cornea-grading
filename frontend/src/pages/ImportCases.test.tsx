@@ -2,6 +2,7 @@ import { screen, within } from "@testing-library/react"
 import userEvent from "@testing-library/user-event"
 import { beforeEach, describe, expect, it, vi } from "vitest"
 import { applyCaseImport, checkCaseImport, listCandidates, recentCases, type ImportReport } from "@/api/cases"
+import { ApiError } from "@/lib/api-client"
 import { makeAuth, makeUser, renderApp } from "@/test/auth-test-utils"
 
 vi.mock(import("@/api/cases"), async (importOriginal) => ({
@@ -67,6 +68,21 @@ describe("Import cases", () => {
 
         expect(await within(card).findByText(/Imported: 2 new, 0 updated, 0 skipped/)).toBeInTheDocument()
         expect(vi.mocked(applyCaseImport).mock.calls[0][1]).toBe("create")
+        expect(within(card).queryByRole("button", { name: /^Import/ })).not.toBeInTheDocument()
+    })
+
+    it("warns that a timed-out import may still be running and does not offer to import again", async () => {
+        vi.mocked(checkCaseImport).mockResolvedValue(report({}))
+        vi.mocked(applyCaseImport).mockRejectedValue(new ApiError(504, "Something went wrong. Please try again."))
+        const user = userEvent.setup()
+        renderApp("/cases", makeAuth({ user: makeUser("NURSE") }))
+
+        const card = (await screen.findByRole("heading", { name: "Import cases" })).closest("section")!
+        await user.upload(within(card).getByLabelText("File"), csv())
+        await user.click(await within(card).findByRole("button", { name: "Import 2 cases" }))
+
+        expect(await within(card).findByText(/may still be running or may already have finished/)).toBeInTheDocument()
+        expect(within(card).queryByText(/Something went wrong/)).not.toBeInTheDocument()
         expect(within(card).queryByRole("button", { name: /^Import/ })).not.toBeInTheDocument()
     })
 

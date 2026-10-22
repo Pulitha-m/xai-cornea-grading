@@ -119,6 +119,35 @@ class CaseImportIntegrationTests extends IntegrationTestSupport {
     }
 
     @Test
+    void largeFileIsImportedInOneBatchedWrite() throws Exception {
+        upload("tissue_id,ECD_CD_cells_per_mm2\n12656R,2400\n", "cases.csv", "create", true)
+                .andExpect(status().isOk());
+        StringBuilder csv = new StringBuilder("tissue_id,ECD_CD_cells_per_mm2,CV,Stroma_Has_Scar\n");
+        for (int i = 0; i < 250; i++) {
+            csv.append(20000 + i).append(i % 2 == 0 ? "R" : "L").append(',').append(2000 + i).append(",35,0\n");
+        }
+        csv.append("12656R,2500,,\n");  // existing case: updated in the same write
+
+        upload(csv.toString(), "cases.csv", "update", true)
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.applied").value(true))
+                .andExpect(jsonPath("$.created").value(250))
+                .andExpect(jsonPath("$.updated").value(1));
+
+        entityManager.flush();
+        assertThat(cases.count()).isEqualTo(251);
+        assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM audit_events WHERE detail = 'bulk import: created'",
+                Integer.class)).isEqualTo(251);  // 1 from the first file + 250
+        assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM audit_events WHERE detail = 'bulk import: updated'",
+                Integer.class)).isEqualTo(1);
+        mockMvc.perform(get("/api/cases").param("tissueId", "20249L").header(HttpHeaders.AUTHORIZATION, bearer(nurse)))
+                .andExpect(jsonPath("$[0].details.ecd").value(2249.0))
+                .andExpect(jsonPath("$[0].details.slitLamp.Stroma_Has_Scar").value(0));
+        mockMvc.perform(get("/api/cases").param("tissueId", "12656R").header(HttpHeaders.AUTHORIZATION, bearer(nurse)))
+                .andExpect(jsonPath("$[0].details.ecd").value(2500.0));
+    }
+
+    @Test
     void createModeSkipsExistingCasesAndUpdateModeKeepsValuesForBlankCells() throws Exception {
         upload("tissue_id,ECD_CD_cells_per_mm2,CV\n12656R,2400,32\n", "cases.csv", "create", true)
                 .andExpect(status().isOk());

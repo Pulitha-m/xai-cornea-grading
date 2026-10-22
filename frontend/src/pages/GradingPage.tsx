@@ -14,7 +14,7 @@ export function GradingPage() {
                     </>
                 }
                 title="Cornea grading"
-                description="Grades donor corneas (A+, A or B) from a specular microscopy image and 24 Konan and slit-lamp inputs with the hybrid model, alongside the ECD rule's grade as a reference. Decision support for specialist review — not an eye-bank grading decision."
+                description="Grades donor corneas (A+, A or B) from a specular microscopy image and 24 Konan and slit-lamp inputs with the hybrid model, and shows what drove each grade. Decision support for specialist review — not an eye-bank grading decision."
             />
             <GradingPanel />
             <div className="mt-6">
