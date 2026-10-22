@@ -15,6 +15,7 @@ from fastapi.responses import JSONResponse
 from app.schemas.analysis import ErrorDetail, RejectedResponse
 from app.schemas.recommendation import FollowupRequest, FollowupResponse, MatchRequest, MatchResponse
 from pipelines.recommendation import followup as followup_model
+from pipelines.recommendation.checks import followup_warnings, match_warnings
 from pipelines.recommendation.engine import Weights, rank
 from pipelines.recommendation.ml_ranker import rank_ml
 
@@ -27,6 +28,7 @@ def match(body: MatchRequest) -> MatchResponse:
     request = body.request.model_dump()
     candidates = [c.model_dump() for c in body.candidates]
     mcda = rank(request=request, candidates=candidates, weights=Weights(**given), top_k=None)
+    warnings = match_warnings(request, candidates)
 
     ml = rank_ml(request, candidates, top_k=body.top_k) if body.method != "mcda" else None
     if ml is None:
@@ -36,7 +38,8 @@ def match(body: MatchRequest) -> MatchResponse:
         method = "mcda" if body.method == "mcda" else "mcda (ML model not installed)"
         return MatchResponse(request_id=body.request.request_id, ranked=ranked, excluded=mcda["excluded"],
                              weights_used=mcda["weights_used"],
-                             endothelium_considered=mcda["endothelium_considered"], method_used=method)
+                             endothelium_considered=mcda["endothelium_considered"], method_used=method,
+                             warnings=warnings)
 
     by_id = {r["record_id"]: r for r in mcda["ranked"]}
     ranked = []
@@ -47,7 +50,8 @@ def match(body: MatchRequest) -> MatchResponse:
                        "reasons": m["reasons"]})
     return MatchResponse(request_id=body.request.request_id, ranked=ranked, excluded=ml["excluded"],
                          weights_used=mcda["weights_used"], endothelium_considered=mcda["endothelium_considered"],
-                         method_used="ml", model=ml["model"], model_summary=ml["model_summary"] or None)
+                         method_used="ml", model=ml["model"], model_summary=ml["model_summary"] or None,
+                         warnings=warnings)
 
 
 @router.post("/followup", response_model=FollowupResponse,
@@ -57,5 +61,6 @@ def followup(body: FollowupRequest):
     if model is None:
         err = ErrorDetail(code="MODEL_NOT_READY", message="The follow-up model is unavailable. Try again later.")
         return JSONResponse(status_code=503, content=RejectedResponse(error=err).model_dump(exclude_none=True))
-    result = followup_model.recommend_followup(body.model_dump(), model)
-    return FollowupResponse(graft_id=body.graft_id, **result)
+    req = body.model_dump()
+    result = followup_model.recommend_followup(req, model)
+    return FollowupResponse(graft_id=body.graft_id, **result, warnings=followup_warnings(req))

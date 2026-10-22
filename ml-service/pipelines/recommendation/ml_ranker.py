@@ -7,7 +7,9 @@ ml-service/models/recommendation_ranker.json. For each candidate it returns:
   ml_score        the model's score (higher = more like the corneas NEBSL chose)
   why             contribution of each reason compared with the other candidates
                   (exact SHAP for a linear model, relative to the pool)
-  counterfactual  smallest realistic change that would make it #1
+  counterfactual  only for corneas whose serology is still pending: whether confirming it clear
+                  would make the cornea #1 (the one actionable change; the full search over
+                  storage, ECD and grade stays in counterfactual() for research use)
 
 Keep this file in step with the research code: the parity test in
 ml/recommendation/tests/test_export.py compares both on the real dataset.
@@ -210,6 +212,22 @@ def counterfactual(model: dict, request: dict, candidates: list[dict], i: int) -
     return "would be #1 if: " + "; or ".join(alts)
 
 
+def serology_counterfactual(model: dict, request: dict, candidates: list[dict], i: int) -> str | None:
+    """For a cornea below #1 whose serology is pending: would confirming it clear make it #1?
+
+    One re-ranking per pending cornea, so it stays fast for long stock lists (the full search
+    in counterfactual() re-ranks the pool many times per cornea).
+    """
+    c = candidates[i]
+    if (c.get("serology_clear") or "Unknown").capitalize() != "Unknown":
+        return None
+    if ranks(model, request, candidates)[i] == 1:
+        return None
+    trial = [dict(x) for x in candidates]
+    trial[i]["serology_clear"] = "Yes"
+    return "would be #1 if: serology confirmed clear" if ranks(model, request, trial)[i] == 1 else None
+
+
 def rank_ml(request: dict, candidates: list[dict], top_k: int | None = None,
             with_counterfactuals: bool = True) -> dict | None:
     """Rank with the trained model. Returns None if no exported model is installed."""
@@ -232,7 +250,7 @@ def rank_ml(request: dict, candidates: list[dict], top_k: int | None = None,
         ranked = ranked[:top_k]
     if with_counterfactuals:
         for x in ranked:
-            x["counterfactual"] = counterfactual(model, request, candidates, x["index"])
+            x["counterfactual"] = serology_counterfactual(model, request, candidates, x["index"])
     for x in ranked:
         x.pop("index")
     return {"ranked": ranked, "excluded": excluded,
